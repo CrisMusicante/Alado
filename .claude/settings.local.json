@@ -3,7 +3,15 @@
     "allow": [
       "Read(//c/Users/Usuario/Desktop/Alabanzas/ref_design/src/app/**)",
       "Read(//c/Users/Usuario/Desktop/Alabanzas/ref_design/src/styles/**)",
-      "Bash(cd \"C:\\\\Users\\\\Usuario\\\\Desktop\\\\WorshipFlow\" && npx tsc --noEmit 2>&1 | head -60)"
+      "Bash(cd \"C:\\\\Users\\\\Usuario\\\\Desktop\\\\WorshipFlow\" && npx tsc --noEmit 2>&1 | head -60)",
+      "Bash(python --version 2>&1; python3 --version 2>&1; where python 2>&1)",
+      "Bash(where cl:*)",
+      "Bash(where msbuild:*)",
+      "Read(//c/Program Files \\(x86\\)/Microsoft Visual Studio/**)",
+      "Read(//c/Program Files/Microsoft Visual Studio/**)",
+      "Bash(powershell -Command \"\\(Invoke-WebRequest -Uri 'https://releases.electronjs.org/releases.json' -UseBasicParsing\\).Content | ConvertFrom-Json | Where-Object { \\\\$_.version -like '41.*' } | Select-Object version, modules -First 3\" 2>&1)",
+      "Bash(powershell -Command \"\n\\\\$r = \\(Invoke-WebRequest -Uri 'https://releases.electronjs.org/releases.json' -UseBasicParsing\\).Content | ConvertFrom-Json\n\\\\$r | Where-Object { \\\\$_.version -match '^41\\\\.' } | Select-Object version, modules | Select-Object -First 3\n\" 2>&1)",
+      "Bash(node -e \"\nfetch\\('https://releases.electronjs.org/releases.json'\\)\n  .then\\(r=>r.json\\(\\)\\)\n  .then\\(data => {\n    const e41 = data.filter\\(r => r.version.startsWith\\('41.'\\)\\).slice\\(0,3\\)\n    e41.forEach\\(r => console.log\\(r.version, 'modules:', r.modules\\)\\)\n  }\\)\n\" 2>&1)"
     ]
   }
 }
