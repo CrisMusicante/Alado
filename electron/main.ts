@@ -1,3 +1,8 @@
+// Suppress dev-only CSP warning caused by Vite HMR requiring unsafe-eval
+if (process.env.NODE_ENV === 'development') {
+  process.env['ELECTRON_DISABLE_SECURITY_WARNINGS'] = 'true'
+}
+
 import { app, BrowserWindow } from 'electron'
 import { createMainWindow } from './windows/main.window'
 import { createLiveWindow } from './windows/live.window'

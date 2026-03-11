@@ -15,8 +15,9 @@ export function createMainWindow(): BrowserWindow {
     }
   })
 
-  if (process.env.NODE_ENV === 'development' && process.env['ELECTRON_RENDERER_URL']) {
-    win.loadURL(process.env['ELECTRON_RENDERER_URL'])
+  if (process.env.NODE_ENV === 'development') {
+    const rendererUrl = process.env['ELECTRON_RENDERER_URL'] ?? 'http://localhost:5173'
+    win.loadURL(rendererUrl)
     win.webContents.openDevTools()
   } else {
     win.loadFile(path.join(__dirname, '../renderer/index.html'))

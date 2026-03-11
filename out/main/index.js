@@ -16,8 +16,9 @@ function createMainWindow() {
       nodeIntegration: false
     }
   });
-  if (process.env.NODE_ENV === "development" && process.env["ELECTRON_RENDERER_URL"]) {
-    win.loadURL(process.env["ELECTRON_RENDERER_URL"]);
+  if (process.env.NODE_ENV === "development") {
+    const rendererUrl = process.env["ELECTRON_RENDERER_URL"] ?? "http://localhost:5173";
+    win.loadURL(rendererUrl);
     win.webContents.openDevTools();
   } else {
     win.loadFile(path.join(__dirname, "../renderer/index.html"));
@@ -45,8 +46,9 @@ function createLiveWindow() {
       nodeIntegration: false
     }
   });
-  if (process.env.NODE_ENV === "development" && process.env["ELECTRON_RENDERER_URL"]) {
-    win.loadURL(`${process.env["ELECTRON_RENDERER_URL"]}/live.html`);
+  if (process.env.NODE_ENV === "development") {
+    const rendererUrl = process.env["ELECTRON_RENDERER_URL"] ?? "http://localhost:5173";
+    win.loadURL(`${rendererUrl}/src/live/live.html`);
   } else {
     win.loadFile(path.join(__dirname, "../renderer/live.html"));
   }
@@ -231,6 +233,9 @@ function registerSystemHandlers() {
     const result = await electron.dialog.showOpenDialog({ properties: ["openFile"], filters });
     return result.canceled ? null : result.filePaths[0];
   });
+}
+if (process.env.NODE_ENV === "development") {
+  process.env["ELECTRON_DISABLE_SECURITY_WARNINGS"] = "true";
 }
 let mainWindow = null;
 let liveWindow = null;
