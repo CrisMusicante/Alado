@@ -18,14 +18,14 @@ export function createLiveWindow(): BrowserWindow {
     skipTaskbar: true,
     backgroundColor: '#000000',
     webPreferences: {
-      preload: path.join(__dirname, '../preload.js'),
+      preload: path.join(__dirname, '../preload/index.js'),
       contextIsolation: true,
       nodeIntegration: false
     }
   })
 
-  if (process.env.NODE_ENV === 'development') {
-    win.loadURL('http://localhost:5173/live.html')
+  if (process.env.NODE_ENV === 'development' && process.env['ELECTRON_RENDERER_URL']) {
+    win.loadURL(`${process.env['ELECTRON_RENDERER_URL']}/live.html`)
   } else {
     win.loadFile(path.join(__dirname, '../renderer/live.html'))
   }

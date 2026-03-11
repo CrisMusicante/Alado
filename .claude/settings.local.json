@@ -1,0 +1,9 @@
+{
+  "permissions": {
+    "allow": [
+      "Read(//c/Users/Usuario/Desktop/Alabanzas/ref_design/src/app/**)",
+      "Read(//c/Users/Usuario/Desktop/Alabanzas/ref_design/src/styles/**)",
+      "Bash(cd \"C:\\\\Users\\\\Usuario\\\\Desktop\\\\WorshipFlow\" && npx tsc --noEmit 2>&1 | head -60)"
+    ]
+  }
+}

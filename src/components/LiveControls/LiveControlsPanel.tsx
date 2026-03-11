@@ -9,7 +9,6 @@ export default function LiveControlsPanel() {
     toggleBlackout, toggleWhiteout, stopLive
   } = useLiveStore()
 
-  // Keyboard shortcuts
   useEffect(() => {
     function onKey(e: KeyboardEvent) {
       if (['INPUT', 'TEXTAREA'].includes((e.target as HTMLElement).tagName)) return
@@ -31,39 +30,44 @@ export default function LiveControlsPanel() {
   const activeSection = sections[currentSectionIndex]
 
   return (
-    <div className="bg-slate-950 border-b border-slate-800 p-3 flex items-start gap-4">
-      {/* Current section display */}
+    <div className="bg-slate-950 border-b border-slate-800 px-4 py-3 flex items-center gap-4">
+      {/* Live indicator + current info */}
       <div className="flex-1 min-w-0">
-        <div className="flex items-center gap-2 mb-1">
-          <span className="text-xs text-indigo-400 font-medium uppercase tracking-wide">En vivo</span>
+        <div className="flex items-center gap-2 mb-1.5">
+          <span className="flex items-center gap-1.5 text-xs font-bold text-red-400 uppercase tracking-widest">
+            <span className="w-2 h-2 rounded-full bg-red-500 animate-pulse inline-block" />
+            En vivo
+          </span>
           <span className="text-sm text-white font-semibold truncate">{currentSong.title}</span>
         </div>
-        <div className="bg-slate-900 rounded-lg px-3 py-2 text-sm text-white">
-          <span className="text-indigo-400 font-medium mr-2">{activeSection?.label}</span>
-          {activeSection?.lines.slice(0, 1).join(' ')}
+        <div className="bg-slate-900 rounded-xl px-3 py-2 text-sm text-white border border-slate-800">
+          <span className="text-indigo-400 font-semibold mr-2">{activeSection?.label}</span>
+          <span className="text-slate-300">{activeSection?.lines[0]}</span>
         </div>
       </div>
 
-      {/* Section list */}
-      <div className="flex gap-1 flex-wrap max-w-xs">
+      {/* Section quick-jump */}
+      <div className="flex gap-1 flex-wrap max-w-sm">
         {sections.map((s, i) => (
           <button
             key={i}
             onClick={() => goToSection(i)}
-            className={`px-2.5 py-1 rounded text-xs font-medium transition-colors
-              ${i === currentSectionIndex ? 'bg-indigo-600 text-white' : 'bg-slate-800 text-slate-300 hover:bg-slate-700'}`}
+            className={`px-2.5 py-1 rounded-lg text-xs font-medium transition-all duration-150
+              ${i === currentSectionIndex
+                ? 'bg-indigo-600 text-white shadow-sm shadow-indigo-900'
+                : 'bg-slate-800 text-slate-300 hover:bg-slate-700 border border-slate-700'}`}
           >
             {s.label}
           </button>
         ))}
       </div>
 
-      {/* Navigation */}
-      <div className="flex gap-2">
+      {/* Prev / Next */}
+      <div className="flex gap-2 shrink-0">
         <button
           onClick={prevSection}
           disabled={currentSectionIndex === 0}
-          className="w-10 h-10 rounded-lg bg-slate-800 hover:bg-slate-700 disabled:opacity-30 text-white transition-colors flex items-center justify-center"
+          className="w-10 h-10 rounded-xl bg-slate-800 hover:bg-slate-700 disabled:opacity-30 text-white transition-colors flex items-center justify-center text-lg border border-slate-700"
           title="Anterior (←)"
         >
           ‹
@@ -71,7 +75,7 @@ export default function LiveControlsPanel() {
         <button
           onClick={nextSection}
           disabled={currentSectionIndex === sections.length - 1}
-          className="w-10 h-10 rounded-lg bg-slate-800 hover:bg-slate-700 disabled:opacity-30 text-white transition-colors flex items-center justify-center"
+          className="w-10 h-10 rounded-xl bg-slate-800 hover:bg-slate-700 disabled:opacity-30 text-white transition-colors flex items-center justify-center text-lg border border-slate-700"
           title="Siguiente (→ / Espacio)"
         >
           ›
@@ -79,24 +83,30 @@ export default function LiveControlsPanel() {
       </div>
 
       {/* Emergency controls */}
-      <div className="flex gap-2">
+      <div className="flex gap-2 shrink-0">
         <button
           onClick={toggleBlackout}
-          className={`px-3 py-2 rounded-lg text-xs font-bold transition-colors ${blackout ? 'bg-slate-600 text-white' : 'bg-slate-800 text-slate-400 hover:text-white'}`}
+          className={`px-3 py-2 rounded-xl text-xs font-bold transition-all duration-150 border
+            ${blackout
+              ? 'bg-slate-700 border-slate-500 text-white shadow-inner'
+              : 'bg-slate-900 border-slate-700 text-slate-400 hover:text-white hover:border-slate-500'}`}
           title="Pantalla negra (B)"
         >
           ■ Negro
         </button>
         <button
           onClick={toggleWhiteout}
-          className={`px-3 py-2 rounded-lg text-xs font-bold transition-colors ${whiteout ? 'bg-white text-black' : 'bg-slate-800 text-slate-400 hover:text-white'}`}
+          className={`px-3 py-2 rounded-xl text-xs font-bold transition-all duration-150 border
+            ${whiteout
+              ? 'bg-white border-slate-300 text-black'
+              : 'bg-slate-900 border-slate-700 text-slate-400 hover:text-white hover:border-slate-500'}`}
           title="Pantalla blanca (W)"
         >
           □ Blanco
         </button>
         <button
           onClick={() => { if (confirm('¿Detener la presentación?')) stopLive() }}
-          className="px-3 py-2 rounded-lg text-xs font-bold bg-red-900 text-red-300 hover:bg-red-700 hover:text-white transition-colors"
+          className="px-3 py-2 rounded-xl text-xs font-bold bg-red-950 border border-red-800 text-red-400 hover:bg-red-700 hover:text-white transition-all duration-150"
           title="Detener (Escape)"
         >
           ⏹ Detener

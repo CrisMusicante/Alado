@@ -1,5 +1,14 @@
 import { ipcMain, BrowserWindow } from 'electron'
 
+interface TextStyle {
+  font: 'sans' | 'rounded' | 'bold-condensed'
+  size: 'sm' | 'md' | 'lg' | 'xl'
+  color: string
+  position: 'top' | 'center' | 'bottom'
+  shadow: boolean
+  stroke: boolean
+}
+
 let liveWindow: BrowserWindow | null = null
 
 export function setLiveWindow(win: BrowserWindow | null): void {
@@ -12,6 +21,7 @@ export function registerLiveHandlers(): void {
     sectionIndex: number
     text: string
     lines: string[]
+    textStyle?: Partial<TextStyle>
   }) => {
     liveWindow?.webContents.send('live:show-section', payload)
   })

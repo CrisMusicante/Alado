@@ -5,6 +5,52 @@ import fs from 'fs'
 
 let db: Database.Database
 
+// Inlined schema — avoids electron-vite not copying .sql assets to out/main/
+const SCHEMA = `
+CREATE TABLE IF NOT EXISTS songs (
+  id          INTEGER PRIMARY KEY AUTOINCREMENT,
+  title       TEXT NOT NULL,
+  artist      TEXT,
+  sections    TEXT NOT NULL DEFAULT '[]',
+  video_path  TEXT,
+  text_style  TEXT NOT NULL DEFAULT '{}',
+  created_at  DATETIME DEFAULT CURRENT_TIMESTAMP,
+  updated_at  DATETIME DEFAULT CURRENT_TIMESTAMP
+);
+
+CREATE TABLE IF NOT EXISTS setlists (
+  id           INTEGER PRIMARY KEY AUTOINCREMENT,
+  name         TEXT NOT NULL,
+  service_date TEXT,
+  notes        TEXT,
+  created_at   DATETIME DEFAULT CURRENT_TIMESTAMP
+);
+
+CREATE TABLE IF NOT EXISTS setlist_items (
+  id           INTEGER PRIMARY KEY AUTOINCREMENT,
+  setlist_id   INTEGER NOT NULL REFERENCES setlists(id) ON DELETE CASCADE,
+  song_id      INTEGER NOT NULL REFERENCES songs(id) ON DELETE RESTRICT,
+  position     INTEGER NOT NULL,
+  custom_video TEXT
+);
+
+CREATE TABLE IF NOT EXISTS app_settings (
+  key   TEXT PRIMARY KEY,
+  value TEXT NOT NULL
+);
+
+CREATE INDEX IF NOT EXISTS idx_songs_title ON songs(title COLLATE NOCASE);
+
+CREATE VIRTUAL TABLE IF NOT EXISTS songs_fts
+  USING fts5(title, artist, sections, content='songs', content_rowid='id');
+
+CREATE TRIGGER IF NOT EXISTS songs_updated_at
+  AFTER UPDATE ON songs
+  BEGIN
+    UPDATE songs SET updated_at = CURRENT_TIMESTAMP WHERE id = NEW.id;
+  END;
+`
+
 export function getDb(): Database.Database {
   if (!db) {
     const userDataPath = app.getPath('userData')
@@ -12,16 +58,10 @@ export function getDb(): Database.Database {
     db = new Database(dbPath)
     db.pragma('journal_mode = WAL')
     db.pragma('foreign_keys = ON')
-    initSchema()
+    db.exec(SCHEMA)
     scheduleBackup(userDataPath, dbPath)
   }
   return db
-}
-
-function initSchema(): void {
-  const schemaPath = path.join(__dirname, 'schema.sql')
-  const schema = fs.readFileSync(schemaPath, 'utf-8')
-  db.exec(schema)
 }
 
 function scheduleBackup(userDataPath: string, dbPath: string): void {
@@ -37,7 +77,6 @@ function scheduleBackup(userDataPath: string, dbPath: string): void {
     const dest = path.join(backupDir, `worshipflow_${date}.db`)
     db.backup(dest).then(() => {
       db.prepare("INSERT OR REPLACE INTO app_settings (key, value) VALUES ('last_backup', ?)").run(new Date().toISOString())
-      // Keep only the 5 most recent backups
       const backups = fs.readdirSync(backupDir)
         .filter(f => f.startsWith('worshipflow_') && f.endsWith('.db'))
         .sort()

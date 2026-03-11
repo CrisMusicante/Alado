@@ -95,6 +95,7 @@ async function sendSection(song: Song, index: number): Promise<void> {
     songId: song.id,
     sectionIndex: index,
     text: section.lines.join('\n'),
-    lines: section.lines
+    lines: section.lines,
+    textStyle: song.text_style
   })
 }

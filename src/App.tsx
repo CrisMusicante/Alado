@@ -14,12 +14,15 @@ export default function App() {
   return (
     <div className="flex h-screen bg-slate-900 text-white overflow-hidden">
       {/* Sidebar */}
-      <aside className="w-16 flex flex-col items-center py-6 gap-4 bg-slate-950 border-r border-slate-800">
+      <aside className="w-20 flex flex-col items-center py-6 gap-1 bg-slate-950 border-r border-slate-800">
         <NavBtn icon="🎵" label="Canciones" active={page === 'songs'} onClick={() => setPage('songs')} />
         <NavBtn icon="📋" label="Servicio" active={page === 'setlist'} onClick={() => setPage('setlist')} />
         <NavBtn icon="⚙️" label="Ajustes" active={page === 'settings'} onClick={() => setPage('settings')} />
         {isLive && (
-          <div className="mt-auto mb-2 w-3 h-3 rounded-full bg-red-500 animate-pulse" title="En vivo" />
+          <div className="mt-auto mb-2 flex flex-col items-center gap-1">
+            <div className="w-2.5 h-2.5 rounded-full bg-red-500 animate-pulse" />
+            <span className="text-[9px] font-bold text-red-400 tracking-widest uppercase">Live</span>
+          </div>
         )}
       </aside>
 
@@ -36,15 +39,18 @@ export default function App() {
   )
 }
 
-function NavBtn({ icon, label, active, onClick }: { icon: string; label: string; active: boolean; onClick: () => void }) {
+function NavBtn({ icon, label, active, onClick }: {
+  icon: string; label: string; active: boolean; onClick: () => void
+}) {
   return (
     <button
       onClick={onClick}
       title={label}
-      className={`w-12 h-12 rounded-xl flex items-center justify-center text-xl transition-colors
+      className={`w-14 flex flex-col items-center gap-1 py-2.5 rounded-xl transition-all duration-200
         ${active ? 'bg-indigo-600 text-white' : 'text-slate-400 hover:bg-slate-800 hover:text-white'}`}
     >
-      {icon}
+      <span className="text-xl leading-none">{icon}</span>
+      <span className="text-[10px] font-medium leading-none">{label}</span>
     </button>
   )
 }
