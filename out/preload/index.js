@@ -27,5 +27,7 @@ electron.contextBridge.exposeInMainWorld("api", {
   },
   off: (channel, cb) => {
     electron.ipcRenderer.removeListener(channel, cb);
-  }
+  },
+  // Signal from live renderer → main that it is mounted and ready to receive IPC
+  signalReady: () => electron.ipcRenderer.send("live:renderer-ready")
 });

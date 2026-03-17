@@ -57,6 +57,7 @@ declare global {
       openFileDialog: (filters: any) => Promise<string | null>
       on: (channel: string, cb: (...args: any[]) => void) => void
       off: (channel: string, cb: (...args: any[]) => void) => void
+      signalReady: () => void
     }
   }
 }

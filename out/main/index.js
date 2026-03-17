@@ -43,12 +43,16 @@ function createLiveWindow() {
     webPreferences: {
       preload: path.join(__dirname, "../preload/index.js"),
       contextIsolation: true,
-      nodeIntegration: false
+      nodeIntegration: false,
+      // Required so the renderer (loaded from http:// in dev, file:// in prod)
+      // can load local video files via file:/// URIs.
+      webSecurity: false
     }
   });
   if (process.env.NODE_ENV === "development") {
     const rendererUrl = process.env["ELECTRON_RENDERER_URL"] ?? "http://localhost:5173";
     win.loadURL(`${rendererUrl}/src/live/live.html`);
+    win.webContents.openDevTools({ mode: "detach" });
   } else {
     win.loadFile(path.join(__dirname, "../renderer/live.html"));
   }
@@ -244,7 +248,7 @@ electron.app.whenReady().then(() => {
   registerLiveHandlers();
   registerSystemHandlers();
   mainWindow = createMainWindow();
-  electron.ipcMain.handle("live:open", () => {
+  electron.ipcMain.handle("live:open", async () => {
     if (!liveWindow || liveWindow.isDestroyed()) {
       liveWindow = createLiveWindow();
       setLiveWindow(liveWindow);
@@ -252,6 +256,13 @@ electron.app.whenReady().then(() => {
         liveWindow = null;
         setLiveWindow(null);
         mainWindow?.webContents.send("live:closed");
+      });
+      await new Promise((resolve) => {
+        const timeout = setTimeout(resolve, 5e3);
+        liveWindow.webContents.ipc.once("live:renderer-ready", () => {
+          clearTimeout(timeout);
+          resolve();
+        });
       });
     }
     liveWindow.show();

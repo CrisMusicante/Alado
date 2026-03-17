@@ -32,5 +32,8 @@ contextBridge.exposeInMainWorld('api', {
   },
   off: (channel: string, cb: (...args: unknown[]) => void) => {
     ipcRenderer.removeListener(channel, cb as any)
-  }
+  },
+
+  // Signal from live renderer → main that it is mounted and ready to receive IPC
+  signalReady: () => ipcRenderer.send('live:renderer-ready')
 })

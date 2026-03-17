@@ -22,7 +22,7 @@ app.whenReady().then(() => {
   mainWindow = createMainWindow()
 
   // Open/close Live window on demand from renderer
-  ipcMain.handle('live:open', () => {
+  ipcMain.handle('live:open', async () => {
     if (!liveWindow || liveWindow.isDestroyed()) {
       liveWindow = createLiveWindow()
       setLiveWindow(liveWindow)
@@ -30,6 +30,16 @@ app.whenReady().then(() => {
         liveWindow = null
         setLiveWindow(null)
         mainWindow?.webContents.send('live:closed')
+      })
+
+      // Wait for the live renderer to mount and attach its IPC listeners before
+      // returning — this ensures setVideo / showSection are not sent into the void.
+      await new Promise<void>((resolve) => {
+        const timeout = setTimeout(resolve, 5000) // fallback: give up after 5s
+        liveWindow!.webContents.ipc.once('live:renderer-ready', () => {
+          clearTimeout(timeout)
+          resolve()
+        })
       })
     }
     liveWindow.show()

@@ -45,16 +45,23 @@ Automatic weekly backup: up to 5 backups kept in `userData/backups/`.
 
 ### Frontend State
 
-Two Zustand stores in `src/store/`:
+Three Zustand stores in `src/store/`:
 
 - `useSongsStore` — song list, search, CRUD via `window.api`
 - `useLiveStore` — live session state (current song, section index, blackout/whiteout), drives IPC calls
+- `useSetlistsStore` — saved setlist persistence (save/load/delete via `window.api`)
 
 ### Type Duplication
 
 `Song`, `Section`, and `TextStyle` interfaces are intentionally defined in **both** `electron/ipc/db.handlers.ts` (main process) and `src/store/songs.store.ts` (renderer process). This is expected due to Electron's process isolation — the two processes cannot share TypeScript types at runtime.
 
 The `window.api` type declaration lives in `src/store/songs.store.ts` as a global augmentation.
+
+`window.api.on()` enforces a channel allowlist in `electron/preload.ts`: `live:show-section`, `live:set-video`, `live:blackout`, `live:whiteout`, `live:transition`, `live:closed`. Adding new push channels requires updating that allowlist.
+
+### Notes on the DB
+
+The schema includes a `songs_fts` FTS5 virtual table for full-text search, but `db:get-songs` currently uses `LIKE` queries instead. The `setlist_items` table cascades deletes from `setlists` but restricts deletes from `songs` — deleting a song that belongs to a setlist will fail at the DB level.
 
 ### Path Alias
 

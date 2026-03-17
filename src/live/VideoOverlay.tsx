@@ -80,6 +80,9 @@ export default function VideoOverlay() {
     window.api.on('live:whiteout', onWhiteout)
     window.api.on('live:transition', onTransition)
 
+    // Notify main process that listeners are attached and ready to receive IPC
+    window.api.signalReady()
+
     return () => {
       window.api.off('live:show-section', onShowSection)
       window.api.off('live:set-video', onSetVideo)
@@ -92,7 +95,8 @@ export default function VideoOverlay() {
   useEffect(() => {
     if (!videoRef.current) return
     if (videoPath) {
-      videoRef.current.src = `file://${videoPath}`
+      // file:///C:/path/... is required on Windows (three slashes for absolute paths)
+      videoRef.current.src = `file:///${videoPath.replace(/\\/g, '/')}`
       videoRef.current.play().catch(console.error)
     } else {
       videoRef.current.pause()
