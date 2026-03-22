@@ -220,9 +220,337 @@ const useSongsStore = create((set) => ({
     set({ songs });
   }
 }));
+const HEADER_PATTERNS = [
+  { re: /^(pre[-\s]?chorus|pre[-\s]?coro)\s*(\d*)/i, type: "pre-chorus", baseLabel: "Pre-Coro" },
+  { re: /^(verse|verso)\s*(\d*)/i, type: "verse", baseLabel: "Verso" },
+  { re: /^(chorus|coro)\s*(\d*)/i, type: "chorus", baseLabel: "Coro" },
+  { re: /^(estribillo|refrain)\s*(\d*)/i, type: "estribillo", baseLabel: "Estribillo" },
+  { re: /^(bridge|puente)\s*(\d*)/i, type: "bridge", baseLabel: "Puente" },
+  { re: /^(intro)\s*(\d*)/i, type: "intro", baseLabel: "Intro" },
+  { re: /^(outro|final|coda|ending)\s*(\d*)/i, type: "outro", baseLabel: "Outro" },
+  { re: /^(tag|hook|gancho|vamp)\s*(\d*)/i, type: "custom", baseLabel: "Tag" }
+];
+function matchHeader(line) {
+  const bracketed = /^\[.+\]$/.test(line.trim());
+  const clean = line.replace(/^\[|\]$/g, "").replace(/:$/, "").trim();
+  for (const { re, type, baseLabel } of HEADER_PATTERNS) {
+    const m = clean.match(re);
+    if (!m) continue;
+    if (m[0].length !== clean.length && !bracketed) continue;
+    return { type, baseLabel, num: m[2] ? Number(m[2]) : void 0 };
+  }
+  return null;
+}
+function blockKey(lines) {
+  return lines.join("\n").toLowerCase().replace(/[^\w\náéíóúüñ\n]/g, " ").replace(/\s+/g, " ").trim();
+}
+function parseLyricsToSections(raw) {
+  const text = raw.replace(/\r\n/g, "\n").replace(/\r/g, "\n").trim();
+  if (!text) return [];
+  const rawBlocks = text.split(/\n{2,}/).map((b) => b.trim()).filter(Boolean);
+  const parsed = rawBlocks.map((block) => {
+    const all = block.split("\n").map((l) => l.trim()).filter(Boolean);
+    const header = all.length ? matchHeader(all[0]) : null;
+    return { header, lines: header ? all.slice(1) : all, raw: all };
+  });
+  const contentCount = /* @__PURE__ */ new Map();
+  for (const b of parsed) {
+    if (!b.header) {
+      const k = blockKey(b.lines);
+      contentCount.set(k, (contentCount.get(k) ?? 0) + 1);
+    }
+  }
+  const typeCount = {};
+  const seenRepeated = /* @__PURE__ */ new Map();
+  const sections = [];
+  for (const b of parsed) {
+    if (!b.lines.length && !b.header) continue;
+    if (b.header) {
+      const { type, baseLabel, num } = b.header;
+      typeCount[type] = (typeCount[type] ?? 0) + 1;
+      const count = typeCount[type];
+      const n = num ?? (count > 1 ? count : void 0);
+      sections.push({
+        type,
+        label: n != null ? `${baseLabel} ${n}` : baseLabel,
+        lines: b.lines
+      });
+    } else {
+      const k = blockKey(b.lines);
+      const occurrences = contentCount.get(k) ?? 1;
+      const isRepeated = occurrences >= 2;
+      if (isRepeated) {
+        if (seenRepeated.has(k)) {
+          sections.push({ type: "chorus", label: seenRepeated.get(k), lines: b.lines });
+        } else {
+          typeCount["chorus"] = (typeCount["chorus"] ?? 0) + 1;
+          const count = typeCount["chorus"];
+          const label = count > 1 ? `Coro ${count}` : "Coro";
+          seenRepeated.set(k, label);
+          sections.push({ type: "chorus", label, lines: b.lines });
+        }
+      } else {
+        typeCount["verse"] = (typeCount["verse"] ?? 0) + 1;
+        sections.push({ type: "verse", label: `Verso ${typeCount["verse"]}`, lines: b.lines });
+      }
+    }
+  }
+  return sections;
+}
+const SECTION_TYPE_LABEL = {
+  verse: "Verso",
+  chorus: "Coro",
+  estribillo: "Estribillo",
+  "pre-chorus": "Pre-Coro",
+  bridge: "Puente",
+  intro: "Intro",
+  outro: "Outro",
+  custom: "Personalizado"
+};
+const SECTION_COLOR = {
+  verse: "bg-blue-900/40 border-blue-700",
+  chorus: "bg-indigo-900/40 border-indigo-700",
+  estribillo: "bg-violet-900/40 border-violet-700",
+  "pre-chorus": "bg-cyan-900/40 border-cyan-700",
+  bridge: "bg-purple-900/40 border-purple-700",
+  intro: "bg-slate-700/40 border-slate-600",
+  outro: "bg-slate-700/40 border-slate-600",
+  custom: "bg-teal-900/40 border-teal-700"
+};
+function LyricsImportModal({ onApply, onClose }) {
+  const [tab, setTab] = reactExports.useState("paste");
+  const [pasteText, setPasteText] = reactExports.useState("");
+  const [url, setUrl] = reactExports.useState("");
+  const [urlLoading, setUrlLoading] = reactExports.useState(false);
+  const [urlError, setUrlError] = reactExports.useState(null);
+  const [preview, setPreview] = reactExports.useState(null);
+  function handleParsePaste() {
+    const sections = parseLyricsToSections(pasteText);
+    setPreview(sections.length > 0 ? sections : null);
+  }
+  async function handleFetchUrl() {
+    if (!url.trim()) return;
+    setUrlLoading(true);
+    setUrlError(null);
+    setPreview(null);
+    const result = await window.api.fetchLyricsUrl(url.trim());
+    if (!result.success || !result.rawText) {
+      setUrlError(result.error ?? "Error desconocido");
+      setUrlLoading(false);
+      return;
+    }
+    const sections = parseLyricsToSections(result.rawText);
+    if (sections.length === 0) {
+      setUrlError('La letra se descargó pero no se pudo dividir en secciones. Prueba la pestaña "Pegar letra".');
+    } else {
+      setPreview(sections);
+    }
+    setUrlLoading(false);
+  }
+  function handleApply() {
+    if (preview && preview.length > 0) onApply(preview);
+  }
+  const claudeApiKey = localStorage.getItem("claudeApiKey") ?? "";
+  return /* @__PURE__ */ jsxRuntimeExports.jsx("div", { className: "fixed inset-0 z-50 flex items-center justify-center bg-black/70 backdrop-blur-sm", children: /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "bg-slate-900 border border-slate-700 rounded-2xl shadow-2xl w-full max-w-2xl mx-4 max-h-[90vh] flex flex-col", children: [
+    /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "flex items-center justify-between px-6 pt-5 pb-4 border-b border-slate-700 shrink-0", children: [
+      /* @__PURE__ */ jsxRuntimeExports.jsx("h2", { className: "text-lg font-bold", children: "Importar letra" }),
+      /* @__PURE__ */ jsxRuntimeExports.jsx(
+        "button",
+        {
+          onClick: onClose,
+          className: "text-slate-400 hover:text-white transition-colors text-xl leading-none",
+          children: "✕"
+        }
+      )
+    ] }),
+    /* @__PURE__ */ jsxRuntimeExports.jsx("div", { className: "flex gap-1 px-6 pt-4 shrink-0", children: [
+      ["paste", "Pegar letra"],
+      ["url", "Importar URL"],
+      ["ai", "Claude IA"]
+    ].map(([t, label]) => /* @__PURE__ */ jsxRuntimeExports.jsxs(
+      "button",
+      {
+        onClick: () => {
+          setTab(t);
+          setPreview(null);
+          setUrlError(null);
+        },
+        className: `px-4 py-2 rounded-xl text-sm font-medium transition-colors border
+                ${tab === t ? "bg-indigo-600 border-indigo-500 text-white" : "bg-slate-800 border-slate-700 text-slate-400 hover:text-white hover:border-slate-600"}`,
+        children: [
+          label,
+          t === "ai" && /* @__PURE__ */ jsxRuntimeExports.jsx("span", { className: "ml-1.5 text-xs bg-slate-700 text-slate-400 px-1.5 py-0.5 rounded-md", children: "Próximamente" })
+        ]
+      },
+      t
+    )) }),
+    /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "flex-1 overflow-y-auto px-6 py-4 flex flex-col gap-4", children: [
+      tab === "paste" && /* @__PURE__ */ jsxRuntimeExports.jsxs(jsxRuntimeExports.Fragment, { children: [
+        /* @__PURE__ */ jsxRuntimeExports.jsx("p", { className: "text-sm text-slate-400", children: "Copia la letra desde cualquier sitio web y pégala aquí. El sistema detecta automáticamente versos, coros, puentes y más." }),
+        /* @__PURE__ */ jsxRuntimeExports.jsx(
+          "textarea",
+          {
+            value: pasteText,
+            onChange: (e) => {
+              setPasteText(e.target.value);
+              setPreview(null);
+            },
+            rows: 10,
+            className: "w-full bg-slate-800 text-white rounded-xl px-4 py-3 outline-none focus:ring-2 focus:ring-indigo-500 text-sm resize-none border border-slate-700 font-mono",
+            placeholder: `Ejemplo:
+
+[Verso 1]
+En la cruz
+Donde todo fue consumado
+
+[Coro]
+Alabado seas
+Por siempre alabado`
+          }
+        ),
+        /* @__PURE__ */ jsxRuntimeExports.jsx(
+          "button",
+          {
+            onClick: handleParsePaste,
+            disabled: !pasteText.trim(),
+            className: "self-start bg-indigo-600 hover:bg-indigo-500 disabled:opacity-40 text-white px-5 py-2 rounded-xl text-sm font-semibold transition-colors",
+            children: "Analizar letra"
+          }
+        )
+      ] }),
+      tab === "url" && /* @__PURE__ */ jsxRuntimeExports.jsxs(jsxRuntimeExports.Fragment, { children: [
+        /* @__PURE__ */ jsxRuntimeExports.jsxs("p", { className: "text-sm text-slate-400", children: [
+          "Ingresa la URL de la página con la letra. Funciona mejor con",
+          " ",
+          /* @__PURE__ */ jsxRuntimeExports.jsx("span", { className: "text-slate-300", children: "letras.com" }),
+          ",",
+          " ",
+          /* @__PURE__ */ jsxRuntimeExports.jsx("span", { className: "text-slate-300", children: "genius.com" }),
+          " y",
+          " ",
+          /* @__PURE__ */ jsxRuntimeExports.jsx("span", { className: "text-slate-300", children: "musica.com" }),
+          ". Algunos sitios con carga dinámica pueden no funcionar."
+        ] }),
+        /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "flex gap-2", children: [
+          /* @__PURE__ */ jsxRuntimeExports.jsx(
+            "input",
+            {
+              value: url,
+              onChange: (e) => {
+                setUrl(e.target.value);
+                setUrlError(null);
+                setPreview(null);
+              },
+              onKeyDown: (e) => e.key === "Enter" && handleFetchUrl(),
+              className: "flex-1 bg-slate-800 text-white rounded-xl px-4 py-2.5 outline-none focus:ring-2 focus:ring-indigo-500 border border-slate-700 text-sm",
+              placeholder: "https://www.letras.com/...",
+              type: "url"
+            }
+          ),
+          /* @__PURE__ */ jsxRuntimeExports.jsx(
+            "button",
+            {
+              onClick: handleFetchUrl,
+              disabled: !url.trim() || urlLoading,
+              className: "bg-indigo-600 hover:bg-indigo-500 disabled:opacity-40 text-white px-5 py-2.5 rounded-xl text-sm font-semibold transition-colors shrink-0",
+              children: urlLoading ? "Descargando..." : "Importar"
+            }
+          )
+        ] }),
+        urlError && /* @__PURE__ */ jsxRuntimeExports.jsx("div", { className: "bg-red-950/60 border border-red-800 text-red-300 rounded-xl px-4 py-3 text-sm", children: urlError })
+      ] }),
+      tab === "ai" && /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "flex flex-col gap-4", children: [
+        /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "bg-indigo-950/40 border border-indigo-800/50 rounded-2xl p-5", children: [
+          /* @__PURE__ */ jsxRuntimeExports.jsx("p", { className: "text-sm font-semibold text-indigo-200 mb-1", children: "Importar con Claude AI" }),
+          /* @__PURE__ */ jsxRuntimeExports.jsx("p", { className: "text-sm text-slate-400", children: "Claude analiza cualquier URL o texto y extrae la letra dividiéndola inteligentemente en secciones etiquetadas, sin importar el formato de la página." })
+        ] }),
+        /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { children: [
+          /* @__PURE__ */ jsxRuntimeExports.jsx("label", { className: "block text-sm text-slate-400 mb-1.5", children: "Clave API de Claude (Anthropic)" }),
+          /* @__PURE__ */ jsxRuntimeExports.jsx(
+            "input",
+            {
+              type: "password",
+              defaultValue: claudeApiKey,
+              readOnly: true,
+              className: "w-full bg-slate-800/60 text-slate-500 rounded-xl px-4 py-2.5 border border-slate-700 text-sm cursor-not-allowed",
+              placeholder: claudeApiKey ? "••••••••••••••••" : "No configurada"
+            }
+          ),
+          /* @__PURE__ */ jsxRuntimeExports.jsxs("p", { className: "text-xs text-slate-500 mt-1.5", children: [
+            "Configura la clave en",
+            " ",
+            /* @__PURE__ */ jsxRuntimeExports.jsx("span", { className: "text-indigo-400", children: "Ajustes → Importar con IA" }),
+            "."
+          ] })
+        ] }),
+        /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "bg-slate-800/60 rounded-2xl p-4 border border-slate-700 opacity-60", children: [
+          /* @__PURE__ */ jsxRuntimeExports.jsx("p", { className: "text-sm text-slate-400 mb-3", children: "URL o texto a procesar" }),
+          /* @__PURE__ */ jsxRuntimeExports.jsx(
+            "input",
+            {
+              disabled: true,
+              className: "w-full bg-slate-900 text-slate-600 rounded-xl px-4 py-2.5 border border-slate-700 text-sm cursor-not-allowed",
+              placeholder: "https://... (disponible próximamente)"
+            }
+          )
+        ] }),
+        /* @__PURE__ */ jsxRuntimeExports.jsx("div", { className: "text-xs text-slate-600 bg-slate-800/40 rounded-xl p-3 border border-slate-700/50", children: "Esta función estará disponible en una próxima actualización. Se requiere una clave de API de Anthropic (claude.ai)." })
+      ] }),
+      preview && preview.length > 0 && /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "border-t border-slate-700 pt-4", children: [
+        /* @__PURE__ */ jsxRuntimeExports.jsxs("p", { className: "text-sm text-slate-400 mb-3", children: [
+          "Vista previa — ",
+          /* @__PURE__ */ jsxRuntimeExports.jsxs("span", { className: "text-white font-medium", children: [
+            preview.length,
+            " secciones detectadas"
+          ] })
+        ] }),
+        /* @__PURE__ */ jsxRuntimeExports.jsx("div", { className: "flex flex-col gap-2 max-h-56 overflow-y-auto", children: preview.map((s, i) => /* @__PURE__ */ jsxRuntimeExports.jsxs(
+          "div",
+          {
+            className: `rounded-xl px-3 py-2 border text-sm ${SECTION_COLOR[s.type] ?? "bg-slate-800 border-slate-700"}`,
+            children: [
+              /* @__PURE__ */ jsxRuntimeExports.jsx("span", { className: "font-semibold text-xs uppercase tracking-wider text-slate-300 mr-2", children: SECTION_TYPE_LABEL[s.type] ?? s.type }),
+              /* @__PURE__ */ jsxRuntimeExports.jsx("span", { className: "text-slate-400", children: s.label }),
+              s.lines.length > 0 && /* @__PURE__ */ jsxRuntimeExports.jsxs("p", { className: "text-slate-300 mt-1 text-xs truncate", children: [
+                s.lines[0],
+                s.lines.length > 1 && ` · ${s.lines[1]}`
+              ] })
+            ]
+          },
+          i
+        )) })
+      ] }),
+      preview !== null && preview.length === 0 && /* @__PURE__ */ jsxRuntimeExports.jsx("div", { className: "bg-yellow-950/40 border border-yellow-800/50 text-yellow-300 rounded-xl px-4 py-3 text-sm", children: "No se detectaron secciones. Revisa el formato del texto o añade encabezados como [Verso 1], [Coro], etc." })
+    ] }),
+    /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "flex items-center justify-end gap-3 px-6 py-4 border-t border-slate-700 shrink-0", children: [
+      /* @__PURE__ */ jsxRuntimeExports.jsx(
+        "button",
+        {
+          onClick: onClose,
+          className: "px-5 py-2 rounded-xl text-sm text-slate-400 hover:text-white transition-colors",
+          children: "Cancelar"
+        }
+      ),
+      /* @__PURE__ */ jsxRuntimeExports.jsxs(
+        "button",
+        {
+          onClick: handleApply,
+          disabled: !preview || preview.length === 0,
+          className: "bg-indigo-600 hover:bg-indigo-500 disabled:opacity-40 text-white px-6 py-2 rounded-xl text-sm font-semibold transition-colors",
+          children: [
+            "Aplicar ",
+            preview && preview.length > 0 ? `${preview.length} secciones` : ""
+          ]
+        }
+      )
+    ] })
+  ] }) });
+}
 const SECTION_TYPES = [
   { value: "verse", label: "Verso" },
   { value: "chorus", label: "Coro" },
+  { value: "estribillo", label: "Estribillo" },
+  { value: "pre-chorus", label: "Pre-Coro" },
   { value: "bridge", label: "Puente" },
   { value: "intro", label: "Intro" },
   { value: "outro", label: "Outro" },
@@ -231,6 +559,8 @@ const SECTION_TYPES = [
 const SECTION_BORDER = {
   verse: "border-l-blue-500",
   chorus: "border-l-indigo-500",
+  estribillo: "border-l-violet-500",
+  "pre-chorus": "border-l-cyan-500",
   bridge: "border-l-purple-500",
   intro: "border-l-slate-400",
   outro: "border-l-slate-400",
@@ -244,6 +574,7 @@ function SongEditor({ song, onClose }) {
   const [videoPath, setVideoPath] = reactExports.useState(song.video_path ?? "");
   const [textStyle, setTextStyle] = reactExports.useState(song.text_style ?? {});
   const [saving, setSaving] = reactExports.useState(false);
+  const [showImport, setShowImport] = reactExports.useState(false);
   function updateTextStyle(patch) {
     setTextStyle((prev) => ({ ...prev, ...patch }));
   }
@@ -431,19 +762,39 @@ function SongEditor({ song, onClose }) {
     ] }),
     /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "flex items-center justify-between mb-3", children: [
       /* @__PURE__ */ jsxRuntimeExports.jsx("h2", { className: "text-lg font-semibold", children: "Secciones" }),
-      /* @__PURE__ */ jsxRuntimeExports.jsx(
-        "button",
-        {
-          onClick: addSection,
-          className: "text-sm bg-slate-700 hover:bg-slate-600 text-white px-3 py-1.5 rounded-xl transition-colors border border-slate-600",
-          children: "+ Añadir sección"
-        }
-      )
+      /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "flex gap-2", children: [
+        /* @__PURE__ */ jsxRuntimeExports.jsx(
+          "button",
+          {
+            onClick: () => setShowImport(true),
+            className: "text-sm bg-slate-700 hover:bg-slate-600 text-white px-3 py-1.5 rounded-xl transition-colors border border-slate-600",
+            children: "Importar letra"
+          }
+        ),
+        /* @__PURE__ */ jsxRuntimeExports.jsx(
+          "button",
+          {
+            onClick: addSection,
+            className: "text-sm bg-slate-700 hover:bg-slate-600 text-white px-3 py-1.5 rounded-xl transition-colors border border-slate-600",
+            children: "+ Añadir sección"
+          }
+        )
+      ] })
     ] }),
     sections.length === 0 && /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "text-center py-10 text-slate-500 border-2 border-dashed border-slate-700 rounded-2xl mb-4", children: [
       /* @__PURE__ */ jsxRuntimeExports.jsx("p", { className: "text-3xl mb-2", children: "🎼" }),
       /* @__PURE__ */ jsxRuntimeExports.jsx("p", { children: "Sin secciones. Añade un Verso, Coro, Puente..." })
     ] }),
+    showImport && /* @__PURE__ */ jsxRuntimeExports.jsx(
+      LyricsImportModal,
+      {
+        onApply: (imported) => {
+          setSections(imported);
+          setShowImport(false);
+        },
+        onClose: () => setShowImport(false)
+      }
+    ),
     /* @__PURE__ */ jsxRuntimeExports.jsx("div", { className: "flex flex-col gap-4", children: sections.map((section, i) => /* @__PURE__ */ jsxRuntimeExports.jsxs(
       "div",
       {
@@ -454,10 +805,12 @@ function SongEditor({ song, onClose }) {
               "select",
               {
                 value: section.type,
-                onChange: (e) => updateSection(i, {
-                  type: e.target.value,
-                  label: SECTION_TYPES.find((t) => t.value === e.target.value)?.label + " " + (i + 1)
-                }),
+                onChange: (e) => {
+                  const newType = e.target.value;
+                  const baseLabel = SECTION_TYPES.find((t) => t.value === newType)?.label ?? newType;
+                  const count = sections.filter((s, idx) => idx !== i && s.type === newType).length + 1;
+                  updateSection(i, { type: newType, label: `${baseLabel} ${count}` });
+                },
                 className: "bg-slate-700 text-white rounded-lg px-3 py-2 outline-none border border-slate-600",
                 children: SECTION_TYPES.map((t) => /* @__PURE__ */ jsxRuntimeExports.jsx("option", { value: t.value, children: t.label }, t.value))
               }
@@ -4897,6 +5250,9 @@ function SettingsPage() {
   const [transitionDuration, setTransitionDuration] = reactExports.useState(
     Number(localStorage.getItem("transitionDuration")) || 250
   );
+  const [claudeKey, setClaudeKey] = reactExports.useState(localStorage.getItem("claudeApiKey") ?? "");
+  const [claudeKeySaved, setClaudeKeySaved] = reactExports.useState(false);
+  const claudeSaveTimer = reactExports.useRef(null);
   reactExports.useEffect(() => {
     window.api.getDisplays().then(setDisplays);
   }, []);
@@ -4916,6 +5272,19 @@ function SettingsPage() {
   function handleTransitionDuration(duration) {
     setTransitionDuration(duration);
     applyTransition(transitionType, duration);
+  }
+  function saveClaudeKey(key) {
+    setClaudeKey(key);
+    if (claudeSaveTimer.current) clearTimeout(claudeSaveTimer.current);
+    claudeSaveTimer.current = setTimeout(() => {
+      if (key.trim()) {
+        localStorage.setItem("claudeApiKey", key.trim());
+      } else {
+        localStorage.removeItem("claudeApiKey");
+      }
+      setClaudeKeySaved(true);
+      setTimeout(() => setClaudeKeySaved(false), 2e3);
+    }, 800);
   }
   return /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "p-6 max-w-2xl", children: [
     /* @__PURE__ */ jsxRuntimeExports.jsx("h1", { className: "text-2xl font-bold mb-8", children: "Configuración" }),
@@ -5007,6 +5376,33 @@ function SettingsPage() {
           /* @__PURE__ */ jsxRuntimeExports.jsx("span", { children: "800ms (lento)" })
         ] })
       ] })
+    ] }),
+    /* @__PURE__ */ jsxRuntimeExports.jsxs("section", { className: "mb-8", children: [
+      /* @__PURE__ */ jsxRuntimeExports.jsx("h2", { className: "text-base font-semibold text-white mb-1", children: "Importar con IA (Claude API)" }),
+      /* @__PURE__ */ jsxRuntimeExports.jsxs("p", { className: "text-sm text-slate-400 mb-4", children: [
+        "Permite usar Claude para importar letras automáticamente desde cualquier URL. Obtén tu clave en",
+        " ",
+        /* @__PURE__ */ jsxRuntimeExports.jsx("span", { className: "text-indigo-400", children: "console.anthropic.com" }),
+        "."
+      ] }),
+      /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { children: [
+        /* @__PURE__ */ jsxRuntimeExports.jsx("label", { className: "block text-sm text-slate-400 mb-1.5", children: "Clave API de Anthropic" }),
+        /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "flex gap-2", children: [
+          /* @__PURE__ */ jsxRuntimeExports.jsx(
+            "input",
+            {
+              type: "password",
+              value: claudeKey,
+              onChange: (e) => saveClaudeKey(e.target.value),
+              className: "flex-1 bg-slate-800 text-white rounded-xl px-4 py-2.5 outline-none focus:ring-2 focus:ring-indigo-500 border border-slate-700 text-sm font-mono",
+              placeholder: "sk-ant-..."
+            }
+          ),
+          claudeKeySaved && /* @__PURE__ */ jsxRuntimeExports.jsx("span", { className: "flex items-center text-xs text-green-400 px-2", children: "Guardado" })
+        ] }),
+        /* @__PURE__ */ jsxRuntimeExports.jsx("p", { className: "text-xs text-slate-600 mt-1.5", children: "La clave se guarda localmente en este dispositivo y nunca se envía a servidores externos." })
+      ] }),
+      /* @__PURE__ */ jsxRuntimeExports.jsx("div", { className: "mt-3 bg-indigo-950/30 border border-indigo-800/40 rounded-xl p-3", children: /* @__PURE__ */ jsxRuntimeExports.jsx("p", { className: "text-xs text-indigo-300", children: "La importación con IA estará disponible en una próxima actualización. Puedes guardar tu clave ahora para tenerla lista." }) })
     ] })
   ] });
 }

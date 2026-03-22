@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react'
+import { useEffect, useRef, useState } from 'react'
 
 interface DisplayInfo {
   id: number
@@ -18,6 +18,9 @@ export default function SettingsPage() {
   const [transitionDuration, setTransitionDuration] = useState<number>(
     Number(localStorage.getItem('transitionDuration')) || 250
   )
+  const [claudeKey, setClaudeKey] = useState(localStorage.getItem('claudeApiKey') ?? '')
+  const [claudeKeySaved, setClaudeKeySaved] = useState(false)
+  const claudeSaveTimer = useRef<ReturnType<typeof setTimeout> | null>(null)
 
   useEffect(() => {
     window.api.getDisplays().then(setDisplays)
@@ -42,6 +45,20 @@ export default function SettingsPage() {
   function handleTransitionDuration(duration: number) {
     setTransitionDuration(duration)
     applyTransition(transitionType, duration)
+  }
+
+  function saveClaudeKey(key: string) {
+    setClaudeKey(key)
+    if (claudeSaveTimer.current) clearTimeout(claudeSaveTimer.current)
+    claudeSaveTimer.current = setTimeout(() => {
+      if (key.trim()) {
+        localStorage.setItem('claudeApiKey', key.trim())
+      } else {
+        localStorage.removeItem('claudeApiKey')
+      }
+      setClaudeKeySaved(true)
+      setTimeout(() => setClaudeKeySaved(false), 2000)
+    }, 800)
   }
 
   return (
@@ -146,6 +163,39 @@ export default function SettingsPage() {
             </div>
           </div>
         )}
+      </section>
+      {/* Claude AI Import */}
+      <section className="mb-8">
+        <h2 className="text-base font-semibold text-white mb-1">Importar con IA (Claude API)</h2>
+        <p className="text-sm text-slate-400 mb-4">
+          Permite usar Claude para importar letras automáticamente desde cualquier URL.
+          Obtén tu clave en{' '}
+          <span className="text-indigo-400">console.anthropic.com</span>.
+        </p>
+        <div>
+          <label className="block text-sm text-slate-400 mb-1.5">Clave API de Anthropic</label>
+          <div className="flex gap-2">
+            <input
+              type="password"
+              value={claudeKey}
+              onChange={e => saveClaudeKey(e.target.value)}
+              className="flex-1 bg-slate-800 text-white rounded-xl px-4 py-2.5 outline-none focus:ring-2 focus:ring-indigo-500 border border-slate-700 text-sm font-mono"
+              placeholder="sk-ant-..."
+            />
+            {claudeKeySaved && (
+              <span className="flex items-center text-xs text-green-400 px-2">Guardado</span>
+            )}
+          </div>
+          <p className="text-xs text-slate-600 mt-1.5">
+            La clave se guarda localmente en este dispositivo y nunca se envía a servidores externos.
+          </p>
+        </div>
+        <div className="mt-3 bg-indigo-950/30 border border-indigo-800/40 rounded-xl p-3">
+          <p className="text-xs text-indigo-300">
+            La importación con IA estará disponible en una próxima actualización.
+            Puedes guardar tu clave ahora para tenerla lista.
+          </p>
+        </div>
       </section>
     </div>
   )

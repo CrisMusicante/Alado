@@ -17,6 +17,9 @@ electron.contextBridge.exposeInMainWorld("api", {
   setBlackout: (active) => electron.ipcRenderer.invoke("live:blackout", { active }),
   setWhiteout: (active) => electron.ipcRenderer.invoke("live:whiteout", { active }),
   setTransition: (payload) => electron.ipcRenderer.invoke("live:transition", payload),
+  // Lyrics import
+  fetchLyricsUrl: (url) => electron.ipcRenderer.invoke("lyrics:fetch-url", url),
+  fetchLyricsAI: (payload) => electron.ipcRenderer.invoke("lyrics:fetch-ai", payload),
   // System
   getDisplays: () => electron.ipcRenderer.invoke("system:get-displays"),
   openFileDialog: (filters) => electron.ipcRenderer.invoke("system:open-file-dialog", filters),

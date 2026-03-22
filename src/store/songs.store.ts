@@ -1,7 +1,7 @@
 import { create } from 'zustand'
 
 export interface Section {
-  type: 'verse' | 'chorus' | 'bridge' | 'outro' | 'intro' | 'custom'
+  type: 'verse' | 'chorus' | 'estribillo' | 'pre-chorus' | 'bridge' | 'outro' | 'intro' | 'custom'
   label: string
   lines: string[]
   repeat?: number
@@ -55,6 +55,8 @@ declare global {
       setTransition: (p: any) => Promise<void>
       getDisplays: () => Promise<any[]>
       openFileDialog: (filters: any) => Promise<string | null>
+      fetchLyricsUrl: (url: string) => Promise<{ success: boolean; rawText?: string; site?: string; error?: string }>
+      fetchLyricsAI: (payload: any) => Promise<{ success: boolean; rawText?: string; error?: string }>
       on: (channel: string, cb: (...args: any[]) => void) => void
       off: (channel: string, cb: (...args: any[]) => void) => void
       signalReady: () => void

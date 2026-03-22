@@ -11,7 +11,12 @@
       "Read(//c/Program Files/Microsoft Visual Studio/**)",
       "Bash(powershell -Command \"\\(Invoke-WebRequest -Uri 'https://releases.electronjs.org/releases.json' -UseBasicParsing\\).Content | ConvertFrom-Json | Where-Object { \\\\$_.version -like '41.*' } | Select-Object version, modules -First 3\" 2>&1)",
       "Bash(powershell -Command \"\n\\\\$r = \\(Invoke-WebRequest -Uri 'https://releases.electronjs.org/releases.json' -UseBasicParsing\\).Content | ConvertFrom-Json\n\\\\$r | Where-Object { \\\\$_.version -match '^41\\\\.' } | Select-Object version, modules | Select-Object -First 3\n\" 2>&1)",
-      "Bash(node -e \"\nfetch\\('https://releases.electronjs.org/releases.json'\\)\n  .then\\(r=>r.json\\(\\)\\)\n  .then\\(data => {\n    const e41 = data.filter\\(r => r.version.startsWith\\('41.'\\)\\).slice\\(0,3\\)\n    e41.forEach\\(r => console.log\\(r.version, 'modules:', r.modules\\)\\)\n  }\\)\n\" 2>&1)"
+      "Bash(node -e \"\nfetch\\('https://releases.electronjs.org/releases.json'\\)\n  .then\\(r=>r.json\\(\\)\\)\n  .then\\(data => {\n    const e41 = data.filter\\(r => r.version.startsWith\\('41.'\\)\\).slice\\(0,3\\)\n    e41.forEach\\(r => console.log\\(r.version, 'modules:', r.modules\\)\\)\n  }\\)\n\" 2>&1)",
+      "Bash(python -c \"import sys,json; d=json.load\\(sys.stdin\\); print\\(json.dumps\\(d.get\\(''''dependencies'''',{}\\), indent=2\\)\\)\")",
+      "Bash(npm install:*)",
+      "Bash(npm run:*)",
+      "WebFetch(domain:github.com)",
+      "WebFetch(domain:raw.githubusercontent.com)"
     ]
   }
 }

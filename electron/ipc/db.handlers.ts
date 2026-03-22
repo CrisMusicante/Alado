@@ -2,7 +2,7 @@ import { ipcMain } from 'electron'
 import { getDb } from '../db/database'
 
 export interface Section {
-  type: 'verse' | 'chorus' | 'bridge' | 'outro' | 'intro' | 'custom'
+  type: 'verse' | 'chorus' | 'estribillo' | 'pre-chorus' | 'bridge' | 'outro' | 'intro' | 'custom'
   label: string
   lines: string[]
   repeat?: number

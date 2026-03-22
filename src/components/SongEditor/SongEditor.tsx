@@ -1,5 +1,6 @@
 import { useState } from 'react'
 import { Song, Section, TextStyle, useSongsStore } from '../../store/songs.store'
+import LyricsImportModal from './LyricsImportModal'
 
 interface Props {
   song: Song
@@ -7,21 +8,25 @@ interface Props {
 }
 
 const SECTION_TYPES = [
-  { value: 'verse', label: 'Verso' },
-  { value: 'chorus', label: 'Coro' },
-  { value: 'bridge', label: 'Puente' },
-  { value: 'intro', label: 'Intro' },
-  { value: 'outro', label: 'Outro' },
-  { value: 'custom', label: 'Personalizado' }
+  { value: 'verse',      label: 'Verso' },
+  { value: 'chorus',     label: 'Coro' },
+  { value: 'estribillo', label: 'Estribillo' },
+  { value: 'pre-chorus', label: 'Pre-Coro' },
+  { value: 'bridge',     label: 'Puente' },
+  { value: 'intro',      label: 'Intro' },
+  { value: 'outro',      label: 'Outro' },
+  { value: 'custom',     label: 'Personalizado' },
 ] as const
 
 const SECTION_BORDER: Record<string, string> = {
-  verse: 'border-l-blue-500',
-  chorus: 'border-l-indigo-500',
-  bridge: 'border-l-purple-500',
-  intro: 'border-l-slate-400',
-  outro: 'border-l-slate-400',
-  custom: 'border-l-teal-500',
+  verse:      'border-l-blue-500',
+  chorus:     'border-l-indigo-500',
+  estribillo: 'border-l-violet-500',
+  'pre-chorus': 'border-l-cyan-500',
+  bridge:     'border-l-purple-500',
+  intro:      'border-l-slate-400',
+  outro:      'border-l-slate-400',
+  custom:     'border-l-teal-500',
 }
 
 export default function SongEditor({ song, onClose }: Props) {
@@ -32,6 +37,7 @@ export default function SongEditor({ song, onClose }: Props) {
   const [videoPath, setVideoPath] = useState(song.video_path ?? '')
   const [textStyle, setTextStyle] = useState<Partial<TextStyle>>(song.text_style ?? {})
   const [saving, setSaving] = useState(false)
+  const [showImport, setShowImport] = useState(false)
 
   function updateTextStyle(patch: Partial<TextStyle>) {
     setTextStyle(prev => ({ ...prev, ...patch }))
@@ -236,12 +242,20 @@ export default function SongEditor({ song, onClose }: Props) {
       {/* Sections */}
       <div className="flex items-center justify-between mb-3">
         <h2 className="text-lg font-semibold">Secciones</h2>
-        <button
-          onClick={addSection}
-          className="text-sm bg-slate-700 hover:bg-slate-600 text-white px-3 py-1.5 rounded-xl transition-colors border border-slate-600"
-        >
-          + Añadir sección
-        </button>
+        <div className="flex gap-2">
+          <button
+            onClick={() => setShowImport(true)}
+            className="text-sm bg-slate-700 hover:bg-slate-600 text-white px-3 py-1.5 rounded-xl transition-colors border border-slate-600"
+          >
+            Importar letra
+          </button>
+          <button
+            onClick={addSection}
+            className="text-sm bg-slate-700 hover:bg-slate-600 text-white px-3 py-1.5 rounded-xl transition-colors border border-slate-600"
+          >
+            + Añadir sección
+          </button>
+        </div>
       </div>
 
       {sections.length === 0 && (
@@ -249,6 +263,13 @@ export default function SongEditor({ song, onClose }: Props) {
           <p className="text-3xl mb-2">🎼</p>
           <p>Sin secciones. Añade un Verso, Coro, Puente...</p>
         </div>
+      )}
+
+      {showImport && (
+        <LyricsImportModal
+          onApply={(imported) => { setSections(imported); setShowImport(false) }}
+          onClose={() => setShowImport(false)}
+        />
       )}
 
       <div className="flex flex-col gap-4">
@@ -260,10 +281,12 @@ export default function SongEditor({ song, onClose }: Props) {
             <div className="flex gap-3 mb-3">
               <select
                 value={section.type}
-                onChange={e => updateSection(i, {
-                  type: e.target.value as any,
-                  label: SECTION_TYPES.find(t => t.value === e.target.value)?.label + ' ' + (i + 1)
-                })}
+                onChange={e => {
+                  const newType = e.target.value as Section['type']
+                  const baseLabel = SECTION_TYPES.find(t => t.value === newType)?.label ?? newType
+                  const count = sections.filter((s, idx) => idx !== i && s.type === newType).length + 1
+                  updateSection(i, { type: newType, label: `${baseLabel} ${count}` })
+                }}
                 className="bg-slate-700 text-white rounded-lg px-3 py-2 outline-none border border-slate-600"
               >
                 {SECTION_TYPES.map(t => <option key={t.value} value={t.value}>{t.label}</option>)}

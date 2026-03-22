@@ -21,6 +21,10 @@ contextBridge.exposeInMainWorld('api', {
   setWhiteout: (active: boolean) => ipcRenderer.invoke('live:whiteout', { active }),
   setTransition: (payload: unknown) => ipcRenderer.invoke('live:transition', payload),
 
+  // Lyrics import
+  fetchLyricsUrl: (url: string) => ipcRenderer.invoke('lyrics:fetch-url', url),
+  fetchLyricsAI: (payload: unknown) => ipcRenderer.invoke('lyrics:fetch-ai', payload),
+
   // System
   getDisplays: () => ipcRenderer.invoke('system:get-displays'),
   openFileDialog: (filters: unknown) => ipcRenderer.invoke('system:open-file-dialog', filters),
