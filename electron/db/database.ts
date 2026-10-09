@@ -7,6 +7,12 @@ let db: Database.Database
 
 // Inlined schema — avoids electron-vite not copying .sql assets to out/main/
 const SCHEMA = `
+CREATE TABLE IF NOT EXISTS folders (
+  id         INTEGER PRIMARY KEY AUTOINCREMENT,
+  name       TEXT NOT NULL,
+  created_at DATETIME DEFAULT CURRENT_TIMESTAMP
+);
+
 CREATE TABLE IF NOT EXISTS songs (
   id          INTEGER PRIMARY KEY AUTOINCREMENT,
   title       TEXT NOT NULL,
@@ -14,6 +20,7 @@ CREATE TABLE IF NOT EXISTS songs (
   sections    TEXT NOT NULL DEFAULT '[]',
   video_path  TEXT,
   text_style  TEXT NOT NULL DEFAULT '{}',
+  folder_id   INTEGER REFERENCES folders(id) ON DELETE SET NULL,
   created_at  DATETIME DEFAULT CURRENT_TIMESTAMP,
   updated_at  DATETIME DEFAULT CURRENT_TIMESTAMP
 );
@@ -59,9 +66,33 @@ export function getDb(): Database.Database {
     db.pragma('journal_mode = WAL')
     db.pragma('foreign_keys = ON')
     db.exec(SCHEMA)
+    runMigrations(db)
     scheduleBackup(userDataPath, dbPath)
   }
   return db
+}
+
+function runMigrations(database: Database.Database): void {
+  const version = database.pragma('user_version', { simple: true }) as number
+
+  if (version < 2) {
+    database.transaction(() => {
+      try {
+        database.exec(`
+          CREATE TABLE IF NOT EXISTS folders (
+            id         INTEGER PRIMARY KEY AUTOINCREMENT,
+            name       TEXT NOT NULL,
+            created_at DATETIME DEFAULT CURRENT_TIMESTAMP
+          );
+          ALTER TABLE songs ADD COLUMN folder_id INTEGER REFERENCES folders(id) ON DELETE SET NULL;
+        `)
+      } catch (e: any) {
+        // Column already exists (partial previous run) — safe to ignore
+        if (!String(e?.message).includes('duplicate column name')) throw e
+      }
+      database.pragma('user_version = 2')
+    })()
+  }
 }
 
 function scheduleBackup(userDataPath: string, dbPath: string): void {

@@ -1,18 +1,20 @@
-appId: com.worshipflow.app
-productName: WorshipFlow
-copyright: Copyright © 2026 WorshipFlow
+appId: com.alado.app
+productName: Alado
+copyright: Copyright © 2026 Alado
 
 files:
-  - dist/**/*
-  - electron/**/*
+  - out/**/*
   - assets/**/*
 
 asar: true
+asarUnpack: "**/*.node"
 compression: maximum
+npmRebuild: false
 
 win:
   target: nsis
   icon: assets/icons/icon.ico
+  signAndEditExecutable: false
 
 nsis:
   oneClick: true

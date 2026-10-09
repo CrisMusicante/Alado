@@ -23,8 +23,15 @@ export interface Song {
   sections: Section[]
   video_path?: string
   text_style: Partial<TextStyle>
+  folder_id?: number | null
   created_at?: string
   updated_at?: string
+}
+
+export interface Folder {
+  id?: number
+  name: string
+  created_at?: string
 }
 
 interface SongsState {
@@ -57,6 +64,12 @@ declare global {
       openFileDialog: (filters: any) => Promise<string | null>
       fetchLyricsUrl: (url: string) => Promise<{ success: boolean; rawText?: string; site?: string; error?: string }>
       fetchLyricsAI: (payload: any) => Promise<{ success: boolean; rawText?: string; error?: string }>
+      getFolders: () => Promise<Folder[]>
+      createFolder: (name: string) => Promise<number>
+      renameFolder: (id: number, name: string) => Promise<void>
+      deleteFolder: (id: number) => Promise<void>
+      getSongsInFolder: (folderId: number | null) => Promise<Song[]>
+      moveSongToFolder: (songId: number, folderId: number | null) => Promise<void>
       on: (channel: string, cb: (...args: any[]) => void) => void
       off: (channel: string, cb: (...args: any[]) => void) => void
       signalReady: () => void

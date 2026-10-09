@@ -17,6 +17,13 @@ electron.contextBridge.exposeInMainWorld("api", {
   setBlackout: (active) => electron.ipcRenderer.invoke("live:blackout", { active }),
   setWhiteout: (active) => electron.ipcRenderer.invoke("live:whiteout", { active }),
   setTransition: (payload) => electron.ipcRenderer.invoke("live:transition", payload),
+  // Folders
+  getFolders: () => electron.ipcRenderer.invoke("db:get-folders"),
+  createFolder: (name) => electron.ipcRenderer.invoke("db:create-folder", name),
+  renameFolder: (id, name) => electron.ipcRenderer.invoke("db:rename-folder", { id, name }),
+  deleteFolder: (id) => electron.ipcRenderer.invoke("db:delete-folder", id),
+  getSongsInFolder: (folderId) => electron.ipcRenderer.invoke("db:get-songs-in-folder", folderId),
+  moveSongToFolder: (songId, folderId) => electron.ipcRenderer.invoke("db:move-song-to-folder", { songId, folderId }),
   // Lyrics import
   fetchLyricsUrl: (url) => electron.ipcRenderer.invoke("lyrics:fetch-url", url),
   fetchLyricsAI: (payload) => electron.ipcRenderer.invoke("lyrics:fetch-ai", payload),

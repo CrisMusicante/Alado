@@ -8,11 +8,13 @@ const http = require("http");
 const cheerio = require("cheerio");
 function createMainWindow() {
   const win = new electron.BrowserWindow({
+    title: "Alado",
     width: 1280,
     height: 800,
     minWidth: 900,
     minHeight: 600,
     backgroundColor: "#0f172a",
+    icon: path.join(__dirname, "../../assets/icons/icon.ico"),
     webPreferences: {
       preload: path.join(__dirname, "../preload/index.js"),
       contextIsolation: true,
@@ -63,6 +65,12 @@ function createLiveWindow() {
 }
 let db;
 const SCHEMA = `
+CREATE TABLE IF NOT EXISTS folders (
+  id         INTEGER PRIMARY KEY AUTOINCREMENT,
+  name       TEXT NOT NULL,
+  created_at DATETIME DEFAULT CURRENT_TIMESTAMP
+);
+
 CREATE TABLE IF NOT EXISTS songs (
   id          INTEGER PRIMARY KEY AUTOINCREMENT,
   title       TEXT NOT NULL,
@@ -70,6 +78,7 @@ CREATE TABLE IF NOT EXISTS songs (
   sections    TEXT NOT NULL DEFAULT '[]',
   video_path  TEXT,
   text_style  TEXT NOT NULL DEFAULT '{}',
+  folder_id   INTEGER REFERENCES folders(id) ON DELETE SET NULL,
   created_at  DATETIME DEFAULT CURRENT_TIMESTAMP,
   updated_at  DATETIME DEFAULT CURRENT_TIMESTAMP
 );
@@ -114,9 +123,30 @@ function getDb() {
     db.pragma("journal_mode = WAL");
     db.pragma("foreign_keys = ON");
     db.exec(SCHEMA);
+    runMigrations(db);
     scheduleBackup(userDataPath);
   }
   return db;
+}
+function runMigrations(database) {
+  const version = database.pragma("user_version", { simple: true });
+  if (version < 2) {
+    database.transaction(() => {
+      try {
+        database.exec(`
+          CREATE TABLE IF NOT EXISTS folders (
+            id         INTEGER PRIMARY KEY AUTOINCREMENT,
+            name       TEXT NOT NULL,
+            created_at DATETIME DEFAULT CURRENT_TIMESTAMP
+          );
+          ALTER TABLE songs ADD COLUMN folder_id INTEGER REFERENCES folders(id) ON DELETE SET NULL;
+        `);
+      } catch (e) {
+        if (!String(e?.message).includes("duplicate column name")) throw e;
+      }
+      database.pragma("user_version = 2");
+    })();
+  }
 }
 function scheduleBackup(userDataPath, dbPath) {
   const backupDir = path.join(userDataPath, "backups");
@@ -197,6 +227,27 @@ function registerDbHandlers() {
   });
   electron.ipcMain.handle("db:delete-setlist", (_e, id) => {
     getDb().prepare("DELETE FROM setlists WHERE id = ?").run(id);
+  });
+  electron.ipcMain.handle("db:get-folders", () => {
+    return getDb().prepare("SELECT * FROM folders ORDER BY name COLLATE NOCASE").all();
+  });
+  electron.ipcMain.handle("db:create-folder", (_e, name) => {
+    const result = getDb().prepare("INSERT INTO folders (name) VALUES (?)").run(name);
+    return result.lastInsertRowid;
+  });
+  electron.ipcMain.handle("db:rename-folder", (_e, { id, name }) => {
+    getDb().prepare("UPDATE folders SET name = ? WHERE id = ?").run(name, id);
+  });
+  electron.ipcMain.handle("db:delete-folder", (_e, id) => {
+    getDb().prepare("DELETE FROM folders WHERE id = ?").run(id);
+  });
+  electron.ipcMain.handle("db:get-songs-in-folder", (_e, folderId) => {
+    const db2 = getDb();
+    const rows = folderId === null ? db2.prepare("SELECT * FROM songs WHERE folder_id IS NULL ORDER BY title COLLATE NOCASE").all() : db2.prepare("SELECT * FROM songs WHERE folder_id = ? ORDER BY title COLLATE NOCASE").all(folderId);
+    return rows.map(deserializeSong);
+  });
+  electron.ipcMain.handle("db:move-song-to-folder", (_e, { songId, folderId }) => {
+    getDb().prepare("UPDATE songs SET folder_id = ? WHERE id = ?").run(folderId ?? null, songId);
   });
 }
 function deserializeSong(row) {

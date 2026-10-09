@@ -1,6 +1,15 @@
 import { useState } from 'react'
 import { Song, Section, TextStyle, useSongsStore } from '../../store/songs.store'
 import LyricsImportModal from './LyricsImportModal'
+import {
+  DndContext, closestCenter, KeyboardSensor, PointerSensor,
+  useSensor, useSensors, DragEndEvent
+} from '@dnd-kit/core'
+import {
+  arrayMove, SortableContext, sortableKeyboardCoordinates,
+  verticalListSortingStrategy, useSortable
+} from '@dnd-kit/sortable'
+import { CSS } from '@dnd-kit/utilities'
 
 interface Props {
   song: Song
@@ -27,6 +36,68 @@ const SECTION_BORDER: Record<string, string> = {
   intro:      'border-l-slate-400',
   outro:      'border-l-slate-400',
   custom:     'border-l-teal-500',
+}
+
+function SortableSectionCard({ id, section, index, onUpdate, onUpdateLines, onRemove }: {
+  id: string
+  section: Section
+  index: number
+  onUpdate: (i: number, patch: Partial<Section>) => void
+  onUpdateLines: (i: number, text: string) => void
+  onRemove: (i: number) => void
+}) {
+  const { attributes, listeners, setNodeRef, transform, transition, isDragging } = useSortable({ id })
+  const style = { transform: CSS.Transform.toString(transform), transition, opacity: isDragging ? 0.5 : 1 }
+
+  return (
+    <div
+      ref={setNodeRef}
+      style={style}
+      className={`bg-slate-800 rounded-2xl p-4 border border-slate-700 border-l-4 ${SECTION_BORDER[section.type] ?? 'border-l-slate-500'}`}
+    >
+      <div className="flex gap-3 mb-3">
+        <span
+          {...attributes}
+          {...listeners}
+          className="text-slate-600 hover:text-slate-400 cursor-grab active:cursor-grabbing text-lg select-none flex items-center"
+          title="Arrastrar para reordenar"
+        >
+          ⠿
+        </span>
+        <select
+          value={section.type}
+          onChange={e => {
+            const newType = e.target.value as Section['type']
+            const baseLabel = SECTION_TYPES.find(t => t.value === newType)?.label ?? newType
+            onUpdate(index, { type: newType, label: baseLabel })
+          }}
+          className="bg-slate-700 text-white rounded-lg px-3 py-2 outline-none border border-slate-600"
+        >
+          {SECTION_TYPES.map(t => <option key={t.value} value={t.value}>{t.label}</option>)}
+        </select>
+        <input
+          value={section.label}
+          onChange={e => onUpdate(index, { label: e.target.value })}
+          className="flex-1 bg-slate-700 text-white rounded-lg px-3 py-2 outline-none focus:ring-2 focus:ring-indigo-500 border border-slate-600"
+          placeholder="Etiqueta"
+        />
+        <button
+          onClick={() => onRemove(index)}
+          className="text-slate-500 hover:text-red-400 px-2 transition-colors"
+          title="Eliminar sección"
+        >
+          ✕
+        </button>
+      </div>
+      <textarea
+        value={section.lines.join('\n')}
+        onChange={e => onUpdateLines(index, e.target.value)}
+        rows={4}
+        className="w-full bg-slate-900 text-white rounded-xl px-4 py-3 outline-none focus:ring-2 focus:ring-indigo-500 text-sm resize-none border border-slate-700"
+        placeholder="Escribe la letra aquí, una línea por renglón..."
+      />
+    </div>
+  )
 }
 
 export default function SongEditor({ song, onClose }: Props) {
@@ -83,6 +154,20 @@ export default function SongEditor({ song, onClose }: Props) {
 
   function updateLines(index: number, text: string) {
     updateSection(index, { lines: text.split('\n') })
+  }
+
+  const sensors = useSensors(
+    useSensor(PointerSensor),
+    useSensor(KeyboardSensor, { coordinateGetter: sortableKeyboardCoordinates })
+  )
+
+  function handleDragEnd(event: DragEndEvent) {
+    const { active, over } = event
+    if (over && active.id !== over.id) {
+      const oldIndex = sections.findIndex((_, i) => `section-${i}` === active.id)
+      const newIndex = sections.findIndex((_, i) => `section-${i}` === over.id)
+      setSections(prev => arrayMove(prev, oldIndex, newIndex))
+    }
   }
 
   return (
@@ -272,49 +357,23 @@ export default function SongEditor({ song, onClose }: Props) {
         />
       )}
 
-      <div className="flex flex-col gap-4">
-        {sections.map((section, i) => (
-          <div
-            key={i}
-            className={`bg-slate-800 rounded-2xl p-4 border border-slate-700 border-l-4 ${SECTION_BORDER[section.type] ?? 'border-l-slate-500'}`}
-          >
-            <div className="flex gap-3 mb-3">
-              <select
-                value={section.type}
-                onChange={e => {
-                  const newType = e.target.value as Section['type']
-                  const baseLabel = SECTION_TYPES.find(t => t.value === newType)?.label ?? newType
-                  const count = sections.filter((s, idx) => idx !== i && s.type === newType).length + 1
-                  updateSection(i, { type: newType, label: `${baseLabel} ${count}` })
-                }}
-                className="bg-slate-700 text-white rounded-lg px-3 py-2 outline-none border border-slate-600"
-              >
-                {SECTION_TYPES.map(t => <option key={t.value} value={t.value}>{t.label}</option>)}
-              </select>
-              <input
-                value={section.label}
-                onChange={e => updateSection(i, { label: e.target.value })}
-                className="flex-1 bg-slate-700 text-white rounded-lg px-3 py-2 outline-none focus:ring-2 focus:ring-indigo-500 border border-slate-600"
-                placeholder="Etiqueta"
+      <DndContext sensors={sensors} collisionDetection={closestCenter} onDragEnd={handleDragEnd}>
+        <SortableContext items={sections.map((_, i) => `section-${i}`)} strategy={verticalListSortingStrategy}>
+          <div className="flex flex-col gap-4">
+            {sections.map((section, i) => (
+              <SortableSectionCard
+                key={`section-${i}`}
+                id={`section-${i}`}
+                section={section}
+                index={i}
+                onUpdate={updateSection}
+                onUpdateLines={updateLines}
+                onRemove={removeSection}
               />
-              <button
-                onClick={() => removeSection(i)}
-                className="text-slate-500 hover:text-red-400 px-2 transition-colors"
-                title="Eliminar sección"
-              >
-                ✕
-              </button>
-            </div>
-            <textarea
-              value={section.lines.join('\n')}
-              onChange={e => updateLines(i, e.target.value)}
-              rows={4}
-              className="w-full bg-slate-900 text-white rounded-xl px-4 py-3 outline-none focus:ring-2 focus:ring-indigo-500 text-sm resize-none border border-slate-700"
-              placeholder="Escribe la letra aquí, una línea por renglón..."
-            />
+            ))}
           </div>
-        ))}
-      </div>
+        </SortableContext>
+      </DndContext>
     </div>
   )
 }
