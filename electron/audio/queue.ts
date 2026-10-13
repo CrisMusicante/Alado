@@ -15,7 +15,7 @@ interface Entry {
 
 export class SeparationQueue {
   private entries: Entry[] = []
-  private current: { songId: number; abort: AbortController } | null = null
+  private current: { songId: number; abort: AbortController; settled: Promise<void> } | null = null
   private running = false
 
   constructor(private readonly run: RunFn, private readonly events: QueueEvents) {}
@@ -30,14 +30,17 @@ export class SeparationQueue {
     void this.drain()
   }
 
-  cancel(songId: number): void {
+  /** Resolves once the job no longer runs, so callers can safely delete its files afterwards. */
+  async cancel(songId: number): Promise<void> {
     const entry = this.entries.find(e => e.job.songId === songId)
     if (!entry) return
     if (entry.status === 'pending') {
       entry.status = 'cancelled'
       this.events.onStatus(songId, 'cancelled')
     } else if (entry.status === 'processing' && this.current?.songId === songId) {
-      this.current.abort.abort()
+      const { abort, settled } = this.current
+      abort.abort()
+      await settled
     }
   }
 
@@ -54,7 +57,9 @@ export class SeparationQueue {
         if (!entry) break
         const { songId } = entry.job
         const abort = new AbortController()
-        this.current = { songId, abort }
+        let markSettled!: () => void
+        const settled = new Promise<void>(r => { markSettled = r })
+        this.current = { songId, abort, settled }
         entry.status = 'processing'
         this.events.onStatus(songId, 'processing')
         try {
@@ -75,6 +80,7 @@ export class SeparationQueue {
           }
         } finally {
           this.current = null
+          markSettled()
         }
       }
     } finally {

@@ -47,6 +47,38 @@ describe('runDemucs', () => {
     await expect(p).rejects.toThrow()
   })
 
+  it('does not spawn when aborted while preparing the temp dir (cancel right as the job starts)', async () => {
+    const abort = new AbortController()
+    const p = runDemucs(cmd(), { songId: 12, inputPath: input, outDir }, () => {}, abort.signal)
+    abort.abort() // lands while runDemucs awaits fs.rm / fs.mkdir
+    await expect(p).rejects.toThrow('cancelado')
+    expect(fs.existsSync(path.join(outDir, 'vocals.wav'))).toBe(false)
+    expect(fs.existsSync(path.join(outDir, '.tmp-demucs'))).toBe(false)
+  })
+
+  it('converts non-WAV input (m4a) to WAV with ffmpeg before Demucs', async () => {
+    const m4a = path.join(outDir, 'original.m4a')
+    fs.writeFileSync(m4a, 'M4A')
+    const withFfmpeg: DemucsCommand = {
+      ...cmd({ FAKE_DEMUCS_REQUIRE_WAV: '1' }),
+      ffmpeg: { file: process.execPath, baseArgs: [path.join(__dirname, '__fixtures__', 'fake-ffmpeg.cjs')] }
+    }
+    await runDemucs(withFfmpeg, { songId: 12, inputPath: m4a, outDir }, () => {}, new AbortController().signal)
+    expect(fs.readFileSync(path.join(outDir, 'vocals.wav'), 'utf8')).toBe('VOCALS')
+    expect(fs.existsSync(path.join(outDir, '.tmp-demucs'))).toBe(false)
+  })
+
+  it('reports a readable error when ffmpeg cannot decode the input', async () => {
+    const m4a = path.join(outDir, 'original.m4a')
+    fs.writeFileSync(m4a, 'M4A')
+    const withFfmpeg: DemucsCommand = {
+      ...cmd(),
+      ffmpeg: { file: process.execPath, baseArgs: [path.join(__dirname, '__fixtures__', 'fake-ffmpeg.cjs')], env: { FAKE_FFMPEG_FAIL: '1' } }
+    }
+    await expect(runDemucs(withFfmpeg, { songId: 12, inputPath: m4a, outDir }, () => {}, new AbortController().signal))
+      .rejects.toThrow(/No se pudo leer el audio.*Invalid data/)
+  })
+
   it('rejects immediately when already aborted', async () => {
     const abort = new AbortController(); abort.abort()
     await expect(runDemucs(cmd(), { songId: 12, inputPath: input, outDir }, () => {}, abort.signal)).rejects.toThrow('cancelado')

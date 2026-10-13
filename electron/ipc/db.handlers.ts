@@ -76,9 +76,10 @@ export function registerDbHandlers(): void {
     }
   })
 
-  ipcMain.handle('db:delete-song', (_e, id: number) => {
+  ipcMain.handle('db:delete-song', async (_e, id: number) => {
     getDb().prepare('DELETE FROM songs WHERE id = ?').run(id)
-    purgeSongAudio(id)
+    // The row is gone either way; leftover files must not make the delete look failed.
+    await purgeSongAudio(id).catch(e => console.error('No se pudieron borrar los stems de la canción', id, e))
   })
 
   // ── Setlists ───────────────────────────────────────────────────────────────

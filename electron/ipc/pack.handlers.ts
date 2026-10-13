@@ -95,7 +95,7 @@ export function registerPackHandlers(): void {
     return { path: filePaths[0], title: song.title, artist: song.artist, duplicateOf: dup?.id ?? null }
   })
 
-  ipcMain.handle('pack:import', (_e, { path: packPath, mode }: { path: string; mode: 'copy' | 'replace' }) => {
+  ipcMain.handle('pack:import', async (_e, { path: packPath, mode }: { path: string; mode: 'copy' | 'replace' }) => {
     if (mode !== 'copy' && mode !== 'replace') throw new Error(`Modo de importación inválido: ${String(mode)}`)
     if (typeof packPath !== 'string' || !packPath.toLowerCase().endsWith('.wfpack')) throw new Error('Solo se pueden importar archivos .wfpack')
     const { song, files } = parsePack(new Uint8Array(fs.readFileSync(packPath)))
@@ -106,7 +106,7 @@ export function registerPackHandlers(): void {
 
     if (mode === 'replace' && dup) {
       songId = dup.id
-      purgeSongAudio(songId)
+      await purgeSongAudio(songId)
       db.prepare('UPDATE songs SET sections = ?, text_style = ? WHERE id = ?')
         .run(JSON.stringify(song.sections), JSON.stringify(song.text_style), songId)
     } else {

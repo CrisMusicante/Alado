@@ -95,7 +95,8 @@ export function registerAudioHandlers(getWindow: () => BrowserWindow | null): vo
 }
 
 /** Called after a song row is deleted: stop any job and remove its files. */
-export function purgeSongAudio(songId: number): void {
-  queue?.cancel(songId)
-  fs.rmSync(stemsDir(songId), { recursive: true, force: true })
+export async function purgeSongAudio(songId: number): Promise<void> {
+  // Wait for the Demucs process to exit: on Windows it keeps the stem files locked until then.
+  await queue?.cancel(songId)
+  fs.rmSync(stemsDir(songId), { recursive: true, force: true, maxRetries: 5, retryDelay: 200 })
 }

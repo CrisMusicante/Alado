@@ -71,6 +71,25 @@ describe('SeparationQueue', () => {
     expect(q.snapshot()[0].status).toBe('cancelled')
   })
 
+  it('cancel() resolves only after the running job has fully settled (files released)', async () => {
+    let settled = false
+    const run: RunFn = (_j, _p, signal) => new Promise<void>((_resolve, reject) => {
+      signal.addEventListener('abort', () => setTimeout(() => { settled = true; reject(new Error('killed')) }, 50))
+    })
+    const q = new SeparationQueue(run, { onStatus: vi.fn(), onProgress: vi.fn() })
+    q.enqueue(job(1)); await flush()
+    await q.cancel(1)
+    expect(settled).toBe(true)
+  })
+
+  it('cancel() of an unknown or pending job resolves immediately', async () => {
+    const { run } = deferredRun()
+    const q = new SeparationQueue(run, { onStatus: vi.fn(), onProgress: vi.fn() })
+    await expect(q.cancel(99)).resolves.toBeUndefined()
+    q.enqueue(job(1)); q.enqueue(job(2)); await flush()
+    await expect(q.cancel(2)).resolves.toBeUndefined()
+  })
+
   it('ignores a duplicate enqueue while pending/processing', async () => {
     const { run } = deferredRun()
     const q = new SeparationQueue(run, { onStatus: vi.fn(), onProgress: vi.fn() })

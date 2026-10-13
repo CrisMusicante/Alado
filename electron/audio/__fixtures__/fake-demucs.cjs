@@ -11,6 +11,10 @@ if (process.env.FAKE_DEMUCS_FAIL === '1') {
   process.stderr.write('Traceback (most recent call last):\nRuntimeError: Could not load file ' + input + '\n')
   process.exit(1)
 }
+if (process.env.FAKE_DEMUCS_REQUIRE_WAV === '1' && !input.endsWith('.wav')) {
+  process.stderr.write('LoadAudioError: FFmpeg is not installed.\n')
+  process.exit(1)
+}
 if (!fs.existsSync(input)) {
   process.stderr.write('FileNotFoundError: ' + input + '\n')
   process.exit(1)
