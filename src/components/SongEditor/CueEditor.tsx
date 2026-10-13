@@ -2,6 +2,7 @@ import { useEffect, useRef, useState } from 'react'
 import { CueRecorder, Cue, nudgeCue, removeCue, upsertCueAt, sectionsSignature, cuesAreStale } from '../../audio/cues'
 import { usePlaybackStore, getPlayer } from '../../audio/playback.store'
 import { useAudioStore } from '../../store/audio.store'
+import { useLiveStore } from '../../store/live.store'
 import type { Section } from '../../store/songs.store'
 import { Btn } from './AudioPanel'
 
@@ -11,6 +12,7 @@ export default function CueEditor({ songId, sections }: { songId: number; sectio
   const audio = useAudioStore(s => s.byId[songId])
   const update = useAudioStore(s => s.update)
   const { songId: loaded, recording, setRecording, seek, toggle } = usePlaybackStore()
+  const isLive = useLiveStore(s => s.isLive)
   const recorder = useRef<CueRecorder | null>(null)
   const [draft, setDraft] = useState<Cue[]>([])
   const [selected, setSelected] = useState(0)
@@ -39,7 +41,8 @@ export default function CueEditor({ songId, sections }: { songId: number; sectio
   // Leaving the editor mid-recording must not leave the playback store stuck in recording mode.
   useEffect(() => () => { if (usePlaybackStore.getState().recording) setRecording(false) }, [])
 
-  if (loaded !== songId || sections.length === 0) return null
+  // During a live service the loaded track is the one the congregation hears: no seeking/recording from here.
+  if (isLive || loaded !== songId || sections.length === 0) return null
 
   function start() {
     recorder.current = new CueRecorder(sections.length)
