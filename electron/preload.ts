@@ -21,6 +21,14 @@ contextBridge.exposeInMainWorld('api', {
   setWhiteout: (active: boolean) => ipcRenderer.invoke('live:whiteout', { active }),
   setTransition: (payload: unknown) => ipcRenderer.invoke('live:transition', payload),
 
+  // Folders
+  getFolders: () => ipcRenderer.invoke('db:get-folders'),
+  createFolder: (name: string) => ipcRenderer.invoke('db:create-folder', name),
+  renameFolder: (id: number, name: string) => ipcRenderer.invoke('db:rename-folder', { id, name }),
+  deleteFolder: (id: number) => ipcRenderer.invoke('db:delete-folder', id),
+  getSongsInFolder: (folderId: number | null) => ipcRenderer.invoke('db:get-songs-in-folder', folderId),
+  moveSongToFolder: (songId: number, folderId: number | null) => ipcRenderer.invoke('db:move-song-to-folder', { songId, folderId }),
+
   // Lyrics import
   fetchLyricsUrl: (url: string) => ipcRenderer.invoke('lyrics:fetch-url', url),
   fetchLyricsAI: (payload: unknown) => ipcRenderer.invoke('lyrics:fetch-ai', payload),
