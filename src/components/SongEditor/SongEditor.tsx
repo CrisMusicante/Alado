@@ -2,6 +2,7 @@ import { useState } from 'react'
 import { Song, Section, TextStyle, useSongsStore } from '../../store/songs.store'
 import LyricsImportModal from './LyricsImportModal'
 import AudioPanel from './AudioPanel'
+import SongPreview from './SongPreview'
 import {
   DndContext, closestCenter, KeyboardSensor, PointerSensor,
   useSensor, useSensors, DragEndEvent
@@ -39,10 +40,12 @@ const SECTION_BORDER: Record<string, string> = {
   custom:     'border-l-teal-500',
 }
 
-function SortableSectionCard({ id, section, index, onUpdate, onUpdateLines, onRemove }: {
+function SortableSectionCard({ id, section, index, previewing, onPreview, onUpdate, onUpdateLines, onRemove }: {
   id: string
   section: Section
   index: number
+  previewing: boolean
+  onPreview: (i: number) => void
   onUpdate: (i: number, patch: Partial<Section>) => void
   onUpdateLines: (i: number, text: string) => void
   onRemove: (i: number) => void
@@ -54,7 +57,10 @@ function SortableSectionCard({ id, section, index, onUpdate, onUpdateLines, onRe
     <div
       ref={setNodeRef}
       style={style}
-      className={`bg-slate-800 rounded-2xl p-4 border border-slate-700 border-l-4 ${SECTION_BORDER[section.type] ?? 'border-l-slate-500'}`}
+      onFocusCapture={() => onPreview(index)}
+      onClick={() => onPreview(index)}
+      className={`bg-slate-800 rounded-2xl p-4 border border-l-4 ${SECTION_BORDER[section.type] ?? 'border-l-slate-500'}
+        ${previewing ? 'border-indigo-400 ring-1 ring-indigo-400/40' : 'border-slate-700'}`}
     >
       <div className="flex gap-3 mb-3">
         <span
@@ -110,6 +116,7 @@ export default function SongEditor({ song, onClose }: Props) {
   const [textStyle, setTextStyle] = useState<Partial<TextStyle>>(song.text_style ?? {})
   const [saving, setSaving] = useState(false)
   const [showImport, setShowImport] = useState(false)
+  const [previewIndex, setPreviewIndex] = useState(0)
 
   function updateTextStyle(patch: Partial<TextStyle>) {
     setTextStyle(prev => ({ ...prev, ...patch }))
@@ -138,6 +145,7 @@ export default function SongEditor({ song, onClose }: Props) {
   }
 
   function addSection() {
+    setPreviewIndex(sections.length)
     setSections(prev => [...prev, {
       type: 'verse',
       label: `Verso ${prev.filter(s => s.type === 'verse').length + 1}`,
@@ -360,23 +368,37 @@ export default function SongEditor({ song, onClose }: Props) {
         />
       )}
 
-      <DndContext sensors={sensors} collisionDetection={closestCenter} onDragEnd={handleDragEnd}>
-        <SortableContext items={sections.map((_, i) => `section-${i}`)} strategy={verticalListSortingStrategy}>
-          <div className="flex flex-col gap-4">
-            {sections.map((section, i) => (
-              <SortableSectionCard
-                key={`section-${i}`}
-                id={`section-${i}`}
-                section={section}
-                index={i}
-                onUpdate={updateSection}
-                onUpdateLines={updateLines}
-                onRemove={removeSection}
-              />
-            ))}
-          </div>
-        </SortableContext>
-      </DndContext>
+      <div className="grid grid-cols-[minmax(0,1fr)_minmax(300px,42%)] gap-5 items-start">
+        <DndContext sensors={sensors} collisionDetection={closestCenter} onDragEnd={handleDragEnd}>
+          <SortableContext items={sections.map((_, i) => `section-${i}`)} strategy={verticalListSortingStrategy}>
+            <div className="flex flex-col gap-4">
+              {sections.map((section, i) => (
+                <SortableSectionCard
+                  key={`section-${i}`}
+                  id={`section-${i}`}
+                  section={section}
+                  index={i}
+                  previewing={i === Math.min(previewIndex, sections.length - 1)}
+                  onPreview={setPreviewIndex}
+                  onUpdate={updateSection}
+                  onUpdateLines={updateLines}
+                  onRemove={removeSection}
+                />
+              ))}
+            </div>
+          </SortableContext>
+        </DndContext>
+
+        <div className="sticky top-0">
+          <SongPreview
+            sections={sections}
+            selected={previewIndex}
+            onSelect={setPreviewIndex}
+            textStyle={textStyle}
+            videoPath={videoPath}
+          />
+        </div>
+      </div>
     </div>
   )
 }
