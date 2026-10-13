@@ -8,6 +8,7 @@ import { getSongAudio, upsertSongAudio, markInterruptedJobs } from '../audio/rep
 import { stemsRoot, stemsDir, findStem, findOriginal } from '../audio/paths'
 import { sha256File } from '../audio/download'
 import { Cue } from '../audio/types'
+import { assertSongId, assertStem } from '../audio/validate'
 
 const SUPPORTED = ['.mp3', '.wav', '.flac', '.m4a']
 let queue: SeparationQueue
@@ -46,7 +47,8 @@ export function registerAudioHandlers(getWindow: () => BrowserWindow | null): vo
 
   ipcMain.handle('audio:cancel-install', () => installAbort?.abort())
 
-  ipcMain.handle('audio:import-track', async (_e, { songId, filePath }: { songId: number; filePath: string }) => {
+  ipcMain.handle('audio:import-track', async (_e, { songId: rawId, filePath }: { songId: number; filePath: string }) => {
+    const songId = assertSongId(rawId)
     const ext = path.extname(filePath).toLowerCase()
     if (!SUPPORTED.includes(ext)) throw new Error(`Formato no soportado: ${ext}. Usa mp3, wav, flac o m4a.`)
     // Two 44.1 kHz stereo WAV stems ≈ 20 MB/min; a 10 min song plus the original fits in 300 MB.
@@ -67,7 +69,8 @@ export function registerAudioHandlers(getWindow: () => BrowserWindow | null): vo
     return row
   })
 
-  ipcMain.handle('audio:reprocess', (_e, songId: number) => {
+  ipcMain.handle('audio:reprocess', (_e, rawId: number) => {
+    const songId = assertSongId(rawId)
     const original = findOriginal(songId)
     if (!original) throw new Error('No se encontró el audio original; vuelve a importarlo.')
     const row = upsertSongAudio(songId, { status: 'pending', error: null })
@@ -75,12 +78,12 @@ export function registerAudioHandlers(getWindow: () => BrowserWindow | null): vo
     return row
   })
 
-  ipcMain.handle('audio:cancel', (_e, songId: number) => queue.cancel(songId))
+  ipcMain.handle('audio:cancel', (_e, songId: number) => queue.cancel(assertSongId(songId)))
   ipcMain.handle('audio:get-queue', () => queue.snapshot())
-  ipcMain.handle('audio:get-song-audio', (_e, songId: number) => getSongAudio(songId))
+  ipcMain.handle('audio:get-song-audio', (_e, songId: number) => getSongAudio(assertSongId(songId)))
 
   ipcMain.handle('audio:read-stem', (_e, { songId, stem }: { songId: number; stem: 'instrumental' | 'vocals' }) => {
-    const p = findStem(songId, stem)
+    const p = findStem(assertSongId(songId), assertStem(stem))
     if (!p) throw new Error(`No existe la pista ${stem} de la canción ${songId}`)
     return new Uint8Array(fs.readFileSync(p))
   })
@@ -88,7 +91,7 @@ export function registerAudioHandlers(getWindow: () => BrowserWindow | null): vo
   ipcMain.handle('audio:update', (_e, { songId, patch }: {
     songId: number
     patch: { cues?: Cue[]; cues_sections_sig?: string | null; vol_instrumental?: number; vol_vocals?: number; duration_sec?: number }
-  }) => upsertSongAudio(songId, patch))
+  }) => upsertSongAudio(assertSongId(songId), patch))
 }
 
 /** Called after a song row is deleted: stop any job and remove its files. */

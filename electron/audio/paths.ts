@@ -1,13 +1,14 @@
 import { app } from 'electron'
 import fs from 'fs'
 import path from 'path'
+import { assertSongId, assertStem } from './validate'
 
 export const stemsRoot = (): string => path.join(app.getPath('userData'), 'stems')
-export const stemsDir = (songId: number): string => path.join(stemsRoot(), String(songId))
+export const stemsDir = (songId: number): string => path.join(stemsRoot(), String(assertSongId(songId)))
 
 export function findStem(songId: number, stem: 'instrumental' | 'vocals'): string | null {
   for (const ext of ['wav', 'flac']) {
-    const p = path.join(stemsDir(songId), `${stem}.${ext}`)
+    const p = path.join(stemsDir(songId), `${assertStem(stem)}.${ext}`)
     if (fs.existsSync(p)) return p
   }
   return null
