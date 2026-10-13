@@ -3,11 +3,13 @@ import path from 'path'
 
 export function createMainWindow(): BrowserWindow {
   const win = new BrowserWindow({
+    title: 'Alado',
     width: 1280,
     height: 800,
     minWidth: 900,
     minHeight: 600,
     backgroundColor: '#0f172a',
+    icon: path.join(__dirname, '../../assets/icons/icon.ico'),
     webPreferences: {
       preload: path.join(__dirname, '../preload/index.js'),
       contextIsolation: true,

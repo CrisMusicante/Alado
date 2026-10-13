@@ -1,7 +1,8 @@
 {
-  "name": "worshipflow",
+  "name": "alado",
   "version": "1.0.0",
   "description": "Worship song presentation app for local churches",
+  "author": "Alado",
   "main": "out/main/index.js",
   "scripts": {
     "postinstall": "cd node_modules/better-sqlite3 && npx prebuild-install --runtime electron --target 40.8.0 --arch x64 || true",
