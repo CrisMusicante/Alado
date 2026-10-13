@@ -11,6 +11,8 @@ import { CSS } from '@dnd-kit/utilities'
 import { Song, useSongsStore } from '../../store/songs.store'
 import { useLiveStore } from '../../store/live.store'
 import { useSetlistsStore, SavedSetlist } from '../../store/setlists.store'
+import { useFoldersStore } from '../../store/folders.store'
+import { groupSongs, FolderFilter } from '../../utils/songGroups'
 
 interface SetlistSong {
   id: string
@@ -21,16 +23,19 @@ export default function SetlistPage() {
   const { songs, fetchSongs } = useSongsStore()
   const { isLive, startLive, stopLive, changeSong, currentSong } = useLiveStore()
   const { setlists, fetchSetlists, saveSetlist } = useSetlistsStore()
+  const { folders, fetchFolders } = useFoldersStore()
 
   const [setlistSongs, setSetlistSongs] = useState<SetlistSong[]>([])
   const [setlistName, setSetlistName] = useState(`Servicio ${new Date().toLocaleDateString('es')}`)
   const [searchQuery, setSearchQuery] = useState('')
+  const [folderFilter, setFolderFilter] = useState<FolderFilter>('all')
   const [showSaved, setShowSaved] = useState(false)
   const [saving, setSaving] = useState(false)
 
   useEffect(() => {
     fetchSongs()
     fetchSetlists()
+    fetchFolders()
   }, [])
 
   const sensors = useSensors(
@@ -38,10 +43,9 @@ export default function SetlistPage() {
     useSensor(KeyboardSensor, { coordinateGetter: sortableKeyboardCoordinates })
   )
 
-  const filteredSongs = songs.filter(s =>
-    s.title.toLowerCase().includes(searchQuery.toLowerCase()) ||
-    (s.artist ?? '').toLowerCase().includes(searchQuery.toLowerCase())
-  )
+  const groups = groupSongs(songs, folders, folderFilter, searchQuery)
+  const hasLoose = songs.some(s => s.folder_id == null || !folders.some(f => f.id === s.folder_id))
+  const inSetlist = new Set(setlistSongs.map(s => s.song.id))
 
   function addSong(song: Song) {
     if (setlistSongs.find(s => s.song.id === song.id)) return
@@ -107,18 +111,41 @@ export default function SetlistPage() {
           onChange={e => setSearchQuery(e.target.value)}
           className="bg-slate-800 text-white placeholder-slate-500 rounded-xl px-3 py-2 text-sm outline-none focus:ring-2 focus:ring-indigo-500 border border-slate-700 mb-3"
         />
+        {folders.length > 0 && (
+          <div className="flex flex-wrap gap-1.5 mb-3">
+            <FolderChip active={folderFilter === 'all'} onClick={() => setFolderFilter('all')}>Todas</FolderChip>
+            {folders.map(f => (
+              <FolderChip key={f.id} active={folderFilter === f.id} onClick={() => setFolderFilter(f.id!)}>{f.name}</FolderChip>
+            ))}
+            {hasLoose && (
+              <FolderChip active={folderFilter === null} onClick={() => setFolderFilter(null)}>Sin carpeta</FolderChip>
+            )}
+          </div>
+        )}
         <div className="flex-1 overflow-y-auto flex flex-col gap-1">
-          {filteredSongs.map(song => (
-            <button
-              key={song.id}
-              onClick={() => addSong(song)}
-              className="text-left px-3 py-2.5 rounded-xl hover:bg-slate-800 transition-all duration-150 group border border-transparent hover:border-slate-700"
-            >
-              <p className="text-sm font-medium text-white truncate">{song.title}</p>
-              {song.artist && <p className="text-xs text-slate-500 truncate">{song.artist}</p>}
-            </button>
+          {groups.map(group => (
+            <div key={group.key} className="flex flex-col gap-1">
+              {(folders.length > 0) && (
+                <p className="sticky top-0 z-[1] bg-slate-950 text-[11px] font-semibold text-slate-500 uppercase tracking-wide px-1 pt-2 pb-1">
+                  {group.name} · {group.songs.length}
+                </p>
+              )}
+              {group.songs.map(song => (
+                <button
+                  key={song.id}
+                  onClick={() => addSong(song)}
+                  className="text-left px-3 py-2.5 rounded-xl hover:bg-slate-800 transition-all duration-150 group border border-transparent hover:border-slate-700"
+                >
+                  <p className={`text-sm font-medium truncate ${inSetlist.has(song.id) ? 'text-slate-500' : 'text-white'}`}>
+                    {inSetlist.has(song.id) && <span className="text-emerald-500 mr-1">✓</span>}
+                    {song.title}
+                  </p>
+                  {song.artist && <p className="text-xs text-slate-500 truncate">{song.artist}</p>}
+                </button>
+              ))}
+            </div>
           ))}
-          {filteredSongs.length === 0 && (
+          {groups.length === 0 && (
             <p className="text-xs text-slate-600 text-center py-4">Sin resultados</p>
           )}
         </div>
@@ -224,6 +251,20 @@ export default function SetlistPage() {
         )}
       </div>
     </div>
+  )
+}
+
+function FolderChip({ active, onClick, children }: { active: boolean; onClick: () => void; children: React.ReactNode }) {
+  return (
+    <button
+      onClick={onClick}
+      className={`px-2.5 py-1 rounded-lg text-xs font-medium border transition-colors
+        ${active
+          ? 'bg-indigo-600 border-indigo-500 text-white'
+          : 'bg-slate-800 border-slate-700 text-slate-400 hover:text-white hover:bg-slate-700'}`}
+    >
+      {children}
+    </button>
   )
 }
 
