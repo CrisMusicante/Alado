@@ -21,12 +21,17 @@ export class StemPlayer {
     STEMS.forEach(s => this.gains[s].connect(this.ctx.destination))
   }
 
-  async load(data: Record<Stem, ArrayBuffer>): Promise<void> {
+  /** Decodes without touching what is loaded, so a slow, superseded decode can simply be dropped. */
+  async decode(data: Record<Stem, ArrayBuffer>): Promise<Record<Stem, AudioBuffer>> {
+    const [instrumental, vocals] = await Promise.all(STEMS.map(s => this.ctx.decodeAudioData(data[s])))
+    return { instrumental, vocals }
+  }
+
+  use(decoded: Record<Stem, AudioBuffer>): void {
     this.stopSources()
     this.playing = false
     this.offset = 0
-    const decoded = await Promise.all(STEMS.map(s => this.ctx.decodeAudioData(data[s])))
-    STEMS.forEach((s, i) => { this.buffers[s] = decoded[i] })
+    this.buffers = { ...decoded }
   }
 
   get duration(): number {

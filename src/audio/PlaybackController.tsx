@@ -21,13 +21,18 @@ export default function PlaybackController() {
       return
     }
     const id = currentSong.id
+    let cancelled = false
     void (async () => {
       const audio = await useAudioStore.getState().load(id)
+      if (cancelled) return
       if (audio?.status !== 'ready') { usePlaybackStore.getState().unload(); return }
+      setFollowerCues(null) // never let the previous song's cues drive this one while it loads
       await usePlaybackStore.getState().loadSong(id)
+      if (cancelled || usePlaybackStore.getState().songId !== id) return
       const stale = cuesAreStale(audio.cues, audio.cues_sections_sig, currentSong.sections)
       setFollowerCues(stale ? null : audio.cues)
     })()
+    return () => { cancelled = true }
   }, [isLive, currentSong?.id])
 
   // Operator pressed a section by hand → manual mode until the next cue.
@@ -41,26 +46,23 @@ export default function PlaybackController() {
     }
   }), [])
 
-  // Clock loop: publish time and fire cues.
+  // Clock loop: publish time and fire cues. A timer, not requestAnimationFrame: rAF stops while the
+  // main window is minimized or hidden, and the projected lyrics must keep following the audio.
   useEffect(() => {
-    let raf = 0
     let lastPublished = 0
-    const tick = () => {
+    const timer = setInterval(() => {
       const pb = usePlaybackStore.getState()
+      if (pb.status !== 'ready') return
       const p = getPlayer()
-      if (pb.status === 'ready') {
-        const t = p.currentTime
-        if (Math.abs(t - lastPublished) > 0.1 || p.playing !== pb.playing) {
-          lastPublished = t
-          usePlaybackStore.setState({ time: t, playing: p.playing })
-        }
-        const f = getFollower()
-        if (f && p.playing && !pb.recording) fire(f.update(t))
+      const t = p.currentTime
+      if (Math.abs(t - lastPublished) > 0.1 || p.playing !== pb.playing) {
+        lastPublished = t
+        usePlaybackStore.setState({ time: t, playing: p.playing })
       }
-      raf = requestAnimationFrame(tick)
-    }
-    raf = requestAnimationFrame(tick)
-    return () => cancelAnimationFrame(raf)
+      const f = getFollower()
+      if (f && p.playing && !pb.recording) fire(f.update(t))
+    }, 50)
+    return () => clearInterval(timer)
   }, [])
 
   // "Volver a automático" re-syncs the lyrics to the current time.

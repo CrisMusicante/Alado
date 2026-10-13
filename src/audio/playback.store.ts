@@ -57,7 +57,9 @@ export const usePlaybackStore = create<PlaybackState>((set, get) => ({
       ])
       if (get().songId !== songId) return // another song was requested meanwhile
       // Copy into fresh ArrayBuffers: decodeAudioData detaches its input.
-      await p.load({ instrumental: instrumental.slice().buffer, vocals: vocals.slice().buffer })
+      const decoded = await p.decode({ instrumental: instrumental.slice().buffer, vocals: vocals.slice().buffer })
+      if (get().songId !== songId) return // a newer song finished (or started) while this one decoded
+      p.use(decoded)
       const volumes = { instrumental: meta?.vol_instrumental ?? 1, vocals: meta?.vol_vocals ?? 0 }
       p.setVolume('instrumental', volumes.instrumental)
       p.setVolume('vocals', volumes.vocals)
