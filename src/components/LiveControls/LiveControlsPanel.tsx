@@ -1,5 +1,6 @@
 import { useEffect } from 'react'
 import { useLiveStore } from '../../store/live.store'
+import AudioTransport from './AudioTransport'
 
 export default function LiveControlsPanel() {
   const {
@@ -61,6 +62,8 @@ export default function LiveControlsPanel() {
           </button>
         ))}
       </div>
+
+      <AudioTransport />
 
       {/* Prev / Next */}
       <div className="flex gap-2 shrink-0">
