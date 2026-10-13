@@ -33,6 +33,7 @@ const pythonPath = () => process.platform === 'win32'
   ? path.join(engineDir(), 'python', 'python.exe')
   : path.join(engineDir(), 'python', 'bin', 'python3')
 const binDir = () => path.join(engineDir(), 'bin')
+const ffmpegBin = () => path.join(binDir(), process.platform === 'win32' ? 'ffmpeg.exe' : 'ffmpeg')
 
 export async function getEngineStatus(): Promise<EngineStatus> {
   const base = { platformSupported: platformKey() !== null, estimatedInstallBytes: manifest.estimatedInstallBytes }
@@ -45,15 +46,17 @@ export async function getEngineStatus(): Promise<EngineStatus> {
 }
 
 export function getFfmpegPath(): string | null {
-  const p = path.join(binDir(), process.platform === 'win32' ? 'ffmpeg.exe' : 'ffmpeg')
-  return fs.existsSync(p) ? p : null
+  return fs.existsSync(ffmpegBin()) ? ffmpegBin() : null
 }
 
 export function getDemucsCommand(): DemucsCommand {
   return {
     file: pythonPath(),
     baseArgs: ['-m', 'demucs'],
+    ffmpeg: { file: ffmpegBin(), baseArgs: [] },
     env: {
+      // Without this, Python on Windows writes stdout/paths in the ANSI code page and breaks on users like "José".
+      PYTHONUTF8: '1',
       // demucs 4.1 fetches weights through huggingface_hub; keep them inside the engine folder.
       HF_HOME: path.join(engineDir(), 'models', 'hf'),
       TORCH_HOME: path.join(engineDir(), 'models'),
@@ -112,11 +115,10 @@ export async function installEngine(onProgress: (p: EngineProgress) => void, sig
 
   onProgress({ step: 'ffmpeg', pct: 0 })
   fs.mkdirSync(binDir(), { recursive: true })
-  let ffmpegSrc = ''
-  await runPython(['-c', 'import imageio_ffmpeg;print(imageio_ffmpeg.get_ffmpeg_exe())'], l => { ffmpegSrc = l.trim() }, signal)
-  const ffmpegDest = path.join(binDir(), process.platform === 'win32' ? 'ffmpeg.exe' : 'ffmpeg')
-  fs.copyFileSync(ffmpegSrc, ffmpegDest)
-  if (process.platform !== 'win32') fs.chmodSync(ffmpegDest, 0o755)
+  // Python copies the binary itself (destination via argv) so no path round-trips through stdout encoding.
+  await runPython(['-c', 'import imageio_ffmpeg, shutil, sys; shutil.copyfile(imageio_ffmpeg.get_ffmpeg_exe(), sys.argv[1])', ffmpegBin()],
+    () => {}, signal)
+  if (process.platform !== 'win32') fs.chmodSync(ffmpegBin(), 0o755)
   onProgress({ step: 'ffmpeg', pct: 100 })
 
   // Self-test: separates 1 s of silence; also downloads the htdemucs weights into TORCH_HOME.
@@ -126,7 +128,7 @@ export async function installEngine(onProgress: (p: EngineProgress) => void, sig
   fs.mkdirSync(testDir, { recursive: true })
   const silence = path.join(testDir, 'silence.wav')
   await runPython(['-c',
-    `import numpy as np, soundfile as sf; sf.write(r"${silence}", np.zeros((44100, 2), dtype="float32"), 44100)`], () => {}, signal)
+    'import sys, numpy as np, soundfile as sf; sf.write(sys.argv[1], np.zeros((44100, 2), dtype="float32"), 44100)', silence], () => {}, signal)
   await runPython(['-m', 'demucs', '--two-stems=vocals', '-n', 'htdemucs', '-o', testDir, silence], () => {}, signal)
   if (!fs.existsSync(path.join(testDir, 'htdemucs', 'silence', 'vocals.wav'))) {
     throw new Error('La prueba del motor no produjo archivos de salida')
