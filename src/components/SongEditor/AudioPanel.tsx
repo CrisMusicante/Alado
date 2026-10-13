@@ -3,6 +3,7 @@ import { useAudioStore } from '../../store/audio.store'
 import type { Section } from '../../store/songs.store'
 import StemMixer from './StemMixer'
 import CueEditor from './CueEditor'
+import { confirmDialog } from '../../store/dialog.store'
 
 const STEP_LABEL = { download: 'Descargando', extract: 'Extrayendo', pip: 'Instalando librerías', ffmpeg: 'Preparando ffmpeg', selftest: 'Probando el motor' }
 const gb = (b: number) => (b / 1024 ** 3).toFixed(1)
@@ -88,9 +89,10 @@ export default function AudioPanel({ songId, sections }: { songId?: number; sect
           <CueEditor songId={songId} sections={sections} />
           <div>
             <Btn onClick={async () => {
-              const ok = window.confirm(
+              const ok = await confirmDialog(
                 'Compartir el audio de canciones comerciales puede requerir licencia (por ejemplo CCLI o equivalente). ' +
-                'Es responsabilidad de tu iglesia contar con ella. ¿Exportar el paquete?')
+                'Es responsabilidad de tu iglesia contar con ella. ¿Exportar el paquete?',
+                { title: 'Exportar paquete', confirmLabel: 'Exportar' })
               if (!ok) return
               try {
                 await window.api.packExport(songId)

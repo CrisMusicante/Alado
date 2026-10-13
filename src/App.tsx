@@ -5,6 +5,7 @@ import SettingsPage from './pages/Settings/SettingsPage'
 import LiveControlsPanel from './components/LiveControls/LiveControlsPanel'
 import { useLiveStore } from './store/live.store'
 import PlaybackController from './audio/PlaybackController'
+import DialogHost from './components/DialogHost'
 
 type Page = 'songs' | 'setlist' | 'settings'
 
@@ -15,6 +16,7 @@ export default function App() {
   return (
     <div className="flex h-screen bg-slate-900 text-white overflow-hidden">
       <PlaybackController />
+      <DialogHost />
       {/* Sidebar */}
       <aside className="w-20 flex flex-col items-center py-6 gap-1 bg-slate-950 border-r border-slate-800">
         <NavBtn icon="🎵" label="Canciones" active={page === 'songs'} onClick={() => setPage('songs')} />

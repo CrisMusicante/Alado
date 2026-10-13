@@ -7,6 +7,7 @@ import SongCard from './SongCard'
 import FolderRow from './FolderRow'
 import CreateFolderModal from './CreateFolderModal'
 import RenameFolderModal from './RenameFolderModal'
+import { ask, alertDialog, confirmDialog } from '../../store/dialog.store'
 
 // Drop zone used when inside a folder — drag song here to move it back to root
 function RootDropZone({ children }: { children: React.ReactNode }) {
@@ -60,15 +61,23 @@ export default function SongsPage() {
       if (!info) return
       let mode: 'copy' | 'replace' = 'copy'
       if (info.duplicateOf !== null) {
-        const replace = window.confirm(`"${info.title}" ya existe. Aceptar = reemplazar la existente · Cancelar = elegir otra opción`)
-        if (replace) mode = 'replace'
-        else if (!window.confirm('¿Crear una copia como canción nueva? (Cancelar = no importar)')) return
+        const choice = await ask({
+          title: 'La canción ya existe',
+          message: `"${info.title}" ya está en tu biblioteca.`,
+          actions: [
+            { label: 'No importar', value: 'cancel', variant: 'neutral' },
+            { label: 'Crear copia', value: 'copy', variant: 'neutral' },
+            { label: 'Reemplazar', value: 'replace', variant: 'danger' }
+          ]
+        })
+        if (choice !== 'copy' && choice !== 'replace') return
+        mode = choice
       }
       await window.api.packImport(info.path, mode)
       await fetchSongs()
       await refreshSongsInView()
     } catch (e) {
-      window.alert((e as Error).message)
+      await alertDialog((e as Error).message, 'No se pudo importar')
     }
   }
 
@@ -86,14 +95,14 @@ export default function SongsPage() {
   }
 
   async function handleDelete(song: Song) {
-    if (confirm(`¿Eliminar "${song.title}"?`)) {
+    if (await confirmDialog(`¿Eliminar "${song.title}"?`, { title: 'Eliminar canción', confirmLabel: 'Eliminar', danger: true })) {
       await deleteSong(song.id!)
       refreshSongsInView()
     }
   }
 
   async function handleDeleteFolder(folder: Folder) {
-    if (confirm(`¿Eliminar la carpeta "${folder.name}"? Las canciones dentro quedarán sin carpeta.`)) {
+    if (await confirmDialog(`¿Eliminar la carpeta "${folder.name}"? Las canciones dentro quedarán sin carpeta.`, { title: 'Eliminar carpeta', confirmLabel: 'Eliminar', danger: true })) {
       await deleteFolder(folder.id!)
     }
   }
