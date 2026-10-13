@@ -1,6 +1,7 @@
 import { useState } from 'react'
 import { Song, Section, TextStyle, useSongsStore } from '../../store/songs.store'
 import LyricsImportModal from './LyricsImportModal'
+import AudioPanel from './AudioPanel'
 import {
   DndContext, closestCenter, KeyboardSensor, PointerSensor,
   useSensor, useSensors, DragEndEvent
@@ -232,6 +233,8 @@ export default function SongEditor({ song, onClose }: Props) {
           </button>
         </div>
       </div>
+
+      <AudioPanel songId={song.id} sections={sections} />
 
       {/* Text Style Panel */}
       <div className="mb-6 bg-slate-800 rounded-2xl p-4 border border-slate-700">
