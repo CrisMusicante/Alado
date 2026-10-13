@@ -93,6 +93,27 @@ function runMigrations(database: Database.Database): void {
       database.pragma('user_version = 2')
     })()
   }
+
+  if (version < 3) {
+    database.transaction(() => {
+      database.exec(`
+        CREATE TABLE IF NOT EXISTS song_audio (
+          song_id           INTEGER PRIMARY KEY REFERENCES songs(id) ON DELETE CASCADE,
+          status            TEXT NOT NULL DEFAULT 'pending',
+          error             TEXT,
+          original_hash     TEXT,
+          duration_sec      REAL,
+          vol_instrumental  REAL NOT NULL DEFAULT 1,
+          vol_vocals        REAL NOT NULL DEFAULT 0,
+          cues              TEXT NOT NULL DEFAULT '[]',
+          cues_sections_sig TEXT,
+          created_at        DATETIME DEFAULT CURRENT_TIMESTAMP,
+          updated_at        DATETIME DEFAULT CURRENT_TIMESTAMP
+        );
+      `)
+      database.pragma('user_version = 3')
+    })()
+  }
 }
 
 function scheduleBackup(userDataPath: string, dbPath: string): void {
