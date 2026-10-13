@@ -1,4 +1,5 @@
 import { create } from 'zustand'
+import type { SongAudio, EngineStatus, QueueItem, Stem, SongAudioPatch } from '../audio/types'
 
 export interface Section {
   type: 'verse' | 'chorus' | 'estribillo' | 'pre-chorus' | 'bridge' | 'outro' | 'intro' | 'custom'
@@ -70,6 +71,16 @@ declare global {
       deleteFolder: (id: number) => Promise<void>
       getSongsInFolder: (folderId: number | null) => Promise<Song[]>
       moveSongToFolder: (songId: number, folderId: number | null) => Promise<void>
+      audioEngineStatus: () => Promise<EngineStatus>
+      audioInstallEngine: () => Promise<{ ok: boolean; error?: string }>
+      audioCancelInstall: () => Promise<void>
+      audioImportTrack: (songId: number, filePath: string) => Promise<SongAudio>
+      audioReprocess: (songId: number) => Promise<SongAudio>
+      audioCancel: (songId: number) => Promise<void>
+      audioGetQueue: () => Promise<QueueItem[]>
+      audioGetSongAudio: (songId: number) => Promise<SongAudio | null>
+      audioReadStem: (songId: number, stem: Stem) => Promise<Uint8Array>
+      audioUpdate: (songId: number, patch: SongAudioPatch) => Promise<SongAudio>
       on: (channel: string, cb: (...args: any[]) => void) => void
       off: (channel: string, cb: (...args: any[]) => void) => void
       signalReady: () => void

@@ -1,5 +1,6 @@
 import { ipcMain } from 'electron'
 import { getDb } from '../db/database'
+import { purgeSongAudio } from './audio.handlers'
 
 export interface Section {
   type: 'verse' | 'chorus' | 'estribillo' | 'pre-chorus' | 'bridge' | 'outro' | 'intro' | 'custom'
@@ -77,6 +78,7 @@ export function registerDbHandlers(): void {
 
   ipcMain.handle('db:delete-song', (_e, id: number) => {
     getDb().prepare('DELETE FROM songs WHERE id = ?').run(id)
+    purgeSongAudio(id)
   })
 
   // ── Setlists ───────────────────────────────────────────────────────────────
