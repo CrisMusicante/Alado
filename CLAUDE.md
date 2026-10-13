@@ -10,6 +10,7 @@ npm run build        # Production build → out/
 npm run preview      # Preview production build
 npm run lint         # ESLint
 npm run test         # Vitest (unit tests)
+npx vitest run src/utils/lyricsParser  # Run a single test file
 npm run dist:win     # Package for Windows (electron-builder)
 npm run dist:mac     # Package for macOS
 ```
@@ -62,6 +63,12 @@ The `window.api` type declaration lives in `src/store/songs.store.ts` as a globa
 ### Notes on the DB
 
 The schema includes a `songs_fts` FTS5 virtual table for full-text search, but `db:get-songs` currently uses `LIKE` queries instead. The `setlist_items` table cascades deletes from `setlists` but restricts deletes from `songs` — deleting a song that belongs to a setlist will fail at the DB level.
+
+### Lyrics Import
+
+`electron/ipc/lyrics.handlers.ts` handles `lyrics:fetch-url` (scrapes letras.com, genius.com, musica.com, and a generic fallback via `cheerio`) and `lyrics:fetch-ai` (stub, not yet implemented). The shared parser in `src/utils/lyricsParser.ts` converts raw text to `Section[]` using three strategies in priority order: explicit bracket headers (`[Verse 1]`), standalone keyword lines (`CORO`, `VERSO`), and repetition analysis (identical blocks ≥2 times → chorus, unique blocks → verse). The modal in `src/components/SongEditor/LyricsImportModal.tsx` provides three tabs: paste, URL, and Claude AI (stub).
+
+The Claude AI tab reads `claudeApiKey` from `localStorage` (set in Settings → "Importar con IA" section). Implementing `lyrics:fetch-ai` in `lyrics.handlers.ts` is the remaining step to activate it.
 
 ### Path Alias
 

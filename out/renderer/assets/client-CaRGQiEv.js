@@ -6987,9 +6987,9 @@ const ReactDOM = /* @__PURE__ */ getDefaultExportFromCjs(clientExports);
 export {
   React as R,
   reactExports as a,
-  requireReactDom as b,
+  requireReact as b,
   ReactDOM as c,
   getDefaultExportFromCjs as g,
   jsxRuntimeExports as j,
-  requireReact as r
+  requireReactDom as r
 };
