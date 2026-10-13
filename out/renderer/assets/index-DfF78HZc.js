@@ -2644,7 +2644,7 @@ function useLayoutShiftScrollCompensation(_ref) {
     initialRect,
     config = true
   } = _ref;
-  const initialized = reactExports.useRef(false);
+  const initialized2 = reactExports.useRef(false);
   const {
     x,
     y
@@ -2655,10 +2655,10 @@ function useLayoutShiftScrollCompensation(_ref) {
   useIsomorphicLayoutEffect(() => {
     const disabled = !x && !y;
     if (disabled || !activeNode) {
-      initialized.current = false;
+      initialized2.current = false;
       return;
     }
-    if (initialized.current || !initialRect) {
+    if (initialized2.current || !initialRect) {
       return;
     }
     const node = activeNode == null ? void 0 : activeNode.node.current;
@@ -2673,7 +2673,7 @@ function useLayoutShiftScrollCompensation(_ref) {
     if (!y) {
       rectDelta.y = 0;
     }
-    initialized.current = true;
+    initialized2.current = true;
     if (Math.abs(rectDelta.x) > 0 || Math.abs(rectDelta.y) > 0) {
       const firstScrollableAncestor = getFirstScrollableAncestor(node);
       if (firstScrollableAncestor) {
@@ -3980,6 +3980,669 @@ Por siempre alabado`
     ] })
   ] }) });
 }
+let initialized = false;
+const useAudioStore = create((set, get) => ({
+  engine: null,
+  engineProgress: null,
+  installing: false,
+  byId: {},
+  progress: {},
+  init: () => {
+    if (initialized) return;
+    initialized = true;
+    window.api.on("audio:progress", ({ songId, pct }) => set((s) => ({ progress: { ...s.progress, [songId]: pct } })));
+    window.api.on("audio:status-changed", ({ songId, status, error }) => set((s) => s.byId[songId] ? { byId: { ...s.byId, [songId]: { ...s.byId[songId], status, error: error ?? null } } } : s));
+    window.api.on("audio:engine-progress", (p) => set({ engineProgress: p }));
+    void get().refreshEngine();
+  },
+  refreshEngine: async () => set({ engine: await window.api.audioEngineStatus() }),
+  installEngine: async () => {
+    set({ installing: true, engineProgress: null });
+    const res = await window.api.audioInstallEngine();
+    set({ installing: false });
+    await get().refreshEngine();
+    return res.ok ? null : res.error ?? "Error desconocido";
+  },
+  load: async (songId) => {
+    const row = await window.api.audioGetSongAudio(songId);
+    if (row) set((s) => ({ byId: { ...s.byId, [songId]: row } }));
+    return row;
+  },
+  importTrack: async (songId, filePath) => {
+    const row = await window.api.audioImportTrack(songId, filePath);
+    set((s) => ({ byId: { ...s.byId, [songId]: row }, progress: { ...s.progress, [songId]: 0 } }));
+  },
+  reprocess: async (songId) => {
+    const row = await window.api.audioReprocess(songId);
+    set((s) => ({ byId: { ...s.byId, [songId]: row }, progress: { ...s.progress, [songId]: 0 } }));
+  },
+  cancel: async (songId) => window.api.audioCancel(songId),
+  update: async (songId, patch) => {
+    const row = await window.api.audioUpdate(songId, patch);
+    set((s) => ({ byId: { ...s.byId, [songId]: row } }));
+  }
+}));
+const STEMS = ["instrumental", "vocals"];
+class StemPlayer {
+  ctx = new AudioContext();
+  gains;
+  buffers = {};
+  sources = [];
+  startedAt = 0;
+  offset = 0;
+  playing = false;
+  onEnded = null;
+  constructor() {
+    this.gains = {
+      instrumental: this.ctx.createGain(),
+      vocals: this.ctx.createGain()
+    };
+    STEMS.forEach((s) => this.gains[s].connect(this.ctx.destination));
+  }
+  async load(data) {
+    this.stopSources();
+    this.playing = false;
+    this.offset = 0;
+    const decoded = await Promise.all(STEMS.map((s) => this.ctx.decodeAudioData(data[s])));
+    STEMS.forEach((s, i) => {
+      this.buffers[s] = decoded[i];
+    });
+  }
+  get duration() {
+    return this.buffers.instrumental?.duration ?? 0;
+  }
+  get currentTime() {
+    if (!this.playing) return this.offset;
+    return Math.max(0, Math.min(this.ctx.currentTime - this.startedAt, this.duration));
+  }
+  play() {
+    if (this.playing || !this.buffers.instrumental) return;
+    void this.ctx.resume();
+    const when = this.ctx.currentTime + 0.05;
+    this.sources = STEMS.map((s) => {
+      const src = this.ctx.createBufferSource();
+      src.buffer = this.buffers[s];
+      src.connect(this.gains[s]);
+      src.start(when, this.offset);
+      return src;
+    });
+    const first = this.sources[0];
+    first.onended = () => {
+      if (this.sources[0] !== first || !this.playing) return;
+      this.playing = false;
+      this.offset = 0;
+      this.sources = [];
+      this.onEnded?.();
+    };
+    this.startedAt = when - this.offset;
+    this.playing = true;
+  }
+  pause() {
+    if (!this.playing) return;
+    this.offset = this.currentTime;
+    this.playing = false;
+    this.stopSources();
+  }
+  seek(t) {
+    const wasPlaying = this.playing;
+    if (wasPlaying) {
+      this.playing = false;
+      this.stopSources();
+    }
+    this.offset = Math.max(0, Math.min(t, this.duration));
+    if (wasPlaying) this.play();
+  }
+  setVolume(stem, v) {
+    this.gains[stem].gain.value = Math.max(0, Math.min(1, v));
+  }
+  dispose() {
+    this.stopSources();
+    void this.ctx.close();
+  }
+  stopSources() {
+    this.sources.forEach((s) => {
+      s.onended = null;
+      try {
+        s.stop();
+      } catch {
+      }
+    });
+    this.sources = [];
+  }
+}
+const round = (t) => Math.round(t * 1e3) / 1e3;
+function sectionsSignature(sections) {
+  return `${sections.length}:${sections.map((s) => s.type).join(",")}`;
+}
+function cuesAreStale(cues, savedSig, sections) {
+  if (cues.length === 0) return false;
+  return savedSig !== sectionsSignature(sections);
+}
+function sortCues(cues) {
+  return [...cues].sort((a, b) => a.time - b.time);
+}
+function cuePositionAt(cues, time, lead = 0) {
+  let pos = -1;
+  for (let i = 0; i < cues.length; i++) {
+    if (cues[i].time - lead <= time + 1e-9) pos = i;
+    else break;
+  }
+  return pos;
+}
+function nudgeCue(cues, index, delta) {
+  return sortCues(cues.map((c, i) => i === index ? { ...c, time: Math.max(0, round(c.time + delta)) } : c));
+}
+function removeCue(cues, index) {
+  return cues.filter((_, i) => i !== index);
+}
+function upsertCueAt(cues, sectionIndex, time) {
+  const matches = cues.filter((c) => c.sectionIndex === sectionIndex);
+  if (matches.length === 1) {
+    return sortCues(cues.map((c) => c === matches[0] ? { sectionIndex, time: round(time) } : c));
+  }
+  return sortCues([...cues, { sectionIndex, time: round(time) }]);
+}
+class CueRecorder {
+  constructor(sectionCount) {
+    this.sectionCount = sectionCount;
+  }
+  cues = [];
+  next = 0;
+  last = -1;
+  get nextSection() {
+    return this.next < this.sectionCount ? this.next : null;
+  }
+  get result() {
+    return sortCues(this.cues);
+  }
+  tap(time) {
+    if (this.next >= this.sectionCount) return null;
+    return this.mark(this.next, time);
+  }
+  repeat(time) {
+    if (this.last < 0) return null;
+    const cue = { sectionIndex: this.last, time: round(time) };
+    this.cues.push(cue);
+    return cue;
+  }
+  mark(sectionIndex, time) {
+    const cue = { sectionIndex, time: round(time) };
+    this.cues.push(cue);
+    this.last = sectionIndex;
+    this.next = sectionIndex + 1;
+    return cue;
+  }
+}
+class CueFollower {
+  constructor(cues, lead = 0) {
+    this.lead = lead;
+    this.cues = sortCues(cues);
+  }
+  cues;
+  pos = -1;
+  manual = false;
+  get isManual() {
+    return this.manual;
+  }
+  /** Returns the section to show when a new cue is crossed, else null. */
+  update(time) {
+    const pos = cuePositionAt(this.cues, time, this.lead);
+    if (pos === this.pos) return null;
+    this.pos = pos;
+    if (pos < 0) return null;
+    this.manual = false;
+    return this.cues[pos].sectionIndex;
+  }
+  seek(time) {
+    this.manual = false;
+    this.pos = -2;
+    return this.update(time);
+  }
+  markManual() {
+    this.manual = true;
+  }
+  resumeAuto(time) {
+    this.manual = false;
+    this.pos = cuePositionAt(this.cues, time, this.lead);
+    return this.pos < 0 ? null : this.cues[this.pos].sectionIndex;
+  }
+}
+let player = null;
+const getPlayer = () => player ??= new StemPlayer();
+let follower = null;
+const getFollower = () => follower;
+function setFollowerCues(cues) {
+  follower = cues && cues.length > 0 ? new CueFollower(cues, usePlaybackStore.getState().lead) : null;
+}
+const usePlaybackStore = create((set, get) => ({
+  songId: null,
+  status: "idle",
+  error: null,
+  playing: false,
+  time: 0,
+  duration: 0,
+  volumes: { instrumental: 1, vocals: 0 },
+  manual: false,
+  recording: false,
+  lead: 0.3,
+  loadSong: async (songId) => {
+    if (get().songId === songId && get().status === "ready") return;
+    const p = getPlayer();
+    p.pause();
+    set({ songId, status: "loading", error: null, playing: false, time: 0, manual: false });
+    try {
+      const [instrumental, vocals, meta] = await Promise.all([
+        window.api.audioReadStem(songId, "instrumental"),
+        window.api.audioReadStem(songId, "vocals"),
+        window.api.audioGetSongAudio(songId)
+      ]);
+      if (get().songId !== songId) return;
+      await p.load({ instrumental: instrumental.slice().buffer, vocals: vocals.slice().buffer });
+      const volumes = { instrumental: meta?.vol_instrumental ?? 1, vocals: meta?.vol_vocals ?? 0 };
+      p.setVolume("instrumental", volumes.instrumental);
+      p.setVolume("vocals", volumes.vocals);
+      p.onEnded = () => set({ playing: false, time: 0 });
+      set({ status: "ready", duration: p.duration, volumes });
+      if (meta && !meta.duration_sec) void window.api.audioUpdate(songId, { duration_sec: p.duration });
+    } catch (e) {
+      set({ status: "error", error: e.message });
+    }
+  },
+  toggle: () => {
+    const p = getPlayer();
+    if (get().status !== "ready") return;
+    if (p.playing) p.pause();
+    else p.play();
+    set({ playing: p.playing, time: p.currentTime });
+  },
+  seek: (t) => {
+    getPlayer().seek(t);
+    set({ time: getPlayer().currentTime });
+  },
+  setVolume: (stem, v) => {
+    getPlayer().setVolume(stem, v);
+    const volumes = { ...get().volumes, [stem]: v };
+    set({ volumes });
+    const id = get().songId;
+    if (id) void window.api.audioUpdate(id, stem === "instrumental" ? { vol_instrumental: v } : { vol_vocals: v });
+  },
+  resumeAuto: () => set({ manual: false }),
+  unload: () => {
+    getPlayer().pause();
+    follower = null;
+    set({ songId: null, status: "idle", playing: false, time: 0, duration: 0, manual: false });
+  },
+  setRecording: (recording) => set({ recording })
+}));
+const useLiveStore = create((set, get) => ({
+  isLive: false,
+  currentSong: null,
+  currentSectionIndex: 0,
+  blackout: false,
+  whiteout: false,
+  setlist: [],
+  startLive: async (setlist) => {
+    await window.api.openLive();
+    const song = setlist[0];
+    if (song) {
+      await window.api.setVideo({ videoPath: song.video_path ?? null });
+      await sendSection(song, 0);
+    }
+    set({ isLive: true, setlist, currentSong: song ?? null, currentSectionIndex: 0 });
+  },
+  stopLive: async () => {
+    await window.api.closeLive();
+    set({ isLive: false, currentSong: null, blackout: false, whiteout: false });
+  },
+  goToSection: async (index) => {
+    const { currentSong } = get();
+    if (!currentSong) return;
+    await sendSection(currentSong, index);
+    set({ currentSectionIndex: index });
+  },
+  nextSection: async () => {
+    const { currentSong, currentSectionIndex } = get();
+    if (!currentSong) return;
+    const next = currentSectionIndex + 1;
+    if (next < currentSong.sections.length) {
+      await sendSection(currentSong, next);
+      set({ currentSectionIndex: next });
+    }
+  },
+  prevSection: async () => {
+    const { currentSong, currentSectionIndex } = get();
+    if (!currentSong) return;
+    const prev = currentSectionIndex - 1;
+    if (prev >= 0) {
+      await sendSection(currentSong, prev);
+      set({ currentSectionIndex: prev });
+    }
+  },
+  toggleBlackout: async () => {
+    const active = !get().blackout;
+    await window.api.setBlackout(active);
+    set({ blackout: active });
+  },
+  toggleWhiteout: async () => {
+    const active = !get().whiteout;
+    await window.api.setWhiteout(active);
+    set({ whiteout: active });
+  },
+  changeSong: async (song) => {
+    await window.api.setVideo({ videoPath: song.video_path ?? null });
+    await sendSection(song, 0);
+    set({ currentSong: song, currentSectionIndex: 0 });
+  }
+}));
+async function sendSection(song, index) {
+  const section = song.sections[index];
+  if (!section) return;
+  await window.api.showSection({
+    songId: song.id,
+    sectionIndex: index,
+    text: section.lines.join("\n"),
+    lines: section.lines,
+    textStyle: song.text_style
+  });
+}
+const fmt$1 = (t) => `${Math.floor(t / 60)}:${String(Math.floor(t % 60)).padStart(2, "0")}`;
+function AudioTransport() {
+  const { status, playing, time, duration, volumes, manual, toggle, seek, setVolume, resumeAuto } = usePlaybackStore();
+  if (status === "idle") return null;
+  if (status === "loading") return /* @__PURE__ */ jsxRuntimeExports.jsx("span", { className: "text-xs text-slate-400", children: "Cargando audio…" });
+  if (status === "error") return /* @__PURE__ */ jsxRuntimeExports.jsx("span", { className: "text-xs text-red-400", children: "No se pudo cargar el audio" });
+  function onSeek(t) {
+    seek(t);
+    if (usePlaybackStore.getState().recording) return;
+    const idx = getFollower()?.seek(t);
+    if (idx !== null && idx !== void 0) void useLiveStore.getState().goToSection(idx);
+  }
+  return /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "flex items-center gap-3 bg-slate-900 rounded-xl px-3 py-2 border border-slate-800", children: [
+    /* @__PURE__ */ jsxRuntimeExports.jsx(
+      "button",
+      {
+        onClick: toggle,
+        title: playing ? "Pausar" : "Reproducir",
+        className: "w-9 h-9 rounded-full bg-indigo-600 hover:bg-indigo-500 text-white text-sm shrink-0",
+        children: playing ? "❚❚" : "▶"
+      }
+    ),
+    /* @__PURE__ */ jsxRuntimeExports.jsxs("span", { className: "text-xs text-slate-400 tabular-nums w-20", children: [
+      fmt$1(time),
+      " / ",
+      fmt$1(duration)
+    ] }),
+    /* @__PURE__ */ jsxRuntimeExports.jsx(
+      "input",
+      {
+        type: "range",
+        min: 0,
+        max: duration || 0,
+        step: 0.1,
+        value: time,
+        "aria-label": "Posición",
+        onChange: (e) => onSeek(Number(e.target.value)),
+        className: "w-40 accent-indigo-500"
+      }
+    ),
+    /* @__PURE__ */ jsxRuntimeExports.jsx(Vol, { label: "Inst.", value: volumes.instrumental, onChange: (v) => setVolume("instrumental", v) }),
+    /* @__PURE__ */ jsxRuntimeExports.jsx(Vol, { label: "Voz", value: volumes.vocals, onChange: (v) => setVolume("vocals", v) }),
+    getFollower() && (manual ? /* @__PURE__ */ jsxRuntimeExports.jsx("button", { onClick: resumeAuto, className: "text-xs px-2 py-1 rounded-lg bg-amber-600 text-white", children: "Manual · volver a auto" }) : /* @__PURE__ */ jsxRuntimeExports.jsx("span", { className: "text-xs px-2 py-1 rounded-lg bg-emerald-700 text-white", children: "Automático" }))
+  ] });
+}
+function Vol({ label, value, onChange }) {
+  return /* @__PURE__ */ jsxRuntimeExports.jsxs("label", { className: "flex items-center gap-1.5 text-xs text-slate-400", children: [
+    label,
+    /* @__PURE__ */ jsxRuntimeExports.jsx(
+      "input",
+      {
+        type: "range",
+        min: 0,
+        max: 1,
+        step: 0.05,
+        value,
+        onChange: (e) => onChange(Number(e.target.value)),
+        className: "w-20 accent-indigo-500"
+      }
+    )
+  ] });
+}
+function StemMixer({ songId }) {
+  const { songId: loaded, loadSong, unload } = usePlaybackStore();
+  const isLive = useLiveStore((s) => s.isLive);
+  reactExports.useEffect(() => () => {
+    if (!useLiveStore.getState().isLive) unload();
+  }, []);
+  if (isLive) {
+    return /* @__PURE__ */ jsxRuntimeExports.jsx("p", { className: "text-sm text-slate-400", children: "Hay un servicio en vivo. Termínalo para escuchar o marcar cues aquí." });
+  }
+  if (loaded !== songId) return /* @__PURE__ */ jsxRuntimeExports.jsx("div", { children: /* @__PURE__ */ jsxRuntimeExports.jsx(Btn, { onClick: () => loadSong(songId), children: "Escuchar / mezclar" }) });
+  return /* @__PURE__ */ jsxRuntimeExports.jsx(AudioTransport, {});
+}
+const fmt = (t) => `${Math.floor(t / 60)}:${(t % 60).toFixed(1).padStart(4, "0")}`;
+function CueEditor({ songId, sections }) {
+  const audio = useAudioStore((s) => s.byId[songId]);
+  const update = useAudioStore((s) => s.update);
+  const { songId: loaded, recording, setRecording, seek, toggle } = usePlaybackStore();
+  const recorder = reactExports.useRef(null);
+  const [draft, setDraft] = reactExports.useState([]);
+  const [selected, setSelected] = reactExports.useState(0);
+  const cues = recording ? draft : audio?.cues ?? [];
+  const stale = audio ? cuesAreStale(audio.cues, audio.cues_sections_sig, sections) : false;
+  const save = (next2) => update(songId, { cues: next2, cues_sections_sig: sectionsSignature(sections) });
+  reactExports.useEffect(() => {
+    if (!recording) return;
+    function onKey(e) {
+      if (["INPUT", "TEXTAREA"].includes(e.target.tagName)) return;
+      const t = getPlayer().currentTime;
+      if (e.key === " ") {
+        e.preventDefault();
+        document.activeElement?.blur();
+        recorder.current?.tap(t);
+      } else if (e.key === "r" || e.key === "R") recorder.current?.repeat(t);
+      else return;
+      setDraft(recorder.current.result);
+    }
+    window.addEventListener("keydown", onKey);
+    return () => window.removeEventListener("keydown", onKey);
+  }, [recording]);
+  reactExports.useEffect(() => () => {
+    if (usePlaybackStore.getState().recording) setRecording(false);
+  }, []);
+  if (loaded !== songId || sections.length === 0) return null;
+  function start() {
+    recorder.current = new CueRecorder(sections.length);
+    setDraft([]);
+    setRecording(true);
+    seek(0);
+    if (!getPlayer().playing) toggle();
+  }
+  async function finish() {
+    if (getPlayer().playing) toggle();
+    setRecording(false);
+    await save(recorder.current?.result ?? []);
+    recorder.current = null;
+  }
+  function markSection(i) {
+    if (!recording || !recorder.current) return;
+    recorder.current.mark(i, getPlayer().currentTime);
+    setDraft(recorder.current.result);
+  }
+  const next = recorder.current?.nextSection ?? null;
+  return /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "mt-2 border-t border-slate-700 pt-4", children: [
+    /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "flex items-center gap-3 mb-3", children: [
+      /* @__PURE__ */ jsxRuntimeExports.jsxs("h3", { className: "text-sm font-semibold flex-1", children: [
+        "Cues (",
+        cues.length,
+        ")"
+      ] }),
+      !recording && /* @__PURE__ */ jsxRuntimeExports.jsx(Btn, { onClick: start, children: cues.length ? "Volver a marcar" : "Marcar cues" }),
+      recording && /* @__PURE__ */ jsxRuntimeExports.jsx(Btn, { onClick: finish, children: "Terminar y guardar" })
+    ] }),
+    stale && !recording && /* @__PURE__ */ jsxRuntimeExports.jsx("p", { className: "text-sm text-amber-400 mb-3", children: "Las secciones cambiaron después de marcar los cues. No se usarán en vivo hasta que los vuelvas a marcar." }),
+    recording && /* @__PURE__ */ jsxRuntimeExports.jsxs("p", { className: "text-sm text-slate-300 mb-3", children: [
+      /* @__PURE__ */ jsxRuntimeExports.jsx("b", { children: "Espacio" }),
+      ": siguiente sección",
+      next !== null ? ` (${sections[next].label})` : " (no quedan)",
+      " ·",
+      /* @__PURE__ */ jsxRuntimeExports.jsx("b", { children: " R" }),
+      ": repetir la actual · ",
+      /* @__PURE__ */ jsxRuntimeExports.jsx("b", { children: "clic" }),
+      " en una sección: marcarla ahora"
+    ] }),
+    recording && /* @__PURE__ */ jsxRuntimeExports.jsx("div", { className: "flex gap-1 flex-wrap mb-3", children: sections.map((s, i) => /* @__PURE__ */ jsxRuntimeExports.jsx(
+      "button",
+      {
+        onClick: () => markSection(i),
+        className: `px-2.5 py-1 rounded-lg text-xs border ${i === next ? "bg-indigo-600 border-indigo-500 text-white" : "bg-slate-700 border-slate-600 text-slate-300"}`,
+        children: s.label
+      },
+      i
+    )) }),
+    /* @__PURE__ */ jsxRuntimeExports.jsx("ol", { className: "flex flex-col gap-1", children: cues.map((c, i) => /* @__PURE__ */ jsxRuntimeExports.jsxs(
+      "li",
+      {
+        className: `flex items-center gap-2 text-sm rounded-lg px-2 py-1 ${i === selected && !recording ? "bg-slate-700" : ""}`,
+        onClick: () => setSelected(i),
+        children: [
+          /* @__PURE__ */ jsxRuntimeExports.jsx("span", { className: "tabular-nums text-slate-400 w-16", children: fmt(c.time) }),
+          /* @__PURE__ */ jsxRuntimeExports.jsx("span", { className: "flex-1", children: sections[c.sectionIndex]?.label ?? `Sección ${c.sectionIndex + 1}` }),
+          !recording && /* @__PURE__ */ jsxRuntimeExports.jsxs(jsxRuntimeExports.Fragment, { children: [
+            /* @__PURE__ */ jsxRuntimeExports.jsx(SmallBtn, { onClick: () => save(nudgeCue(cues, i, -0.1)), children: "−0.1" }),
+            /* @__PURE__ */ jsxRuntimeExports.jsx(SmallBtn, { onClick: () => save(nudgeCue(cues, i, 0.1)), children: "+0.1" }),
+            /* @__PURE__ */ jsxRuntimeExports.jsx(SmallBtn, { onClick: () => {
+              seek(Math.max(0, c.time - 2));
+              if (!getPlayer().playing) toggle();
+            }, children: "▶" }),
+            /* @__PURE__ */ jsxRuntimeExports.jsx(SmallBtn, { onClick: () => save(upsertCueAt(cues, c.sectionIndex, getPlayer().currentTime)), children: "Marcar aquí" }),
+            /* @__PURE__ */ jsxRuntimeExports.jsx(SmallBtn, { onClick: () => save(removeCue(cues, i)), children: "✕" })
+          ] })
+        ]
+      },
+      `${c.sectionIndex}-${c.time}-${i}`
+    )) })
+  ] });
+}
+function SmallBtn({ onClick, children }) {
+  return /* @__PURE__ */ jsxRuntimeExports.jsx(
+    "button",
+    {
+      onClick: (e) => {
+        e.stopPropagation();
+        onClick();
+      },
+      className: "text-xs px-2 py-0.5 rounded-md bg-slate-700 hover:bg-slate-600 border border-slate-600",
+      children
+    }
+  );
+}
+const STEP_LABEL = { download: "Descargando", extract: "Extrayendo", pip: "Instalando librerías", ffmpeg: "Preparando ffmpeg", selftest: "Probando el motor" };
+const gb = (b) => (b / 1024 ** 3).toFixed(1);
+function AudioPanel({ songId, sections }) {
+  const { engine, engineProgress, installing, byId, progress, init, installEngine, load, importTrack, reprocess, cancel } = useAudioStore();
+  const [error, setError] = reactExports.useState(null);
+  const audio = songId ? byId[songId] : void 0;
+  reactExports.useEffect(() => {
+    init();
+  }, []);
+  reactExports.useEffect(() => {
+    if (songId) void load(songId);
+  }, [songId]);
+  if (!songId) {
+    return /* @__PURE__ */ jsxRuntimeExports.jsx(Box, { children: /* @__PURE__ */ jsxRuntimeExports.jsx("p", { className: "text-sm text-slate-400", children: "Guarda la canción primero para poder agregarle audio." }) });
+  }
+  async function pickAndImport() {
+    setError(null);
+    const file = await window.api.openFileDialog([{ name: "Audio", extensions: ["mp3", "wav", "flac", "m4a"] }]);
+    if (!file) return;
+    try {
+      await importTrack(songId, file);
+    } catch (e) {
+      setError(e.message);
+    }
+  }
+  async function install() {
+    setError(null);
+    const err = await installEngine();
+    if (err) setError(err);
+  }
+  const needsEngine = engine && !engine.installed;
+  return /* @__PURE__ */ jsxRuntimeExports.jsxs(Box, { children: [
+    error && /* @__PURE__ */ jsxRuntimeExports.jsx("p", { className: "text-sm text-red-400 mb-3", children: error }),
+    needsEngine && !engine.platformSupported && /* @__PURE__ */ jsxRuntimeExports.jsx("p", { className: "text-sm text-amber-400", children: "Esta computadora no es compatible con el motor de separación." }),
+    needsEngine && engine.platformSupported && !installing && /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "flex items-center gap-3", children: [
+      /* @__PURE__ */ jsxRuntimeExports.jsxs("p", { className: "text-sm text-slate-300 flex-1", children: [
+        "Para separar la voz hay que preparar el motor de audio una sola vez (~",
+        gb(engine.estimatedInstallBytes),
+        " GB de descarga y espacio en disco)."
+      ] }),
+      /* @__PURE__ */ jsxRuntimeExports.jsx(Btn, { onClick: install, children: "Preparar motor de audio" })
+    ] }),
+    installing && /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "flex items-center gap-3", children: [
+      /* @__PURE__ */ jsxRuntimeExports.jsx(Progress, { pct: engineProgress?.pct ?? 0, label: engineProgress ? STEP_LABEL[engineProgress.step] : "Iniciando" }),
+      /* @__PURE__ */ jsxRuntimeExports.jsx(Btn, { onClick: () => window.api.audioCancelInstall(), children: "Cancelar" })
+    ] }),
+    engine?.installed && !audio && /* @__PURE__ */ jsxRuntimeExports.jsx(Btn, { onClick: pickAndImport, children: "Importar pista" }),
+    audio && (audio.status === "pending" || audio.status === "processing") && /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "flex items-center gap-3", children: [
+      /* @__PURE__ */ jsxRuntimeExports.jsx(Progress, { pct: progress[songId] ?? 0, label: audio.status === "pending" ? "En espera" : "Separando voz e instrumental (tarda ≈2–3× la duración de la canción)" }),
+      /* @__PURE__ */ jsxRuntimeExports.jsx(Btn, { onClick: () => cancel(songId), children: "Cancelar" })
+    ] }),
+    audio && (audio.status === "failed" || audio.status === "cancelled") && /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "flex items-center gap-3", children: [
+      /* @__PURE__ */ jsxRuntimeExports.jsx("p", { className: "text-sm text-red-400 flex-1", children: audio.status === "cancelled" ? "Separación cancelada." : `Falló la separación: ${audio.error ?? ""}` }),
+      engine?.installed && /* @__PURE__ */ jsxRuntimeExports.jsx(Btn, { onClick: () => reprocess(songId), children: "Reintentar" }),
+      engine?.installed && /* @__PURE__ */ jsxRuntimeExports.jsx(Btn, { onClick: pickAndImport, children: "Otra pista" })
+    ] }),
+    audio?.status === "ready" && /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "flex flex-col gap-3", children: [
+      /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "flex items-center gap-3", children: [
+        /* @__PURE__ */ jsxRuntimeExports.jsx("p", { className: "text-sm text-emerald-400 flex-1", children: "Pista lista: instrumental y voz separadas." }),
+        engine?.installed && /* @__PURE__ */ jsxRuntimeExports.jsx(Btn, { onClick: pickAndImport, children: "Reemplazar pista" })
+      ] }),
+      /* @__PURE__ */ jsxRuntimeExports.jsx(StemMixer, { songId }),
+      /* @__PURE__ */ jsxRuntimeExports.jsx(CueEditor, { songId, sections }),
+      /* @__PURE__ */ jsxRuntimeExports.jsx("div", { children: /* @__PURE__ */ jsxRuntimeExports.jsx(Btn, { onClick: async () => {
+        const ok = window.confirm(
+          "Compartir el audio de canciones comerciales puede requerir licencia (por ejemplo CCLI o equivalente). Es responsabilidad de tu iglesia contar con ella. ¿Exportar el paquete?"
+        );
+        if (!ok) return;
+        try {
+          await window.api.packExport(songId);
+          setError(null);
+        } catch (e) {
+          setError(e.message);
+        }
+      }, children: "Exportar paquete (.wfpack)" }) })
+    ] })
+  ] });
+}
+function Box({ children }) {
+  return /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "mb-5 bg-slate-800 rounded-2xl p-4 border border-slate-700", children: [
+    /* @__PURE__ */ jsxRuntimeExports.jsx("h2", { className: "text-xs font-semibold text-slate-400 mb-4 uppercase tracking-widest", children: "Audio" }),
+    children
+  ] });
+}
+function Btn({ onClick, children, disabled }) {
+  return /* @__PURE__ */ jsxRuntimeExports.jsx(
+    "button",
+    {
+      onClick,
+      disabled,
+      className: "bg-slate-700 hover:bg-slate-600 disabled:opacity-50 text-white px-4 py-2 rounded-xl text-sm transition-colors border border-slate-600 shrink-0",
+      children
+    }
+  );
+}
+function Progress({ pct, label }) {
+  return /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "flex-1", children: [
+    /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "flex justify-between text-xs text-slate-400 mb-1", children: [
+      /* @__PURE__ */ jsxRuntimeExports.jsx("span", { children: label }),
+      /* @__PURE__ */ jsxRuntimeExports.jsxs("span", { children: [
+        pct,
+        "%"
+      ] })
+    ] }),
+    /* @__PURE__ */ jsxRuntimeExports.jsx("div", { className: "h-2 bg-slate-700 rounded-full overflow-hidden", children: /* @__PURE__ */ jsxRuntimeExports.jsx("div", { className: "h-full bg-indigo-500 transition-all", style: { width: `${pct}%` } }) })
+  ] });
+}
 function arrayMove(array, from, to) {
   const newArray = array.slice();
   newArray.splice(to < 0 ? newArray.length + to : to, 0, newArray.splice(from, 1)[0]);
@@ -4774,6 +5437,7 @@ function SongEditor({ song, onClose }) {
         )
       ] })
     ] }),
+    /* @__PURE__ */ jsxRuntimeExports.jsx(AudioPanel, { songId: song.id, sections }),
     /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "mb-6 bg-slate-800 rounded-2xl p-4 border border-slate-700", children: [
       /* @__PURE__ */ jsxRuntimeExports.jsx("h2", { className: "text-xs font-semibold text-slate-400 mb-4 uppercase tracking-widest", children: "Estilo del texto en pantalla" }),
       /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "grid grid-cols-2 gap-4", children: [
@@ -5197,6 +5861,23 @@ function SongsPage() {
     setEditingSong({ title: "", sections: [], text_style: {} });
     setShowEditor(true);
   }
+  async function importPack() {
+    try {
+      const info = await window.api.packInspect();
+      if (!info) return;
+      let mode = "copy";
+      if (info.duplicateOf !== null) {
+        const replace = window.confirm(`"${info.title}" ya existe. Aceptar = reemplazar la existente · Cancelar = elegir otra opción`);
+        if (replace) mode = "replace";
+        else if (!window.confirm("¿Crear una copia como canción nueva? (Cancelar = no importar)")) return;
+      }
+      await window.api.packImport(info.path, mode);
+      await fetchSongs();
+      await refreshSongsInView();
+    } catch (e) {
+      window.alert(e.message);
+    }
+  }
   function openEdit(song) {
     setEditingSong(song);
     setShowEditor(true);
@@ -5253,6 +5934,14 @@ function SongsPage() {
             onClick: () => setShowCreateModal(true),
             className: "bg-slate-700 hover:bg-slate-600 text-white px-4 py-2.5 rounded-xl font-semibold transition-all duration-200 hover:scale-105 active:scale-95 text-sm",
             children: "+ Nueva carpeta"
+          }
+        ),
+        /* @__PURE__ */ jsxRuntimeExports.jsx(
+          "button",
+          {
+            onClick: importPack,
+            className: "bg-slate-700 hover:bg-slate-600 text-white px-4 py-2.5 rounded-xl font-semibold transition-all duration-200 hover:scale-105 active:scale-95 text-sm",
+            children: "Importar paquete"
           }
         ),
         /* @__PURE__ */ jsxRuntimeExports.jsx(
@@ -5341,77 +6030,6 @@ function SongsGrid({
     },
     song.id
   )) });
-}
-const useLiveStore = create((set, get) => ({
-  isLive: false,
-  currentSong: null,
-  currentSectionIndex: 0,
-  blackout: false,
-  whiteout: false,
-  setlist: [],
-  startLive: async (setlist) => {
-    await window.api.openLive();
-    const song = setlist[0];
-    if (song) {
-      await window.api.setVideo({ videoPath: song.video_path ?? null });
-      await sendSection(song, 0);
-    }
-    set({ isLive: true, setlist, currentSong: song ?? null, currentSectionIndex: 0 });
-  },
-  stopLive: async () => {
-    await window.api.closeLive();
-    set({ isLive: false, currentSong: null, blackout: false, whiteout: false });
-  },
-  goToSection: async (index) => {
-    const { currentSong } = get();
-    if (!currentSong) return;
-    await sendSection(currentSong, index);
-    set({ currentSectionIndex: index });
-  },
-  nextSection: async () => {
-    const { currentSong, currentSectionIndex } = get();
-    if (!currentSong) return;
-    const next = currentSectionIndex + 1;
-    if (next < currentSong.sections.length) {
-      await sendSection(currentSong, next);
-      set({ currentSectionIndex: next });
-    }
-  },
-  prevSection: async () => {
-    const { currentSong, currentSectionIndex } = get();
-    if (!currentSong) return;
-    const prev = currentSectionIndex - 1;
-    if (prev >= 0) {
-      await sendSection(currentSong, prev);
-      set({ currentSectionIndex: prev });
-    }
-  },
-  toggleBlackout: async () => {
-    const active = !get().blackout;
-    await window.api.setBlackout(active);
-    set({ blackout: active });
-  },
-  toggleWhiteout: async () => {
-    const active = !get().whiteout;
-    await window.api.setWhiteout(active);
-    set({ whiteout: active });
-  },
-  changeSong: async (song) => {
-    await window.api.setVideo({ videoPath: song.video_path ?? null });
-    await sendSection(song, 0);
-    set({ currentSong: song, currentSectionIndex: 0 });
-  }
-}));
-async function sendSection(song, index) {
-  const section = song.sections[index];
-  if (!section) return;
-  await window.api.showSection({
-    songId: song.id,
-    sectionIndex: index,
-    text: section.lines.join("\n"),
-    lines: section.lines,
-    textStyle: song.text_style
-  });
 }
 const useSetlistsStore = create((set) => ({
   setlists: [],
@@ -5893,6 +6511,7 @@ function LiveControlsPanel() {
       },
       i
     )) }),
+    /* @__PURE__ */ jsxRuntimeExports.jsx(AudioTransport, {}),
     /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "flex gap-2 shrink-0", children: [
       /* @__PURE__ */ jsxRuntimeExports.jsx(
         "button",
@@ -5950,10 +6569,80 @@ function LiveControlsPanel() {
     ] })
   ] });
 }
+function PlaybackController() {
+  const currentSong = useLiveStore((s) => s.currentSong);
+  const isLive = useLiveStore((s) => s.isLive);
+  const pendingAuto = reactExports.useRef(null);
+  reactExports.useEffect(() => {
+    if (!isLive || !currentSong?.id) {
+      const pb = usePlaybackStore.getState();
+      if (pb.songId !== null && !pb.recording) pb.unload();
+      return;
+    }
+    const id = currentSong.id;
+    void (async () => {
+      const audio = await useAudioStore.getState().load(id);
+      if (audio?.status !== "ready") {
+        usePlaybackStore.getState().unload();
+        return;
+      }
+      await usePlaybackStore.getState().loadSong(id);
+      const stale = cuesAreStale(audio.cues, audio.cues_sections_sig, currentSong.sections);
+      setFollowerCues(stale ? null : audio.cues);
+    })();
+  }, [isLive, currentSong?.id]);
+  reactExports.useEffect(() => useLiveStore.subscribe((state, prev) => {
+    if (state.currentSectionIndex === prev.currentSectionIndex) return;
+    if (pendingAuto.current === state.currentSectionIndex) {
+      pendingAuto.current = null;
+      return;
+    }
+    const f = getFollower();
+    if (f && usePlaybackStore.getState().playing) {
+      f.markManual();
+      usePlaybackStore.setState({ manual: true });
+    }
+  }), []);
+  reactExports.useEffect(() => {
+    let raf = 0;
+    let lastPublished = 0;
+    const tick = () => {
+      const pb = usePlaybackStore.getState();
+      const p = getPlayer();
+      if (pb.status === "ready") {
+        const t = p.currentTime;
+        if (Math.abs(t - lastPublished) > 0.1 || p.playing !== pb.playing) {
+          lastPublished = t;
+          usePlaybackStore.setState({ time: t, playing: p.playing });
+        }
+        const f = getFollower();
+        if (f && p.playing && !pb.recording) fire(f.update(t));
+      }
+      raf = requestAnimationFrame(tick);
+    };
+    raf = requestAnimationFrame(tick);
+    return () => cancelAnimationFrame(raf);
+  }, []);
+  reactExports.useEffect(() => usePlaybackStore.subscribe((state, prev) => {
+    const f = getFollower();
+    if (!f || state.recording) return;
+    if (prev.manual && !state.manual && f.isManual) fire(f.resumeAuto(getPlayer().currentTime));
+  }), []);
+  function fire(sectionIndex) {
+    if (sectionIndex === null) return;
+    if (usePlaybackStore.getState().manual) usePlaybackStore.setState({ manual: false });
+    const live = useLiveStore.getState();
+    if (sectionIndex === live.currentSectionIndex) return;
+    pendingAuto.current = sectionIndex;
+    void live.goToSection(sectionIndex);
+  }
+  return null;
+}
 function App() {
   const [page, setPage] = reactExports.useState("songs");
   const isLive = useLiveStore((s) => s.isLive);
   return /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "flex h-screen bg-slate-900 text-white overflow-hidden", children: [
+    /* @__PURE__ */ jsxRuntimeExports.jsx(PlaybackController, {}),
     /* @__PURE__ */ jsxRuntimeExports.jsxs("aside", { className: "w-20 flex flex-col items-center py-6 gap-1 bg-slate-950 border-r border-slate-800", children: [
       /* @__PURE__ */ jsxRuntimeExports.jsx(NavBtn, { icon: "🎵", label: "Canciones", active: page === "songs", onClick: () => setPage("songs") }),
       /* @__PURE__ */ jsxRuntimeExports.jsx(NavBtn, { icon: "📋", label: "Servicio", active: page === "setlist", onClick: () => setPage("setlist") }),
