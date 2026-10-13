@@ -14,6 +14,7 @@ const http = require("http");
 const cheerio = require("cheerio");
 const os = require("os");
 const fflate = require("fflate");
+const url = require("url");
 function _interopNamespaceDefault(e) {
   const n = Object.create(null, { [Symbol.toStringTag]: { value: "Module" } });
   if (e) {
@@ -364,10 +365,10 @@ function sha256File(file) {
     fs.createReadStream(file).on("data", (d) => h.update(d)).on("error", reject).on("end", () => resolve(h.digest("hex")));
   });
 }
-async function downloadWithResume(url, dest, expectedSha256, onProgress, signal) {
+async function downloadWithResume(url2, dest, expectedSha256, onProgress, signal) {
   const part = dest + ".part";
   const already = fs.existsSync(part) ? fs.statSync(part).size : 0;
-  const res = await fetch(url, { headers: already ? { Range: `bytes=${already}-` } : {}, signal });
+  const res = await fetch(url2, { headers: already ? { Range: `bytes=${already}-` } : {}, signal });
   if (!res.ok || !res.body) throw new Error(`Descarga falló: HTTP ${res.status}`);
   const resumed = res.status === 206;
   const start = resumed ? already : 0;
@@ -745,12 +746,12 @@ function registerSystemHandlers() {
     return result.canceled ? null : result.filePaths[0];
   });
 }
-function fetchHtml(url, redirectCount = 0) {
+function fetchHtml(url2, redirectCount = 0) {
   if (redirectCount > 5) return Promise.reject(new Error("Demasiadas redirecciones"));
   return new Promise((resolve, reject) => {
-    const client = url.startsWith("https") ? https : http;
+    const client = url2.startsWith("https") ? https : http;
     const req = client.get(
-      url,
+      url2,
       {
         headers: {
           "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36",
@@ -761,7 +762,7 @@ function fetchHtml(url, redirectCount = 0) {
       (res) => {
         if (res.statusCode && res.statusCode >= 300 && res.statusCode < 400 && res.headers.location) {
           const loc = res.headers.location;
-          const redirectUrl = loc.startsWith("http") ? loc : new URL(loc, url).href;
+          const redirectUrl = loc.startsWith("http") ? loc : new URL(loc, url2).href;
           res.resume();
           fetchHtml(redirectUrl, redirectCount + 1).then(resolve).catch(reject);
           return;
@@ -830,9 +831,9 @@ function extractGeneric($) {
   }
   return null;
 }
-function detectSite(url) {
+function detectSite(url2) {
   try {
-    const h = new URL(url).hostname.toLowerCase();
+    const h = new URL(url2).hostname.toLowerCase();
     if (h.includes("letras.com")) return "letras";
     if (h.includes("genius.com")) return "genius";
     if (h.includes("musica.com")) return "musica";
@@ -845,10 +846,10 @@ function cleanText(raw) {
   return raw.replace(/\r\n/g, "\n").replace(/\r/g, "\n").replace(/\n{3,}/g, "\n\n").split("\n").filter((line) => !line.match(/^(Composer|Lyricist|Copyright|Writer|Contributor|℗|©|Embed|[0-9]+\s*Embed)/i)).join("\n").trim();
 }
 function registerLyricsHandlers() {
-  electron.ipcMain.handle("lyrics:fetch-url", async (_e, url) => {
+  electron.ipcMain.handle("lyrics:fetch-url", async (_e, url2) => {
     let parsedUrl;
     try {
-      parsedUrl = new URL(url);
+      parsedUrl = new URL(url2);
     } catch {
       return { success: false, error: "URL inválida. Asegúrate de incluir https://" };
     }
@@ -856,9 +857,9 @@ function registerLyricsHandlers() {
       return { success: false, error: "Solo se admiten URLs http:// o https://" };
     }
     try {
-      const html = await fetchHtml(url);
+      const html = await fetchHtml(url2);
       const $ = cheerio.load(html);
-      const site = detectSite(url);
+      const site = detectSite(url2);
       let rawText = null;
       if (site === "letras") rawText = extractLetras($);
       else if (site === "genius") rawText = extractGenius($);
@@ -1049,12 +1050,46 @@ function registerPackHandlers() {
     return songId;
   });
 }
+const MEDIA_SCHEME = "alado-media";
+const VIDEO_EXT = /\.(mp4|m4v|webm|mov)$/i;
+const ABSOLUTE = /^([A-Za-z]:[\\/]|\/)/;
+function mediaPathFromUrl(url2) {
+  let parsed;
+  try {
+    parsed = new URL(url2);
+  } catch {
+    return null;
+  }
+  if (parsed.protocol !== `${MEDIA_SCHEME}:` || parsed.hostname !== "video") return null;
+  let path2;
+  try {
+    path2 = decodeURIComponent(parsed.pathname.replace(/^\//, ""));
+  } catch {
+    return null;
+  }
+  if (!ABSOLUTE.test(path2) || !VIDEO_EXT.test(path2) || path2.includes("\0")) return null;
+  return path2;
+}
+function registerMediaSchemePrivileges() {
+  electron.protocol.registerSchemesAsPrivileged([
+    { scheme: MEDIA_SCHEME, privileges: { standard: true, secure: true, stream: true, supportFetchAPI: true } }
+  ]);
+}
+function registerMediaProtocol() {
+  electron.protocol.handle(MEDIA_SCHEME, (request) => {
+    const path2 = mediaPathFromUrl(request.url);
+    if (!path2 || !fs.existsSync(path2)) return new Response("Not found", { status: 404 });
+    return electron.net.fetch(url.pathToFileURL(path2).toString(), { headers: request.headers });
+  });
+}
 if (process.env.NODE_ENV === "development") {
   process.env["ELECTRON_DISABLE_SECURITY_WARNINGS"] = "true";
 }
+registerMediaSchemePrivileges();
 let mainWindow = null;
 let liveWindow = null;
 electron.app.whenReady().then(() => {
+  registerMediaProtocol();
   registerDbHandlers();
   registerLiveHandlers();
   registerSystemHandlers();

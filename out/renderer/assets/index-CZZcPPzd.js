@@ -1,4 +1,4 @@
-import { r as requireReactDom, a as reactExports, R as React, b as requireReact, g as getDefaultExportFromCjs, j as jsxRuntimeExports, c as ReactDOM } from "./client-CaRGQiEv.js";
+import { r as requireReactDom, a as reactExports, R as React, b as requireReact, g as getDefaultExportFromCjs, j as jsxRuntimeExports, S as SlideView, c as ReactDOM } from "./SlideView-_N3UuWWH.js";
 var reactDomExports = requireReactDom();
 function useCombinedRefs() {
   for (var _len = arguments.length, refs = new Array(_len), _key = 0; _key < _len; _key++) {
@@ -2060,9 +2060,9 @@ function useResizeObserver(_ref) {
         return void 0;
       }
       const {
-        ResizeObserver
+        ResizeObserver: ResizeObserver2
       } = window;
-      return new ResizeObserver(handleResize);
+      return new ResizeObserver2(handleResize);
     },
     // eslint-disable-next-line react-hooks/exhaustive-deps
     [disabled]
@@ -4648,6 +4648,66 @@ function Progress({ pct, label }) {
     /* @__PURE__ */ jsxRuntimeExports.jsx("div", { className: "h-2 bg-slate-700 rounded-full overflow-hidden", children: /* @__PURE__ */ jsxRuntimeExports.jsx("div", { className: "h-full bg-indigo-500 transition-all", style: { width: `${pct}%` } }) })
   ] });
 }
+const MEDIA_SCHEME = "alado-media";
+function mediaUrl(path) {
+  return `${MEDIA_SCHEME}://video/${encodeURIComponent(path)}`;
+}
+const STAGE_W = 1920;
+const STAGE_H = 1080;
+function SongPreview({ sections, selected, onSelect, textStyle, videoPath }) {
+  const frameRef = reactExports.useRef(null);
+  const [scale, setScale] = reactExports.useState(0);
+  reactExports.useEffect(() => {
+    const frame = frameRef.current;
+    if (!frame) return;
+    const observer = new ResizeObserver(([entry]) => setScale(entry.contentRect.width / STAGE_W));
+    observer.observe(frame);
+    return () => observer.disconnect();
+  }, []);
+  const index = Math.min(selected, sections.length - 1);
+  const section = index >= 0 ? sections[index] : void 0;
+  const lines = (section?.lines ?? []).filter((l) => l.trim() !== "");
+  return /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "bg-slate-800 rounded-2xl p-3 border border-slate-700", children: [
+    /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "flex items-center gap-2 mb-2", children: [
+      /* @__PURE__ */ jsxRuntimeExports.jsx("h2", { className: "text-xs font-semibold text-slate-400 uppercase tracking-widest flex-1", children: "Vista previa" }),
+      /* @__PURE__ */ jsxRuntimeExports.jsx(
+        "button",
+        {
+          onClick: () => onSelect(index - 1),
+          disabled: index <= 0,
+          className: "w-7 h-7 rounded-lg bg-slate-700 hover:bg-slate-600 disabled:opacity-30 text-sm",
+          title: "Sección anterior",
+          children: "◀"
+        }
+      ),
+      /* @__PURE__ */ jsxRuntimeExports.jsx("span", { className: "text-xs text-slate-400 tabular-nums w-14 text-center", children: sections.length ? `${index + 1} / ${sections.length}` : "—" }),
+      /* @__PURE__ */ jsxRuntimeExports.jsx(
+        "button",
+        {
+          onClick: () => onSelect(index + 1),
+          disabled: index >= sections.length - 1,
+          className: "w-7 h-7 rounded-lg bg-slate-700 hover:bg-slate-600 disabled:opacity-30 text-sm",
+          title: "Sección siguiente",
+          children: "▶"
+        }
+      )
+    ] }),
+    /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { ref: frameRef, className: "relative w-full aspect-video rounded-xl overflow-hidden bg-black", children: [
+      scale > 0 && /* @__PURE__ */ jsxRuntimeExports.jsx("div", { style: {
+        position: "absolute",
+        top: 0,
+        left: 0,
+        width: STAGE_W,
+        height: STAGE_H,
+        transform: `scale(${scale})`,
+        transformOrigin: "top left",
+        overflow: "hidden"
+      }, children: /* @__PURE__ */ jsxRuntimeExports.jsx(SlideView, { lines, textStyle, videoSrc: videoPath ? mediaUrl(videoPath) : null }) }),
+      !section && /* @__PURE__ */ jsxRuntimeExports.jsx("p", { className: "absolute inset-0 flex items-center justify-center text-sm text-slate-500", children: "Sin secciones" })
+    ] }),
+    section && /* @__PURE__ */ jsxRuntimeExports.jsx("p", { className: "text-xs text-slate-400 mt-2 truncate", children: section.label })
+  ] });
+}
 function arrayMove(array, from, to) {
   const newArray = array.slice();
   newArray.splice(to < 0 ? newArray.length + to : to, 0, newArray.splice(from, 1)[0]);
@@ -5246,7 +5306,7 @@ const SECTION_BORDER = {
   outro: "border-l-slate-400",
   custom: "border-l-teal-500"
 };
-function SortableSectionCard({ id, section, index, onUpdate, onUpdateLines, onRemove }) {
+function SortableSectionCard({ id, section, index, previewing, onPreview, onUpdate, onUpdateLines, onRemove }) {
   const { attributes, listeners, setNodeRef, transform, transition, isDragging } = useSortable({ id });
   const style = { transform: CSS.Transform.toString(transform), transition, opacity: isDragging ? 0.5 : 1 };
   return /* @__PURE__ */ jsxRuntimeExports.jsxs(
@@ -5254,7 +5314,10 @@ function SortableSectionCard({ id, section, index, onUpdate, onUpdateLines, onRe
     {
       ref: setNodeRef,
       style,
-      className: `bg-slate-800 rounded-2xl p-4 border border-slate-700 border-l-4 ${SECTION_BORDER[section.type] ?? "border-l-slate-500"}`,
+      onFocusCapture: () => onPreview(index),
+      onClick: () => onPreview(index),
+      className: `bg-slate-800 rounded-2xl p-4 border border-l-4 ${SECTION_BORDER[section.type] ?? "border-l-slate-500"}
+        ${previewing ? "border-indigo-400 ring-1 ring-indigo-400/40" : "border-slate-700"}`,
       children: [
         /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "flex gap-3 mb-3", children: [
           /* @__PURE__ */ jsxRuntimeExports.jsx(
@@ -5322,6 +5385,7 @@ function SongEditor({ song, onClose }) {
   const [textStyle, setTextStyle] = reactExports.useState(song.text_style ?? {});
   const [saving, setSaving] = reactExports.useState(false);
   const [showImport, setShowImport] = reactExports.useState(false);
+  const [previewIndex, setPreviewIndex] = reactExports.useState(0);
   function updateTextStyle(patch) {
     setTextStyle((prev) => ({ ...prev, ...patch }));
   }
@@ -5346,6 +5410,7 @@ function SongEditor({ song, onClose }) {
     if (path) setVideoPath(path);
   }
   function addSection() {
+    setPreviewIndex(sections.length);
     setSections((prev) => [...prev, {
       type: "verse",
       label: `Verso ${prev.filter((s) => s.type === "verse").length + 1}`,
@@ -5555,18 +5620,32 @@ function SongEditor({ song, onClose }) {
         onClose: () => setShowImport(false)
       }
     ),
-    /* @__PURE__ */ jsxRuntimeExports.jsx(DndContext, { sensors, collisionDetection: closestCenter, onDragEnd: handleDragEnd, children: /* @__PURE__ */ jsxRuntimeExports.jsx(SortableContext, { items: sections.map((_, i) => `section-${i}`), strategy: verticalListSortingStrategy, children: /* @__PURE__ */ jsxRuntimeExports.jsx("div", { className: "flex flex-col gap-4", children: sections.map((section, i) => /* @__PURE__ */ jsxRuntimeExports.jsx(
-      SortableSectionCard,
-      {
-        id: `section-${i}`,
-        section,
-        index: i,
-        onUpdate: updateSection,
-        onUpdateLines: updateLines,
-        onRemove: removeSection
-      },
-      `section-${i}`
-    )) }) }) })
+    /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "grid grid-cols-[minmax(0,1fr)_minmax(300px,42%)] gap-5 items-start", children: [
+      /* @__PURE__ */ jsxRuntimeExports.jsx(DndContext, { sensors, collisionDetection: closestCenter, onDragEnd: handleDragEnd, children: /* @__PURE__ */ jsxRuntimeExports.jsx(SortableContext, { items: sections.map((_, i) => `section-${i}`), strategy: verticalListSortingStrategy, children: /* @__PURE__ */ jsxRuntimeExports.jsx("div", { className: "flex flex-col gap-4", children: sections.map((section, i) => /* @__PURE__ */ jsxRuntimeExports.jsx(
+        SortableSectionCard,
+        {
+          id: `section-${i}`,
+          section,
+          index: i,
+          previewing: i === Math.min(previewIndex, sections.length - 1),
+          onPreview: setPreviewIndex,
+          onUpdate: updateSection,
+          onUpdateLines: updateLines,
+          onRemove: removeSection
+        },
+        `section-${i}`
+      )) }) }) }),
+      /* @__PURE__ */ jsxRuntimeExports.jsx("div", { className: "sticky top-0", children: /* @__PURE__ */ jsxRuntimeExports.jsx(
+        SongPreview,
+        {
+          sections,
+          selected: previewIndex,
+          onSelect: setPreviewIndex,
+          textStyle,
+          videoPath
+        }
+      ) })
+    ] })
   ] });
 }
 function SongCard({ song, onEdit, onDelete, onRemoveFromFolder }) {
@@ -6056,26 +6135,44 @@ const useSetlistsStore = create((set) => ({
     set({ setlists });
   }
 }));
+const fold = (s) => s.normalize("NFD").replace(/[̀-ͯ]/g, "").toLowerCase();
+function matchesQuery(song, query) {
+  const q = fold(query.trim());
+  return !q || fold(song.title).includes(q) || fold(song.artist ?? "").includes(q);
+}
+function groupSongs(songs, folders, filter, query) {
+  const known = new Set(folders.map((f) => f.id));
+  const folderOf = (s) => s.folder_id != null && known.has(s.folder_id) ? s.folder_id : null;
+  const visible = songs.filter((s) => matchesQuery(s, query));
+  const groups = [
+    ...folders.map((f) => ({ key: `folder-${f.id}`, name: f.name, id: f.id })),
+    { key: "loose", name: "Sin carpeta", id: null }
+  ].filter((g) => filter === "all" || g.id === filter).map((g) => ({ key: g.key, name: g.name, songs: visible.filter((s) => folderOf(s) === g.id) }));
+  return groups.filter((g) => g.songs.length > 0);
+}
 function SetlistPage() {
   const { songs, fetchSongs } = useSongsStore();
   const { isLive, startLive, stopLive, changeSong, currentSong } = useLiveStore();
   const { setlists, fetchSetlists, saveSetlist } = useSetlistsStore();
+  const { folders, fetchFolders } = useFoldersStore();
   const [setlistSongs, setSetlistSongs] = reactExports.useState([]);
   const [setlistName, setSetlistName] = reactExports.useState(`Servicio ${(/* @__PURE__ */ new Date()).toLocaleDateString("es")}`);
   const [searchQuery, setSearchQuery] = reactExports.useState("");
+  const [folderFilter, setFolderFilter] = reactExports.useState("all");
   const [showSaved, setShowSaved] = reactExports.useState(false);
   const [saving, setSaving] = reactExports.useState(false);
   reactExports.useEffect(() => {
     fetchSongs();
     fetchSetlists();
+    fetchFolders();
   }, []);
   const sensors = useSensors(
     useSensor(PointerSensor),
     useSensor(KeyboardSensor, { coordinateGetter: sortableKeyboardCoordinates })
   );
-  const filteredSongs = songs.filter(
-    (s) => s.title.toLowerCase().includes(searchQuery.toLowerCase()) || (s.artist ?? "").toLowerCase().includes(searchQuery.toLowerCase())
-  );
+  const groups = groupSongs(songs, folders, folderFilter, searchQuery);
+  const hasLoose = songs.some((s) => s.folder_id == null || !folders.some((f) => f.id === s.folder_id));
+  const inSetlist = new Set(setlistSongs.map((s) => s.song.id));
   function addSong(song) {
     if (setlistSongs.find((s) => s.song.id === song.id)) return;
     setSetlistSongs((prev) => [...prev, { id: `${song.id}-${Date.now()}`, song }]);
@@ -6134,20 +6231,35 @@ function SetlistPage() {
           className: "bg-slate-800 text-white placeholder-slate-500 rounded-xl px-3 py-2 text-sm outline-none focus:ring-2 focus:ring-indigo-500 border border-slate-700 mb-3"
         }
       ),
+      folders.length > 0 && /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "flex flex-wrap gap-1.5 mb-3", children: [
+        /* @__PURE__ */ jsxRuntimeExports.jsx(FolderChip, { active: folderFilter === "all", onClick: () => setFolderFilter("all"), children: "Todas" }),
+        folders.map((f) => /* @__PURE__ */ jsxRuntimeExports.jsx(FolderChip, { active: folderFilter === f.id, onClick: () => setFolderFilter(f.id), children: f.name }, f.id)),
+        hasLoose && /* @__PURE__ */ jsxRuntimeExports.jsx(FolderChip, { active: folderFilter === null, onClick: () => setFolderFilter(null), children: "Sin carpeta" })
+      ] }),
       /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "flex-1 overflow-y-auto flex flex-col gap-1", children: [
-        filteredSongs.map((song) => /* @__PURE__ */ jsxRuntimeExports.jsxs(
-          "button",
-          {
-            onClick: () => addSong(song),
-            className: "text-left px-3 py-2.5 rounded-xl hover:bg-slate-800 transition-all duration-150 group border border-transparent hover:border-slate-700",
-            children: [
-              /* @__PURE__ */ jsxRuntimeExports.jsx("p", { className: "text-sm font-medium text-white truncate", children: song.title }),
-              song.artist && /* @__PURE__ */ jsxRuntimeExports.jsx("p", { className: "text-xs text-slate-500 truncate", children: song.artist })
-            ]
-          },
-          song.id
-        )),
-        filteredSongs.length === 0 && /* @__PURE__ */ jsxRuntimeExports.jsx("p", { className: "text-xs text-slate-600 text-center py-4", children: "Sin resultados" })
+        groups.map((group) => /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "flex flex-col gap-1", children: [
+          folders.length > 0 && /* @__PURE__ */ jsxRuntimeExports.jsxs("p", { className: "sticky top-0 z-[1] bg-slate-950 text-[11px] font-semibold text-slate-500 uppercase tracking-wide px-1 pt-2 pb-1", children: [
+            group.name,
+            " · ",
+            group.songs.length
+          ] }),
+          group.songs.map((song) => /* @__PURE__ */ jsxRuntimeExports.jsxs(
+            "button",
+            {
+              onClick: () => addSong(song),
+              className: "text-left px-3 py-2.5 rounded-xl hover:bg-slate-800 transition-all duration-150 group border border-transparent hover:border-slate-700",
+              children: [
+                /* @__PURE__ */ jsxRuntimeExports.jsxs("p", { className: `text-sm font-medium truncate ${inSetlist.has(song.id) ? "text-slate-500" : "text-white"}`, children: [
+                  inSetlist.has(song.id) && /* @__PURE__ */ jsxRuntimeExports.jsx("span", { className: "text-emerald-500 mr-1", children: "✓" }),
+                  song.title
+                ] }),
+                song.artist && /* @__PURE__ */ jsxRuntimeExports.jsx("p", { className: "text-xs text-slate-500 truncate", children: song.artist })
+              ]
+            },
+            song.id
+          ))
+        ] }, group.key)),
+        groups.length === 0 && /* @__PURE__ */ jsxRuntimeExports.jsx("p", { className: "text-xs text-slate-600 text-center py-4", children: "Sin resultados" })
       ] })
     ] }),
     /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "flex-1 p-6 flex flex-col", children: [
@@ -6232,6 +6344,17 @@ function SetlistPage() {
       }) }) }) })
     ] })
   ] });
+}
+function FolderChip({ active, onClick, children }) {
+  return /* @__PURE__ */ jsxRuntimeExports.jsx(
+    "button",
+    {
+      onClick,
+      className: `px-2.5 py-1 rounded-lg text-xs font-medium border transition-colors
+        ${active ? "bg-indigo-600 border-indigo-500 text-white" : "bg-slate-800 border-slate-700 text-slate-400 hover:text-white hover:bg-slate-700"}`,
+      children
+    }
+  );
 }
 function SortableSetlistItem({ id, song, index, isLive, isCurrentSong, onRemove, onClick }) {
   const { attributes, listeners, setNodeRef, transform, transition, isDragging } = useSortable({ id });
