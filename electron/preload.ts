@@ -44,6 +44,9 @@ contextBridge.exposeInMainWorld('api', {
   audioGetSongAudio: (songId: number) => ipcRenderer.invoke('audio:get-song-audio', songId),
   audioReadStem: (songId: number, stem: string) => ipcRenderer.invoke('audio:read-stem', { songId, stem }),
   audioUpdate: (songId: number, patch: unknown) => ipcRenderer.invoke('audio:update', { songId, patch }),
+  packExport: (songId: number) => ipcRenderer.invoke('pack:export', songId),
+  packInspect: () => ipcRenderer.invoke('pack:inspect'),
+  packImport: (path: string, mode: 'copy' | 'replace') => ipcRenderer.invoke('pack:import', { path, mode }),
 
   // System
   getDisplays: () => ipcRenderer.invoke('system:get-displays'),

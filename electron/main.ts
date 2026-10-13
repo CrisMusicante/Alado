@@ -11,6 +11,7 @@ import { registerLiveHandlers, setLiveWindow } from './ipc/live.handlers'
 import { registerSystemHandlers } from './ipc/system.handlers'
 import { registerLyricsHandlers } from './ipc/lyrics.handlers'
 import { registerAudioHandlers } from './ipc/audio.handlers'
+import { registerPackHandlers } from './ipc/pack.handlers'
 import { ipcMain } from 'electron'
 
 let mainWindow: BrowserWindow | null = null
@@ -22,6 +23,7 @@ app.whenReady().then(() => {
   registerSystemHandlers()
   registerLyricsHandlers()
   registerAudioHandlers(() => mainWindow)
+  registerPackHandlers()
 
   mainWindow = createMainWindow()
 

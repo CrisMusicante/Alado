@@ -86,7 +86,18 @@ export default function AudioPanel({ songId, sections }: { songId?: number; sect
           </div>
           <StemMixer songId={songId} />
           <CueEditor songId={songId} sections={sections} />
-          {/* Task 10: export */}
+          <div>
+            <Btn onClick={async () => {
+              const ok = window.confirm(
+                'Compartir el audio de canciones comerciales puede requerir licencia (por ejemplo CCLI o equivalente). ' +
+                'Es responsabilidad de tu iglesia contar con ella. ¿Exportar el paquete?')
+              if (!ok) return
+              try {
+                await window.api.packExport(songId)
+                setError(null)
+              } catch (e) { setError((e as Error).message) }
+            }}>Exportar paquete (.wfpack)</Btn>
+          </div>
         </div>
       )}
     </Box>

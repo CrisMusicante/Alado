@@ -81,6 +81,9 @@ declare global {
       audioGetSongAudio: (songId: number) => Promise<SongAudio | null>
       audioReadStem: (songId: number, stem: Stem) => Promise<Uint8Array>
       audioUpdate: (songId: number, patch: SongAudioPatch) => Promise<SongAudio>
+      packExport: (songId: number) => Promise<{ path: string } | null>
+      packInspect: () => Promise<{ path: string; title: string; artist?: string; duplicateOf: number | null } | null>
+      packImport: (path: string, mode: 'copy' | 'replace') => Promise<number>
       on: (channel: string, cb: (...args: any[]) => void) => void
       off: (channel: string, cb: (...args: any[]) => void) => void
       signalReady: () => void

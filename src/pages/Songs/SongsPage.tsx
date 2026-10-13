@@ -54,6 +54,24 @@ export default function SongsPage() {
     setShowEditor(true)
   }
 
+  async function importPack() {
+    try {
+      const info = await window.api.packInspect()
+      if (!info) return
+      let mode: 'copy' | 'replace' = 'copy'
+      if (info.duplicateOf !== null) {
+        const replace = window.confirm(`"${info.title}" ya existe. Aceptar = reemplazar la existente · Cancelar = elegir otra opción`)
+        if (replace) mode = 'replace'
+        else if (!window.confirm('¿Crear una copia como canción nueva? (Cancelar = no importar)')) return
+      }
+      await window.api.packImport(info.path, mode)
+      await fetchSongs()
+      await refreshSongsInView()
+    } catch (e) {
+      window.alert((e as Error).message)
+    }
+  }
+
   function openEdit(song: Song) {
     setEditingSong(song)
     setShowEditor(true)
@@ -124,6 +142,12 @@ export default function SongsPage() {
               + Nueva carpeta
             </button>
           )}
+          <button
+            onClick={importPack}
+            className="bg-slate-700 hover:bg-slate-600 text-white px-4 py-2.5 rounded-xl font-semibold transition-all duration-200 hover:scale-105 active:scale-95 text-sm"
+          >
+            Importar paquete
+          </button>
           <button
             onClick={openNew}
             className="bg-indigo-600 hover:bg-indigo-500 text-white px-5 py-2.5 rounded-xl font-semibold transition-all duration-200 hover:scale-105 active:scale-95"
