@@ -1,0 +1,25 @@
+{
+  "version": "1",
+  "python": {
+    "win32-x64": {
+      "url": "https://github.com/astral-sh/python-build-standalone/releases/download/20261009/cpython-3.11.17%2B20261009-x86_64-pc-windows-msvc-install_only.tar.gz",
+      "sha256": "4d307648d2fe5f8d927e10380cc33eb7afd8a34a7efe0ed786b5860b5f2d3408",
+      "sizeBytes": 48233938
+    },
+    "darwin-arm64": {
+      "url": "https://github.com/astral-sh/python-build-standalone/releases/download/20261009/cpython-3.11.17%2B20261009-aarch64-apple-darwin-install_only.tar.gz",
+      "sha256": "7b6068989d9b6a0e2a883352b7d0d141ce8670a61360bf4ddabac0e046a08e10",
+      "sizeBytes": 27105320
+    }
+  },
+  "torchIndexUrl": "https://download.pytorch.org/whl/cpu",
+  "pipRequirements": [
+    "torch==2.5.1",
+    "torchaudio==2.5.1",
+    "demucs==4.1.0",
+    "numpy==2.4.6",
+    "imageio-ffmpeg==0.6.0",
+    "soundfile==0.14.0"
+  ],
+  "estimatedInstallBytes": 2684354560
+}
