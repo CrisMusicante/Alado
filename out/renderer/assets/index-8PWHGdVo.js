@@ -4039,14 +4039,16 @@ class StemPlayer {
     };
     STEMS.forEach((s) => this.gains[s].connect(this.ctx.destination));
   }
-  async load(data) {
+  /** Decodes without touching what is loaded, so a slow, superseded decode can simply be dropped. */
+  async decode(data) {
+    const [instrumental, vocals] = await Promise.all(STEMS.map((s) => this.ctx.decodeAudioData(data[s])));
+    return { instrumental, vocals };
+  }
+  use(decoded) {
     this.stopSources();
     this.playing = false;
     this.offset = 0;
-    const decoded = await Promise.all(STEMS.map((s) => this.ctx.decodeAudioData(data[s])));
-    STEMS.forEach((s, i) => {
-      this.buffers[s] = decoded[i];
-    });
+    this.buffers = { ...decoded };
   }
   get duration() {
     return this.buffers.instrumental?.duration ?? 0;
@@ -4237,7 +4239,9 @@ const usePlaybackStore = create((set, get) => ({
         window.api.audioGetSongAudio(songId)
       ]);
       if (get().songId !== songId) return;
-      await p.load({ instrumental: instrumental.slice().buffer, vocals: vocals.slice().buffer });
+      const decoded = await p.decode({ instrumental: instrumental.slice().buffer, vocals: vocals.slice().buffer });
+      if (get().songId !== songId) return;
+      p.use(decoded);
       const volumes = { instrumental: meta?.vol_instrumental ?? 1, vocals: meta?.vol_vocals ?? 0 };
       p.setVolume("instrumental", volumes.instrumental);
       p.setVolume("vocals", volumes.vocals);
@@ -4424,6 +4428,7 @@ function CueEditor({ songId, sections }) {
   const audio = useAudioStore((s) => s.byId[songId]);
   const update = useAudioStore((s) => s.update);
   const { songId: loaded, recording, setRecording, seek, toggle } = usePlaybackStore();
+  const isLive = useLiveStore((s) => s.isLive);
   const recorder = reactExports.useRef(null);
   const [draft, setDraft] = reactExports.useState([]);
   const [selected, setSelected] = reactExports.useState(0);
@@ -4449,7 +4454,7 @@ function CueEditor({ songId, sections }) {
   reactExports.useEffect(() => () => {
     if (usePlaybackStore.getState().recording) setRecording(false);
   }, []);
-  if (loaded !== songId || sections.length === 0) return null;
+  if (isLive || loaded !== songId || sections.length === 0) return null;
   function start() {
     recorder.current = new CueRecorder(sections.length);
     setDraft([]);
@@ -6580,16 +6585,23 @@ function PlaybackController() {
       return;
     }
     const id = currentSong.id;
+    let cancelled = false;
     void (async () => {
       const audio = await useAudioStore.getState().load(id);
+      if (cancelled) return;
       if (audio?.status !== "ready") {
         usePlaybackStore.getState().unload();
         return;
       }
+      setFollowerCues(null);
       await usePlaybackStore.getState().loadSong(id);
+      if (cancelled || usePlaybackStore.getState().songId !== id) return;
       const stale = cuesAreStale(audio.cues, audio.cues_sections_sig, currentSong.sections);
       setFollowerCues(stale ? null : audio.cues);
     })();
+    return () => {
+      cancelled = true;
+    };
   }, [isLive, currentSong?.id]);
   reactExports.useEffect(() => useLiveStore.subscribe((state, prev) => {
     if (state.currentSectionIndex === prev.currentSectionIndex) return;
@@ -6604,24 +6616,20 @@ function PlaybackController() {
     }
   }), []);
   reactExports.useEffect(() => {
-    let raf = 0;
     let lastPublished = 0;
-    const tick = () => {
+    const timer = setInterval(() => {
       const pb = usePlaybackStore.getState();
+      if (pb.status !== "ready") return;
       const p = getPlayer();
-      if (pb.status === "ready") {
-        const t = p.currentTime;
-        if (Math.abs(t - lastPublished) > 0.1 || p.playing !== pb.playing) {
-          lastPublished = t;
-          usePlaybackStore.setState({ time: t, playing: p.playing });
-        }
-        const f = getFollower();
-        if (f && p.playing && !pb.recording) fire(f.update(t));
+      const t = p.currentTime;
+      if (Math.abs(t - lastPublished) > 0.1 || p.playing !== pb.playing) {
+        lastPublished = t;
+        usePlaybackStore.setState({ time: t, playing: p.playing });
       }
-      raf = requestAnimationFrame(tick);
-    };
-    raf = requestAnimationFrame(tick);
-    return () => cancelAnimationFrame(raf);
+      const f = getFollower();
+      if (f && p.playing && !pb.recording) fire(f.update(t));
+    }, 50);
+    return () => clearInterval(timer);
   }, []);
   reactExports.useEffect(() => usePlaybackStore.subscribe((state, prev) => {
     const f = getFollower();

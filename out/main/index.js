@@ -43,7 +43,9 @@ function createMainWindow() {
     webPreferences: {
       preload: path.join(__dirname, "../preload/index.js"),
       contextIsolation: true,
-      nodeIntegration: false
+      nodeIntegration: false,
+      // The cue clock lives in this window; throttled timers would freeze the live lyrics when minimized.
+      backgroundThrottling: false
     }
   });
   if (process.env.NODE_ENV === "development") {
@@ -210,8 +212,8 @@ function scheduleBackup(userDataPath, dbPath) {
   }
 }
 class SeparationQueue {
-  constructor(run, events) {
-    this.run = run;
+  constructor(run2, events) {
+    this.run = run2;
     this.events = events;
   }
   entries = [];
@@ -225,14 +227,17 @@ class SeparationQueue {
     this.events.onStatus(job.songId, "pending");
     void this.drain();
   }
-  cancel(songId) {
+  /** Resolves once the job no longer runs, so callers can safely delete its files afterwards. */
+  async cancel(songId) {
     const entry = this.entries.find((e) => e.job.songId === songId);
     if (!entry) return;
     if (entry.status === "pending") {
       entry.status = "cancelled";
       this.events.onStatus(songId, "cancelled");
     } else if (entry.status === "processing" && this.current?.songId === songId) {
-      this.current.abort.abort();
+      const { abort, settled } = this.current;
+      abort.abort();
+      await settled;
     }
   }
   snapshot() {
@@ -247,7 +252,11 @@ class SeparationQueue {
         if (!entry) break;
         const { songId } = entry.job;
         const abort = new AbortController();
-        this.current = { songId, abort };
+        let markSettled;
+        const settled = new Promise((r) => {
+          markSettled = r;
+        });
+        this.current = { songId, abort, settled };
         entry.status = "processing";
         this.events.onStatus(songId, "processing");
         try {
@@ -268,6 +277,7 @@ class SeparationQueue {
           }
         } finally {
           this.current = null;
+          markSettled();
         }
       }
     } finally {
@@ -283,39 +293,57 @@ function parseDemucsProgress(chunk) {
 function buildDemucsArgs(input, outRoot) {
   return ["--two-stems=vocals", "-n", "htdemucs", "-o", outRoot, input];
 }
-async function runDemucs(cmd, job, onProgress, signal) {
-  if (signal.aborted) throw new Error("Trabajo cancelado");
-  const outRoot = path.join(job.outDir, ".tmp-demucs");
-  await fs$1.rm(outRoot, { recursive: true, force: true });
-  await fs$1.mkdir(outRoot, { recursive: true });
-  try {
-    await new Promise((resolve, reject) => {
-      const child = child_process.spawn(cmd.file, [...cmd.baseArgs, ...buildDemucsArgs(job.inputPath, outRoot)], {
-        env: { ...process.env, ...cmd.env },
-        windowsHide: true
-      });
-      let tail = "";
-      child.stderr.on("data", (d) => {
-        const s = d.toString();
-        tail = (tail + s).slice(-4e3);
-        const pct = parseDemucsProgress(s);
-        if (pct !== null) onProgress(pct);
-      });
-      const onAbort = () => child.kill();
-      signal.addEventListener("abort", onAbort, { once: true });
-      child.on("error", reject);
-      child.on("close", (code) => {
-        signal.removeEventListener("abort", onAbort);
-        if (code === 0) return resolve();
-        const lastLines = tail.split(/[\r\n]+/).map((l) => l.trim()).filter(Boolean).slice(-3).join(" | ");
-        reject(new Error(`Demucs terminó con código ${code}: ${lastLines}`));
-      });
+const cancelled = () => new Error("Trabajo cancelado");
+function run(cmd, args, signal, onStderr, describeFailure) {
+  if (signal.aborted) return Promise.reject(cancelled());
+  return new Promise((resolve, reject) => {
+    const child = child_process.spawn(cmd.file, [...cmd.baseArgs, ...args], { env: { ...process.env, ...cmd.env }, windowsHide: true });
+    let tail = "";
+    child.stderr.on("data", (d) => {
+      const s = d.toString();
+      tail = (tail + s).slice(-4e3);
+      onStderr(s);
     });
-    const produced = path.join(outRoot, "htdemucs", path.parse(job.inputPath).name);
+    const onAbort = () => child.kill();
+    signal.addEventListener("abort", onAbort, { once: true });
+    child.on("error", reject);
+    child.on("close", (code) => {
+      signal.removeEventListener("abort", onAbort);
+      if (code === 0) return resolve();
+      if (signal.aborted) return reject(cancelled());
+      const lastLines = tail.split(/[\r\n]+/).map((l) => l.trim()).filter(Boolean).slice(-3).join(" | ");
+      reject(new Error(describeFailure(code, lastLines)));
+    });
+  });
+}
+async function runDemucs(cmd, job, onProgress, signal) {
+  if (signal.aborted) throw cancelled();
+  const outRoot = path.join(job.outDir, ".tmp-demucs");
+  try {
+    await fs$1.rm(outRoot, { recursive: true, force: true });
+    await fs$1.mkdir(outRoot, { recursive: true });
+    let input = job.inputPath;
+    if (cmd.ffmpeg && path.extname(input).toLowerCase() !== ".wav") {
+      const wav = path.join(outRoot, "input.wav");
+      await run(
+        cmd.ffmpeg,
+        ["-y", "-loglevel", "error", "-i", input, "-vn", "-ac", "2", "-ar", "44100", wav],
+        signal,
+        () => {
+        },
+        (_code, lastLines) => `No se pudo leer el audio (¿archivo dañado o formato no soportado?): ${lastLines}`
+      );
+      input = wav;
+    }
+    await run(cmd, buildDemucsArgs(input, outRoot), signal, (s) => {
+      const pct = parseDemucsProgress(s);
+      if (pct !== null) onProgress(pct);
+    }, (code, lastLines) => `Demucs terminó con código ${code}: ${lastLines}`);
+    const produced = path.join(outRoot, "htdemucs", path.parse(input).name);
     await fs$1.rename(path.join(produced, "no_vocals.wav"), path.join(job.outDir, "instrumental.wav"));
     await fs$1.rename(path.join(produced, "vocals.wav"), path.join(job.outDir, "vocals.wav"));
   } finally {
-    await fs$1.rm(outRoot, { recursive: true, force: true });
+    await fs$1.rm(outRoot, { recursive: true, force: true, maxRetries: 5, retryDelay: 200 });
   }
 }
 const version = "1";
@@ -366,6 +394,7 @@ const engineDir = () => path.join(electron.app.getPath("userData"), "audio-engin
 const markerFile = () => path.join(engineDir(), "engine.json");
 const pythonPath = () => process.platform === "win32" ? path.join(engineDir(), "python", "python.exe") : path.join(engineDir(), "python", "bin", "python3");
 const binDir = () => path.join(engineDir(), "bin");
+const ffmpegBin = () => path.join(binDir(), process.platform === "win32" ? "ffmpeg.exe" : "ffmpeg");
 async function getEngineStatus() {
   const base = { platformSupported: platformKey() !== null, estimatedInstallBytes: manifest.estimatedInstallBytes };
   try {
@@ -376,14 +405,16 @@ async function getEngineStatus() {
   }
 }
 function getFfmpegPath() {
-  const p = path.join(binDir(), process.platform === "win32" ? "ffmpeg.exe" : "ffmpeg");
-  return fs.existsSync(p) ? p : null;
+  return fs.existsSync(ffmpegBin()) ? ffmpegBin() : null;
 }
 function getDemucsCommand() {
   return {
     file: pythonPath(),
     baseArgs: ["-m", "demucs"],
+    ffmpeg: { file: ffmpegBin(), baseArgs: [] },
     env: {
+      // Without this, Python on Windows writes stdout/paths in the ANSI code page and breaks on users like "José".
+      PYTHONUTF8: "1",
       // demucs 4.1 fetches weights through huggingface_hub; keep them inside the engine folder.
       HF_HOME: path.join(engineDir(), "models", "hf"),
       TORCH_HOME: path.join(engineDir(), "models"),
@@ -437,13 +468,13 @@ async function installEngine(onProgress, signal) {
   );
   onProgress({ step: "ffmpeg", pct: 0 });
   fs.mkdirSync(binDir(), { recursive: true });
-  let ffmpegSrc = "";
-  await runPython(["-c", "import imageio_ffmpeg;print(imageio_ffmpeg.get_ffmpeg_exe())"], (l) => {
-    ffmpegSrc = l.trim();
-  }, signal);
-  const ffmpegDest = path.join(binDir(), process.platform === "win32" ? "ffmpeg.exe" : "ffmpeg");
-  fs.copyFileSync(ffmpegSrc, ffmpegDest);
-  if (process.platform !== "win32") fs.chmodSync(ffmpegDest, 493);
+  await runPython(
+    ["-c", "import imageio_ffmpeg, shutil, sys; shutil.copyfile(imageio_ffmpeg.get_ffmpeg_exe(), sys.argv[1])", ffmpegBin()],
+    () => {
+    },
+    signal
+  );
+  if (process.platform !== "win32") fs.chmodSync(ffmpegBin(), 493);
   onProgress({ step: "ffmpeg", pct: 100 });
   onProgress({ step: "selftest", pct: 0 });
   const testDir = path.join(dir, "selftest");
@@ -452,7 +483,8 @@ async function installEngine(onProgress, signal) {
   const silence = path.join(testDir, "silence.wav");
   await runPython([
     "-c",
-    `import numpy as np, soundfile as sf; sf.write(r"${silence}", np.zeros((44100, 2), dtype="float32"), 44100)`
+    'import sys, numpy as np, soundfile as sf; sf.write(sys.argv[1], np.zeros((44100, 2), dtype="float32"), 44100)',
+    silence
   ], () => {
   }, signal);
   await runPython(["-m", "demucs", "--two-stems=vocals", "-n", "htdemucs", "-o", testDir, silence], () => {
@@ -580,9 +612,9 @@ function registerAudioHandlers(getWindow) {
   });
   electron.ipcMain.handle("audio:update", (_e, { songId, patch }) => upsertSongAudio(assertSongId(songId), patch));
 }
-function purgeSongAudio(songId) {
-  queue?.cancel(songId);
-  fs.rmSync(stemsDir(songId), { recursive: true, force: true });
+async function purgeSongAudio(songId) {
+  await queue?.cancel(songId);
+  fs.rmSync(stemsDir(songId), { recursive: true, force: true, maxRetries: 5, retryDelay: 200 });
 }
 function registerDbHandlers() {
   electron.ipcMain.handle("db:get-songs", (_e, query) => {
@@ -610,9 +642,9 @@ function registerDbHandlers() {
       return result.lastInsertRowid;
     }
   });
-  electron.ipcMain.handle("db:delete-song", (_e, id) => {
+  electron.ipcMain.handle("db:delete-song", async (_e, id) => {
     getDb().prepare("DELETE FROM songs WHERE id = ?").run(id);
-    purgeSongAudio(id);
+    await purgeSongAudio(id).catch((e) => console.error("No se pudieron borrar los stems de la canción", id, e));
   });
   electron.ipcMain.handle("db:get-setlists", () => {
     const db2 = getDb();
@@ -978,7 +1010,7 @@ function registerPackHandlers() {
     const dup = findDuplicate(song.title, song.artist);
     return { path: filePaths[0], title: song.title, artist: song.artist, duplicateOf: dup?.id ?? null };
   });
-  electron.ipcMain.handle("pack:import", (_e, { path: packPath, mode }) => {
+  electron.ipcMain.handle("pack:import", async (_e, { path: packPath, mode }) => {
     if (mode !== "copy" && mode !== "replace") throw new Error(`Modo de importación inválido: ${String(mode)}`);
     if (typeof packPath !== "string" || !packPath.toLowerCase().endsWith(".wfpack")) throw new Error("Solo se pueden importar archivos .wfpack");
     const { song, files } = parsePack(new Uint8Array(fs.readFileSync(packPath)));
@@ -987,7 +1019,7 @@ function registerPackHandlers() {
     const dup = findDuplicate(song.title, song.artist);
     if (mode === "replace" && dup) {
       songId = dup.id;
-      purgeSongAudio(songId);
+      await purgeSongAudio(songId);
       db2.prepare("UPDATE songs SET sections = ?, text_style = ? WHERE id = ?").run(JSON.stringify(song.sections), JSON.stringify(song.text_style), songId);
     } else {
       const title = dup ? `${song.title} (importada)` : song.title;
