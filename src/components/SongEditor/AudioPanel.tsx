@@ -2,6 +2,7 @@ import { useEffect, useState } from 'react'
 import { useAudioStore } from '../../store/audio.store'
 import type { Section } from '../../store/songs.store'
 import StemMixer from './StemMixer'
+import CueEditor from './CueEditor'
 
 const STEP_LABEL = { download: 'Descargando', extract: 'Extrayendo', pip: 'Instalando librerías', ffmpeg: 'Preparando ffmpeg', selftest: 'Probando el motor' }
 const gb = (b: number) => (b / 1024 ** 3).toFixed(1)
@@ -84,7 +85,8 @@ export default function AudioPanel({ songId, sections }: { songId?: number; sect
             {engine?.installed && <Btn onClick={pickAndImport}>Reemplazar pista</Btn>}
           </div>
           <StemMixer songId={songId} />
-          {/* Task 8: <CueEditor/> · Task 10: export */}
+          <CueEditor songId={songId} sections={sections} />
+          {/* Task 10: export */}
         </div>
       )}
     </Box>
