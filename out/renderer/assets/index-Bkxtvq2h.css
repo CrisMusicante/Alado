@@ -541,6 +541,9 @@ video {
 .z-\[1\] {
   z-index: 1;
 }
+.z-\[200\] {
+  z-index: 200;
+}
 .mx-4 {
   margin-left: 1rem;
   margin-right: 1rem;
@@ -705,6 +708,9 @@ video {
 .w-9 {
   width: 2.25rem;
 }
+.w-96 {
+  width: 24rem;
+}
 .w-full {
   width: 100%;
 }
@@ -716,6 +722,9 @@ video {
 }
 .max-w-\[7rem\] {
   max-width: 7rem;
+}
+.max-w-\[90vw\] {
+  max-width: 90vw;
 }
 .max-w-sm {
   max-width: 24rem;
@@ -838,6 +847,9 @@ video {
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
+}
+.whitespace-pre-line {
+  white-space: pre-line;
 }
 .rounded {
   border-radius: 0.25rem;

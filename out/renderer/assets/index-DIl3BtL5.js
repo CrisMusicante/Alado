@@ -4541,6 +4541,39 @@ function SmallBtn({ onClick, children }) {
     }
   );
 }
+const useDialogStore = create((set, get) => ({
+  current: null,
+  queue: [],
+  answer: (value) => {
+    const { current, queue } = get();
+    if (!current) return;
+    const [next = null, ...rest] = queue;
+    set({ current: next, queue: rest });
+    current.resolve(value);
+  }
+}));
+function ask(request) {
+  return new Promise((resolve) => {
+    const pending = { ...request, resolve };
+    const { current, queue } = useDialogStore.getState();
+    if (current) useDialogStore.setState({ queue: [...queue, pending] });
+    else useDialogStore.setState({ current: pending });
+  });
+}
+async function confirmDialog(message, opts = {}) {
+  const value = await ask({
+    title: opts.title ?? "Confirmar",
+    message,
+    actions: [
+      { label: "Cancelar", value: "cancel", variant: "neutral" },
+      { label: opts.confirmLabel ?? "Aceptar", value: "confirm", variant: opts.danger ? "danger" : "primary" }
+    ]
+  });
+  return value === "confirm";
+}
+async function alertDialog(message, title = "Aviso") {
+  await ask({ title, message, actions: [{ label: "Entendido", value: "ok", variant: "primary" }] });
+}
 const STEP_LABEL = { download: "Descargando", extract: "Extrayendo", pip: "Instalando librerías", ffmpeg: "Preparando ffmpeg", selftest: "Probando el motor" };
 const gb = (b) => (b / 1024 ** 3).toFixed(1);
 function AudioPanel({ songId, sections }) {
@@ -4605,8 +4638,9 @@ function AudioPanel({ songId, sections }) {
       /* @__PURE__ */ jsxRuntimeExports.jsx(StemMixer, { songId }),
       /* @__PURE__ */ jsxRuntimeExports.jsx(CueEditor, { songId, sections }),
       /* @__PURE__ */ jsxRuntimeExports.jsx("div", { children: /* @__PURE__ */ jsxRuntimeExports.jsx(Btn, { onClick: async () => {
-        const ok = window.confirm(
-          "Compartir el audio de canciones comerciales puede requerir licencia (por ejemplo CCLI o equivalente). Es responsabilidad de tu iglesia contar con ella. ¿Exportar el paquete?"
+        const ok = await confirmDialog(
+          "Compartir el audio de canciones comerciales puede requerir licencia (por ejemplo CCLI o equivalente). Es responsabilidad de tu iglesia contar con ella. ¿Exportar el paquete?",
+          { title: "Exportar paquete", confirmLabel: "Exportar" }
         );
         if (!ok) return;
         try {
@@ -5951,15 +5985,23 @@ function SongsPage() {
       if (!info) return;
       let mode = "copy";
       if (info.duplicateOf !== null) {
-        const replace = window.confirm(`"${info.title}" ya existe. Aceptar = reemplazar la existente · Cancelar = elegir otra opción`);
-        if (replace) mode = "replace";
-        else if (!window.confirm("¿Crear una copia como canción nueva? (Cancelar = no importar)")) return;
+        const choice = await ask({
+          title: "La canción ya existe",
+          message: `"${info.title}" ya está en tu biblioteca.`,
+          actions: [
+            { label: "No importar", value: "cancel", variant: "neutral" },
+            { label: "Crear copia", value: "copy", variant: "neutral" },
+            { label: "Reemplazar", value: "replace", variant: "danger" }
+          ]
+        });
+        if (choice !== "copy" && choice !== "replace") return;
+        mode = choice;
       }
       await window.api.packImport(info.path, mode);
       await fetchSongs();
       await refreshSongsInView();
     } catch (e) {
-      window.alert(e.message);
+      await alertDialog(e.message, "No se pudo importar");
     }
   }
   function openEdit(song) {
@@ -5973,13 +6015,13 @@ function SongsPage() {
     refreshSongsInView();
   }
   async function handleDelete(song) {
-    if (confirm(`¿Eliminar "${song.title}"?`)) {
+    if (await confirmDialog(`¿Eliminar "${song.title}"?`, { title: "Eliminar canción", confirmLabel: "Eliminar", danger: true })) {
       await deleteSong(song.id);
       refreshSongsInView();
     }
   }
   async function handleDeleteFolder(folder) {
-    if (confirm(`¿Eliminar la carpeta "${folder.name}"? Las canciones dentro quedarán sin carpeta.`)) {
+    if (await confirmDialog(`¿Eliminar la carpeta "${folder.name}"? Las canciones dentro quedarán sin carpeta.`, { title: "Eliminar carpeta", confirmLabel: "Eliminar", danger: true })) {
       await deleteFolder(folder.id);
     }
   }
@@ -6586,6 +6628,7 @@ function LiveControlsPanel() {
   reactExports.useEffect(() => {
     function onKey(e) {
       if (["INPUT", "TEXTAREA"].includes(e.target.tagName)) return;
+      if (useDialogStore.getState().current) return;
       switch (e.key) {
         case "ArrowRight":
         case " ":
@@ -6686,8 +6729,8 @@ function LiveControlsPanel() {
       /* @__PURE__ */ jsxRuntimeExports.jsx(
         "button",
         {
-          onClick: () => {
-            if (confirm("¿Detener la presentación?")) stopLive();
+          onClick: async () => {
+            if (await confirmDialog("¿Detener la presentación?", { title: "Detener", confirmLabel: "Detener", danger: true })) stopLive();
           },
           className: "px-3 py-2 rounded-xl text-xs font-bold bg-red-950 border border-red-800 text-red-400 hover:bg-red-700 hover:text-white transition-all duration-150",
           title: "Detener (Escape)",
@@ -6769,11 +6812,60 @@ function PlaybackController() {
   }
   return null;
 }
+const VARIANT = {
+  primary: "bg-indigo-600 hover:bg-indigo-500 text-white font-semibold",
+  danger: "bg-red-600 hover:bg-red-500 text-white font-semibold",
+  neutral: "text-slate-400 hover:text-white hover:bg-slate-700"
+};
+function DialogHost() {
+  const current = useDialogStore((s) => s.current);
+  const answer = useDialogStore((s) => s.answer);
+  const defaultRef = reactExports.useRef(null);
+  reactExports.useEffect(() => {
+    if (!current) return;
+    defaultRef.current?.focus();
+    const onKey = (e) => {
+      if (e.key === "Escape") {
+        e.preventDefault();
+        answer(null);
+      }
+    };
+    window.addEventListener("keydown", onKey);
+    return () => window.removeEventListener("keydown", onKey);
+  }, [current]);
+  if (!current) return null;
+  const last = current.actions.length - 1;
+  return /* @__PURE__ */ jsxRuntimeExports.jsx("div", { className: "fixed inset-0 bg-black/60 flex items-center justify-center z-[200]", onClick: () => answer(null), children: /* @__PURE__ */ jsxRuntimeExports.jsxs(
+    "div",
+    {
+      role: "dialog",
+      "aria-modal": "true",
+      "aria-labelledby": "dialog-title",
+      className: "bg-slate-800 border border-slate-700 rounded-2xl p-6 w-96 max-w-[90vw] shadow-2xl",
+      onClick: (e) => e.stopPropagation(),
+      children: [
+        /* @__PURE__ */ jsxRuntimeExports.jsx("h3", { id: "dialog-title", className: "text-white font-semibold mb-2", children: current.title }),
+        current.message && /* @__PURE__ */ jsxRuntimeExports.jsx("p", { className: "text-sm text-slate-300 mb-5 whitespace-pre-line", children: current.message }),
+        /* @__PURE__ */ jsxRuntimeExports.jsx("div", { className: "flex gap-2 justify-end", children: current.actions.map((a, i) => /* @__PURE__ */ jsxRuntimeExports.jsx(
+          "button",
+          {
+            ref: i === last ? defaultRef : void 0,
+            onClick: () => answer(a.value),
+            className: `px-4 py-2 rounded-xl transition-colors ${VARIANT[a.variant ?? "neutral"]}`,
+            children: a.label
+          },
+          a.value
+        )) })
+      ]
+    }
+  ) });
+}
 function App() {
   const [page, setPage] = reactExports.useState("songs");
   const isLive = useLiveStore((s) => s.isLive);
   return /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "flex h-screen bg-slate-900 text-white overflow-hidden", children: [
     /* @__PURE__ */ jsxRuntimeExports.jsx(PlaybackController, {}),
+    /* @__PURE__ */ jsxRuntimeExports.jsx(DialogHost, {}),
     /* @__PURE__ */ jsxRuntimeExports.jsxs("aside", { className: "w-20 flex flex-col items-center py-6 gap-1 bg-slate-950 border-r border-slate-800", children: [
       /* @__PURE__ */ jsxRuntimeExports.jsx(NavBtn, { icon: "🎵", label: "Canciones", active: page === "songs", onClick: () => setPage("songs") }),
       /* @__PURE__ */ jsxRuntimeExports.jsx(NavBtn, { icon: "📋", label: "Servicio", active: page === "setlist", onClick: () => setPage("setlist") }),
