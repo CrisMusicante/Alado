@@ -62,6 +62,8 @@ export function getDb(): Database.Database {
   if (!db) {
     const userDataPath = app.getPath('userData')
     const dbPath = path.join(userDataPath, 'worshipflow.db')
+    const isFirstRun = !fs.existsSync(dbPath)
+    if (isFirstRun) installSeed(userDataPath, dbPath)
     db = new Database(dbPath)
     db.pragma('journal_mode = WAL')
     db.pragma('foreign_keys = ON')
@@ -70,6 +72,37 @@ export function getDb(): Database.Database {
     scheduleBackup(userDataPath, dbPath)
   }
   return db
+}
+
+// Catálogo embebido en el instalador (resources/seed, ver scripts/make-seed.py).
+// Solo se aplica cuando no existe DB: copia la DB y los videos a userData y
+// reescribe video_path, que en la semilla apunta a la máquina de origen.
+function installSeed(userDataPath: string, dbPath: string): void {
+  const seedDir = path.join(process.resourcesPath, 'seed')
+  const seedDb = path.join(seedDir, 'worshipflow.seed.db')
+  if (!fs.existsSync(seedDb)) return
+
+  const videosDest = path.join(userDataPath, 'videos')
+  const videosSrc = path.join(seedDir, 'videos')
+  if (fs.existsSync(videosSrc)) fs.cpSync(videosSrc, videosDest, { recursive: true })
+
+  const tmp = dbPath + '.seeding'
+  fs.copyFileSync(seedDb, tmp)
+  const seeded = new Database(tmp)
+  try {
+    const rows = seeded.prepare("SELECT id, video_path FROM songs WHERE video_path IS NOT NULL AND video_path != ''").all() as { id: number; video_path: string }[]
+    const update = seeded.prepare('UPDATE songs SET video_path = ? WHERE id = ?')
+    seeded.transaction(() => {
+      for (const r of rows) {
+        const name = r.video_path.split(/[\\/]/).pop()!
+        update.run(path.join(videosDest, name), r.id)
+      }
+    })()
+    seeded.pragma('journal_mode = DELETE')
+  } finally {
+    seeded.close()
+  }
+  fs.renameSync(tmp, dbPath)
 }
 
 function runMigrations(database: Database.Database): void {

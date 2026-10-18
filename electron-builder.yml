@@ -6,6 +6,10 @@ files:
   - out/**/*
   - assets/**/*
 
+extraResources:
+  - from: resources/seed
+    to: seed
+
 asar: true
 asarUnpack: "**/*.node"
 compression: maximum

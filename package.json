@@ -9,6 +9,7 @@
     "dev": "electron-vite dev --config electron.vite.config.ts",
     "build": "electron-vite build --config electron.vite.config.ts",
     "preview": "electron-vite preview --config electron.vite.config.ts",
+    "seed": "python scripts/make-seed.py",
     "dist:win": "electron-builder --win",
     "dist:mac": "electron-builder --mac",
     "lint": "eslint .",
