@@ -87,7 +87,7 @@ function createLiveWindow() {
     win.loadURL(`${rendererUrl}/src/live/live.html`);
     win.webContents.openDevTools({ mode: "detach" });
   } else {
-    win.loadFile(path.join(__dirname, "../renderer/live.html"));
+    win.loadFile(path.join(__dirname, "../renderer/src/live/live.html"));
   }
   return win;
 }
@@ -147,6 +147,8 @@ function getDb() {
   if (!db) {
     const userDataPath = electron.app.getPath("userData");
     const dbPath = path.join(userDataPath, "worshipflow.db");
+    const isFirstRun = !fs.existsSync(dbPath);
+    if (isFirstRun) installSeed(userDataPath, dbPath);
     db = new Database(dbPath);
     db.pragma("journal_mode = WAL");
     db.pragma("foreign_keys = ON");
@@ -155,6 +157,31 @@ function getDb() {
     scheduleBackup(userDataPath);
   }
   return db;
+}
+function installSeed(userDataPath, dbPath) {
+  const seedDir = path.join(process.resourcesPath, "seed");
+  const seedDb = path.join(seedDir, "worshipflow.seed.db");
+  if (!fs.existsSync(seedDb)) return;
+  const videosDest = path.join(userDataPath, "videos");
+  const videosSrc = path.join(seedDir, "videos");
+  if (fs.existsSync(videosSrc)) fs.cpSync(videosSrc, videosDest, { recursive: true });
+  const tmp = dbPath + ".seeding";
+  fs.copyFileSync(seedDb, tmp);
+  const seeded = new Database(tmp);
+  try {
+    const rows = seeded.prepare("SELECT id, video_path FROM songs WHERE video_path IS NOT NULL AND video_path != ''").all();
+    const update = seeded.prepare("UPDATE songs SET video_path = ? WHERE id = ?");
+    seeded.transaction(() => {
+      for (const r of rows) {
+        const name = r.video_path.split(/[\\/]/).pop();
+        update.run(path.join(videosDest, name), r.id);
+      }
+    })();
+    seeded.pragma("journal_mode = DELETE");
+  } finally {
+    seeded.close();
+  }
+  fs.renameSync(tmp, dbPath);
 }
 function runMigrations(database) {
   const version2 = database.pragma("user_version", { simple: true });
