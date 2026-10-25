@@ -6,6 +6,10 @@ files:
   - out/**/*
   - assets/**/*
 
+extraResources:
+  - from: resources/seed
+    to: seed
+
 asar: true
 asarUnpack: "**/*.node"
 compression: maximum
@@ -14,12 +18,14 @@ npmRebuild: false
 win:
   target: nsis
   icon: assets/icons/icon.ico
-  signAndEditExecutable: false
 
 nsis:
   oneClick: true
   perMachine: false
   createDesktopShortcut: true
+  installerIcon: assets/icons/icon.ico
+  uninstallerIcon: assets/icons/icon.ico
+  installerHeaderIcon: assets/icons/icon.ico
 
 mac:
   target: dmg

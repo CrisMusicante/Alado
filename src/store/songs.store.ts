@@ -1,4 +1,5 @@
 import { create } from 'zustand'
+import type { SongAudio, EngineStatus, QueueItem, Stem, SongAudioPatch } from '../audio/types'
 
 export interface Section {
   type: 'verse' | 'chorus' | 'estribillo' | 'pre-chorus' | 'bridge' | 'outro' | 'intro' | 'custom'
@@ -28,6 +29,16 @@ export interface Song {
   updated_at?: string
 }
 
+/** Result of importing a .alado service (mirrors electron/ipc/setlist.handlers.ts). */
+export interface ImportSummary {
+  setlistId: number
+  reused: number
+  created: string[]
+  differing: string[]
+  missingVideo: string[]
+  missingAudio: string[]
+}
+
 export interface Folder {
   id?: number
   name: string
@@ -53,6 +64,10 @@ declare global {
       getSetlists: () => Promise<any[]>
       saveSetlist: (s: any) => Promise<number>
       deleteSetlist: (id: number) => Promise<void>
+      setlistExport: (p: { name: string; service_date: string; songIds: number[]; customVideos?: Array<string | null> }) => Promise<{ path: string } | null>
+      setlistSavePptx: (p: { bytes: Uint8Array; defaultName: string }) => Promise<{ path: string } | null>
+      setlistImportInspect: () => Promise<{ path: string; name: string; service_date: string | null; songCount: number; duplicateOf: number | null } | null>
+      setlistImportApply: (p: { path: string; mode: 'new' | 'replace'; replaceId?: number }) => Promise<ImportSummary>
       openLive: () => Promise<void>
       closeLive: () => Promise<void>
       showSection: (p: any) => Promise<void>
@@ -70,6 +85,19 @@ declare global {
       deleteFolder: (id: number) => Promise<void>
       getSongsInFolder: (folderId: number | null) => Promise<Song[]>
       moveSongToFolder: (songId: number, folderId: number | null) => Promise<void>
+      audioEngineStatus: () => Promise<EngineStatus>
+      audioInstallEngine: () => Promise<{ ok: boolean; error?: string }>
+      audioCancelInstall: () => Promise<void>
+      audioImportTrack: (songId: number, filePath: string) => Promise<SongAudio>
+      audioReprocess: (songId: number) => Promise<SongAudio>
+      audioCancel: (songId: number) => Promise<void>
+      audioGetQueue: () => Promise<QueueItem[]>
+      audioGetSongAudio: (songId: number) => Promise<SongAudio | null>
+      audioReadStem: (songId: number, stem: Stem) => Promise<Uint8Array>
+      audioUpdate: (songId: number, patch: SongAudioPatch) => Promise<SongAudio>
+      packExport: (songId: number) => Promise<{ path: string } | null>
+      packInspect: () => Promise<{ path: string; title: string; artist?: string; duplicateOf: number | null } | null>
+      packImport: (path: string, mode: 'copy' | 'replace') => Promise<number>
       on: (channel: string, cb: (...args: any[]) => void) => void
       off: (channel: string, cb: (...args: any[]) => void) => void
       signalReady: () => void

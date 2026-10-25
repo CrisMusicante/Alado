@@ -9,6 +9,7 @@
     "dev": "electron-vite dev --config electron.vite.config.ts",
     "build": "electron-vite build --config electron.vite.config.ts",
     "preview": "electron-vite preview --config electron.vite.config.ts",
+    "seed": "python scripts/make-seed.py",
     "dist:win": "electron-builder --win",
     "dist:mac": "electron-builder --mac",
     "lint": "eslint .",
@@ -37,8 +38,11 @@
     "@dnd-kit/sortable": "^8.0.0",
     "better-sqlite3": "^12.6.2",
     "cheerio": "^1.2.0",
+    "fflate": "^0.8.3",
+    "pptxgenjs": "^4.0.1",
     "react": "^18.3.1",
     "react-dom": "^18.3.1",
+    "tar": "^7.5.22",
     "zustand": "^4.5.5"
   }
 }

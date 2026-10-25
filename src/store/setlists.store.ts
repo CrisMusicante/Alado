@@ -6,7 +6,7 @@ export interface SavedSetlist {
   name: string
   service_date?: string
   notes?: string
-  songs?: Array<{ song: Song; position: number; custom_video?: string }>
+  songs?: Array<{ song: Song; position: number; custom_video?: string | null }>
 }
 
 interface SetlistsState {

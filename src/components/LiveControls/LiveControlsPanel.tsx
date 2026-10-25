@@ -1,5 +1,7 @@
 import { useEffect } from 'react'
 import { useLiveStore } from '../../store/live.store'
+import AudioTransport from './AudioTransport'
+import { confirmDialog, useDialogStore } from '../../store/dialog.store'
 
 export default function LiveControlsPanel() {
   const {
@@ -12,6 +14,7 @@ export default function LiveControlsPanel() {
   useEffect(() => {
     function onKey(e: KeyboardEvent) {
       if (['INPUT', 'TEXTAREA'].includes((e.target as HTMLElement).tagName)) return
+      if (useDialogStore.getState().current) return // keys belong to the open dialog (Esc = cancel)
       switch (e.key) {
         case 'ArrowRight': case ' ': e.preventDefault(); nextSection(); break
         case 'ArrowLeft': e.preventDefault(); prevSection(); break
@@ -62,6 +65,8 @@ export default function LiveControlsPanel() {
         ))}
       </div>
 
+      <AudioTransport />
+
       {/* Prev / Next */}
       <div className="flex gap-2 shrink-0">
         <button
@@ -105,7 +110,9 @@ export default function LiveControlsPanel() {
           □ Blanco
         </button>
         <button
-          onClick={() => { if (confirm('¿Detener la presentación?')) stopLive() }}
+          onClick={async () => {
+            if (await confirmDialog('¿Detener la presentación?', { title: 'Detener', confirmLabel: 'Detener', danger: true })) stopLive()
+          }}
           className="px-3 py-2 rounded-xl text-xs font-bold bg-red-950 border border-red-800 text-red-400 hover:bg-red-700 hover:text-white transition-all duration-150"
           title="Detener (Escape)"
         >

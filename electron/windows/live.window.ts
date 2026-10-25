@@ -33,7 +33,7 @@ export function createLiveWindow(): BrowserWindow {
     // Open detached DevTools in dev so errors in the live window are visible
     win.webContents.openDevTools({ mode: 'detach' })
   } else {
-    win.loadFile(path.join(__dirname, '../renderer/live.html'))
+    win.loadFile(path.join(__dirname, '../renderer/src/live/live.html'))
   }
 
   return win

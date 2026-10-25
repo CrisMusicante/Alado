@@ -11,6 +11,10 @@ contextBridge.exposeInMainWorld('api', {
   getSetlists: () => ipcRenderer.invoke('db:get-setlists'),
   saveSetlist: (setlist: unknown) => ipcRenderer.invoke('db:save-setlist', setlist),
   deleteSetlist: (id: number) => ipcRenderer.invoke('db:delete-setlist', id),
+  setlistExport: (payload: unknown) => ipcRenderer.invoke('setlist:export', payload),
+  setlistSavePptx: (payload: unknown) => ipcRenderer.invoke('setlist:save-pptx', payload),
+  setlistImportInspect: () => ipcRenderer.invoke('setlist:import-inspect'),
+  setlistImportApply: (payload: unknown) => ipcRenderer.invoke('setlist:import-apply', payload),
 
   // Live window
   openLive: () => ipcRenderer.invoke('live:open'),
@@ -33,13 +37,29 @@ contextBridge.exposeInMainWorld('api', {
   fetchLyricsUrl: (url: string) => ipcRenderer.invoke('lyrics:fetch-url', url),
   fetchLyricsAI: (payload: unknown) => ipcRenderer.invoke('lyrics:fetch-ai', payload),
 
+  // Audio (stems, engine, cues)
+  audioEngineStatus: () => ipcRenderer.invoke('audio:engine-status'),
+  audioInstallEngine: () => ipcRenderer.invoke('audio:install-engine'),
+  audioCancelInstall: () => ipcRenderer.invoke('audio:cancel-install'),
+  audioImportTrack: (songId: number, filePath: string) => ipcRenderer.invoke('audio:import-track', { songId, filePath }),
+  audioReprocess: (songId: number) => ipcRenderer.invoke('audio:reprocess', songId),
+  audioCancel: (songId: number) => ipcRenderer.invoke('audio:cancel', songId),
+  audioGetQueue: () => ipcRenderer.invoke('audio:get-queue'),
+  audioGetSongAudio: (songId: number) => ipcRenderer.invoke('audio:get-song-audio', songId),
+  audioReadStem: (songId: number, stem: string) => ipcRenderer.invoke('audio:read-stem', { songId, stem }),
+  audioUpdate: (songId: number, patch: unknown) => ipcRenderer.invoke('audio:update', { songId, patch }),
+  packExport: (songId: number) => ipcRenderer.invoke('pack:export', songId),
+  packInspect: () => ipcRenderer.invoke('pack:inspect'),
+  packImport: (path: string, mode: 'copy' | 'replace') => ipcRenderer.invoke('pack:import', { path, mode }),
+
   // System
   getDisplays: () => ipcRenderer.invoke('system:get-displays'),
   openFileDialog: (filters: unknown) => ipcRenderer.invoke('system:open-file-dialog', filters),
 
   // Events from main → renderer
   on: (channel: string, cb: (...args: unknown[]) => void) => {
-    const allowed = ['live:show-section', 'live:set-video', 'live:blackout', 'live:whiteout', 'live:transition', 'live:closed']
+    const allowed = ['live:show-section', 'live:set-video', 'live:blackout', 'live:whiteout', 'live:transition', 'live:closed',
+      'audio:progress', 'audio:status-changed', 'audio:engine-progress']
     if (allowed.includes(channel)) ipcRenderer.on(channel, (_e, ...args) => cb(...args))
   },
   off: (channel: string, cb: (...args: unknown[]) => void) => {

@@ -1,5 +1,7 @@
 import { ipcMain } from 'electron'
 import { getDb } from '../db/database'
+import { purgeSongAudio } from './audio.handlers'
+import { toSetlistItem } from '../setlist/setlistRows'
 
 export interface Section {
   type: 'verse' | 'chorus' | 'estribillo' | 'pre-chorus' | 'bridge' | 'outro' | 'intro' | 'custom'
@@ -75,8 +77,10 @@ export function registerDbHandlers(): void {
     }
   })
 
-  ipcMain.handle('db:delete-song', (_e, id: number) => {
+  ipcMain.handle('db:delete-song', async (_e, id: number) => {
     getDb().prepare('DELETE FROM songs WHERE id = ?').run(id)
+    // The row is gone either way; leftover files must not make the delete look failed.
+    await purgeSongAudio(id).catch(e => console.error('No se pudieron borrar los stems de la canción', id, e))
   })
 
   // ── Setlists ───────────────────────────────────────────────────────────────
@@ -90,34 +94,38 @@ export function registerDbHandlers(): void {
         `SELECT si.*, s.title, s.artist, s.sections, s.video_path, s.text_style
          FROM setlist_items si JOIN songs s ON s.id = si.song_id
          WHERE si.setlist_id = ? ORDER BY si.position`
-      ).all(sl.id).map((row: any) => ({ ...row, ...deserializeSong(row) }))
+      ).all(sl.id).map(toSetlistItem)
     }))
   })
 
   ipcMain.handle('db:save-setlist', (_e, setlist: Setlist) => {
     const db = getDb()
-    let setlistId = setlist.id
+    // One transaction: a failure must not leave a half-saved service (or a new row the renderer
+    // never learns about, which the next save would duplicate).
+    return db.transaction((): number => {
+      let setlistId = setlist.id
 
-    if (setlistId) {
-      db.prepare('UPDATE setlists SET name=?, service_date=?, notes=? WHERE id=?')
-        .run(setlist.name, setlist.service_date ?? null, setlist.notes ?? null, setlistId)
-    } else {
-      const result = db.prepare(
-        'INSERT INTO setlists (name, service_date, notes) VALUES (?,?,?)'
-      ).run(setlist.name, setlist.service_date ?? null, setlist.notes ?? null)
-      setlistId = result.lastInsertRowid as number
-    }
+      if (setlistId) {
+        db.prepare('UPDATE setlists SET name=?, service_date=?, notes=? WHERE id=?')
+          .run(setlist.name, setlist.service_date ?? null, setlist.notes ?? null, setlistId)
+      } else {
+        const result = db.prepare(
+          'INSERT INTO setlists (name, service_date, notes) VALUES (?,?,?)'
+        ).run(setlist.name, setlist.service_date ?? null, setlist.notes ?? null)
+        setlistId = result.lastInsertRowid as number
+      }
 
-    // Replace items
-    db.prepare('DELETE FROM setlist_items WHERE setlist_id = ?').run(setlistId)
-    const insertItem = db.prepare(
-      'INSERT INTO setlist_items (setlist_id, song_id, position, custom_video) VALUES (?,?,?,?)'
-    )
-    setlist.songs?.forEach((item, i) => {
-      insertItem.run(setlistId, item.song.id, i, item.custom_video ?? null)
-    })
+      // Replace items
+      db.prepare('DELETE FROM setlist_items WHERE setlist_id = ?').run(setlistId)
+      const insertItem = db.prepare(
+        'INSERT INTO setlist_items (setlist_id, song_id, position, custom_video) VALUES (?,?,?,?)'
+      )
+      setlist.songs?.forEach((item, i) => {
+        insertItem.run(setlistId, item.song.id, i, item.custom_video ?? null)
+      })
 
-    return setlistId
+      return setlistId
+    })()
   })
 
   ipcMain.handle('db:delete-setlist', (_e, id: number) => {
@@ -156,7 +164,7 @@ export function registerDbHandlers(): void {
   })
 }
 
-function deserializeSong(row: any): Song {
+export function deserializeSong(row: any): Song {
   return {
     ...row,
     sections: JSON.parse(row.sections || '[]'),

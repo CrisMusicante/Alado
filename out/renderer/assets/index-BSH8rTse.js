@@ -1,4 +1,5 @@
-import { r as requireReactDom, a as reactExports, R as React, b as requireReact, g as getDefaultExportFromCjs, j as jsxRuntimeExports, c as ReactDOM } from "./client-CaRGQiEv.js";
+const __vite__mapDeps=(i,m=__vite__mapDeps,d=(m.f||(m.f=["./pptxgen.es-DGJFxpjQ.js","./SlideView-CqN0asXU.js"])))=>i.map(i=>d[i]);
+import { r as requireReactDom, a as reactExports, R as React, b as requireReact, g as getDefaultExportFromCjs, j as jsxRuntimeExports, S as SlideView, c as ReactDOM } from "./SlideView-CqN0asXU.js";
 var reactDomExports = requireReactDom();
 function useCombinedRefs() {
   for (var _len = arguments.length, refs = new Array(_len), _key = 0; _key < _len; _key++) {
@@ -2060,9 +2061,9 @@ function useResizeObserver(_ref) {
         return void 0;
       }
       const {
-        ResizeObserver
+        ResizeObserver: ResizeObserver2
       } = window;
-      return new ResizeObserver(handleResize);
+      return new ResizeObserver2(handleResize);
     },
     // eslint-disable-next-line react-hooks/exhaustive-deps
     [disabled]
@@ -2644,7 +2645,7 @@ function useLayoutShiftScrollCompensation(_ref) {
     initialRect,
     config = true
   } = _ref;
-  const initialized = reactExports.useRef(false);
+  const initialized2 = reactExports.useRef(false);
   const {
     x,
     y
@@ -2655,10 +2656,10 @@ function useLayoutShiftScrollCompensation(_ref) {
   useIsomorphicLayoutEffect(() => {
     const disabled = !x && !y;
     if (disabled || !activeNode) {
-      initialized.current = false;
+      initialized2.current = false;
       return;
     }
-    if (initialized.current || !initialRect) {
+    if (initialized2.current || !initialRect) {
       return;
     }
     const node = activeNode == null ? void 0 : activeNode.node.current;
@@ -2673,7 +2674,7 @@ function useLayoutShiftScrollCompensation(_ref) {
     if (!y) {
       rectDelta.y = 0;
     }
-    initialized.current = true;
+    initialized2.current = true;
     if (Math.abs(rectDelta.x) > 0 || Math.abs(rectDelta.y) > 0) {
       const firstScrollableAncestor = getFirstScrollableAncestor(node);
       if (firstScrollableAncestor) {
@@ -3386,7 +3387,7 @@ function useDroppable(_ref) {
     setNodeRef
   };
 }
-const __vite_import_meta_env__$1 = {};
+const __vite_import_meta_env__$2 = {};
 const createStoreImpl = (createState) => {
   let state;
   const listeners = /* @__PURE__ */ new Set();
@@ -3405,7 +3406,7 @@ const createStoreImpl = (createState) => {
     return () => listeners.delete(listener);
   };
   const destroy = () => {
-    if ((__vite_import_meta_env__$1 ? "production" : void 0) !== "production") {
+    if ((__vite_import_meta_env__$2 ? "production" : void 0) !== "production") {
       console.warn(
         "[DEPRECATED] The `destroy` method will be unsupported in a future version. Instead use unsubscribe function returned by subscribe. Everything will be garbage-collected if store is garbage-collected."
       );
@@ -3551,13 +3552,13 @@ function requireWithSelector() {
 }
 var withSelectorExports = requireWithSelector();
 const useSyncExternalStoreExports = /* @__PURE__ */ getDefaultExportFromCjs(withSelectorExports);
-const __vite_import_meta_env__ = {};
+const __vite_import_meta_env__$1 = {};
 const { useDebugValue } = React;
 const { useSyncExternalStoreWithSelector } = useSyncExternalStoreExports;
 let didWarnAboutEqualityFn = false;
 const identity = (arg) => arg;
 function useStore(api, selector = identity, equalityFn) {
-  if ((__vite_import_meta_env__ ? "production" : void 0) !== "production" && equalityFn && !didWarnAboutEqualityFn) {
+  if ((__vite_import_meta_env__$1 ? "production" : void 0) !== "production" && equalityFn && !didWarnAboutEqualityFn) {
     console.warn(
       "[DEPRECATED] Use `createWithEqualityFn` instead of `create` or use `useStoreWithEqualityFn` instead of `useStore`. They can be imported from 'zustand/traditional'. https://github.com/pmndrs/zustand/discussions/1937"
     );
@@ -3574,7 +3575,7 @@ function useStore(api, selector = identity, equalityFn) {
   return slice;
 }
 const createImpl = (createState) => {
-  if ((__vite_import_meta_env__ ? "production" : void 0) !== "production" && typeof createState !== "function") {
+  if ((__vite_import_meta_env__$1 ? "production" : void 0) !== "production" && typeof createState !== "function") {
     console.warn(
       "[DEPRECATED] Passing a vanilla store will be unsupported in a future version. Instead use `import { useStore } from 'zustand'`."
     );
@@ -3979,6 +3980,768 @@ Por siempre alabado`
       )
     ] })
   ] }) });
+}
+let initialized = false;
+const useAudioStore = create((set, get) => ({
+  engine: null,
+  engineProgress: null,
+  installing: false,
+  byId: {},
+  progress: {},
+  init: () => {
+    if (initialized) return;
+    initialized = true;
+    window.api.on("audio:progress", ({ songId, pct }) => set((s) => ({ progress: { ...s.progress, [songId]: pct } })));
+    window.api.on("audio:status-changed", ({ songId, status, error }) => set((s) => s.byId[songId] ? { byId: { ...s.byId, [songId]: { ...s.byId[songId], status, error: error ?? null } } } : s));
+    window.api.on("audio:engine-progress", (p) => set({ engineProgress: p }));
+    void get().refreshEngine();
+  },
+  refreshEngine: async () => set({ engine: await window.api.audioEngineStatus() }),
+  installEngine: async () => {
+    set({ installing: true, engineProgress: null });
+    const res = await window.api.audioInstallEngine();
+    set({ installing: false });
+    await get().refreshEngine();
+    return res.ok ? null : res.error ?? "Error desconocido";
+  },
+  load: async (songId) => {
+    const row = await window.api.audioGetSongAudio(songId);
+    if (row) set((s) => ({ byId: { ...s.byId, [songId]: row } }));
+    return row;
+  },
+  importTrack: async (songId, filePath) => {
+    const row = await window.api.audioImportTrack(songId, filePath);
+    set((s) => ({ byId: { ...s.byId, [songId]: row }, progress: { ...s.progress, [songId]: 0 } }));
+  },
+  reprocess: async (songId) => {
+    const row = await window.api.audioReprocess(songId);
+    set((s) => ({ byId: { ...s.byId, [songId]: row }, progress: { ...s.progress, [songId]: 0 } }));
+  },
+  cancel: async (songId) => window.api.audioCancel(songId),
+  update: async (songId, patch) => {
+    const row = await window.api.audioUpdate(songId, patch);
+    set((s) => ({ byId: { ...s.byId, [songId]: row } }));
+  }
+}));
+const STEMS = ["instrumental", "vocals"];
+class StemPlayer {
+  ctx = new AudioContext();
+  gains;
+  buffers = {};
+  sources = [];
+  startedAt = 0;
+  offset = 0;
+  playing = false;
+  onEnded = null;
+  constructor() {
+    this.gains = {
+      instrumental: this.ctx.createGain(),
+      vocals: this.ctx.createGain()
+    };
+    STEMS.forEach((s) => this.gains[s].connect(this.ctx.destination));
+  }
+  /** Decodes without touching what is loaded, so a slow, superseded decode can simply be dropped. */
+  async decode(data) {
+    const [instrumental, vocals] = await Promise.all(STEMS.map((s) => this.ctx.decodeAudioData(data[s])));
+    return { instrumental, vocals };
+  }
+  use(decoded) {
+    this.stopSources();
+    this.playing = false;
+    this.offset = 0;
+    this.buffers = { ...decoded };
+  }
+  get duration() {
+    return this.buffers.instrumental?.duration ?? 0;
+  }
+  get currentTime() {
+    if (!this.playing) return this.offset;
+    return Math.max(0, Math.min(this.ctx.currentTime - this.startedAt, this.duration));
+  }
+  play() {
+    if (this.playing || !this.buffers.instrumental) return;
+    void this.ctx.resume();
+    const when = this.ctx.currentTime + 0.05;
+    this.sources = STEMS.map((s) => {
+      const src = this.ctx.createBufferSource();
+      src.buffer = this.buffers[s];
+      src.connect(this.gains[s]);
+      src.start(when, this.offset);
+      return src;
+    });
+    const first = this.sources[0];
+    first.onended = () => {
+      if (this.sources[0] !== first || !this.playing) return;
+      this.playing = false;
+      this.offset = 0;
+      this.sources = [];
+      this.onEnded?.();
+    };
+    this.startedAt = when - this.offset;
+    this.playing = true;
+  }
+  pause() {
+    if (!this.playing) return;
+    this.offset = this.currentTime;
+    this.playing = false;
+    this.stopSources();
+  }
+  seek(t) {
+    const wasPlaying = this.playing;
+    if (wasPlaying) {
+      this.playing = false;
+      this.stopSources();
+    }
+    this.offset = Math.max(0, Math.min(t, this.duration));
+    if (wasPlaying) this.play();
+  }
+  setVolume(stem, v) {
+    this.gains[stem].gain.value = Math.max(0, Math.min(1, v));
+  }
+  dispose() {
+    this.stopSources();
+    void this.ctx.close();
+  }
+  stopSources() {
+    this.sources.forEach((s) => {
+      s.onended = null;
+      try {
+        s.stop();
+      } catch {
+      }
+    });
+    this.sources = [];
+  }
+}
+const round = (t) => Math.round(t * 1e3) / 1e3;
+function sectionsSignature(sections) {
+  return `${sections.length}:${sections.map((s) => s.type).join(",")}`;
+}
+function cuesAreStale(cues, savedSig, sections) {
+  if (cues.length === 0) return false;
+  return savedSig !== sectionsSignature(sections);
+}
+function sortCues(cues) {
+  return [...cues].sort((a, b) => a.time - b.time);
+}
+function cuePositionAt(cues, time, lead = 0) {
+  let pos = -1;
+  for (let i = 0; i < cues.length; i++) {
+    if (cues[i].time - lead <= time + 1e-9) pos = i;
+    else break;
+  }
+  return pos;
+}
+function nudgeCue(cues, index, delta) {
+  return sortCues(cues.map((c, i) => i === index ? { ...c, time: Math.max(0, round(c.time + delta)) } : c));
+}
+function removeCue(cues, index) {
+  return cues.filter((_, i) => i !== index);
+}
+function upsertCueAt(cues, sectionIndex, time) {
+  const matches = cues.filter((c) => c.sectionIndex === sectionIndex);
+  if (matches.length === 1) {
+    return sortCues(cues.map((c) => c === matches[0] ? { sectionIndex, time: round(time) } : c));
+  }
+  return sortCues([...cues, { sectionIndex, time: round(time) }]);
+}
+class CueRecorder {
+  constructor(sectionCount) {
+    this.sectionCount = sectionCount;
+  }
+  cues = [];
+  next = 0;
+  last = -1;
+  get nextSection() {
+    return this.next < this.sectionCount ? this.next : null;
+  }
+  get result() {
+    return sortCues(this.cues);
+  }
+  tap(time) {
+    if (this.next >= this.sectionCount) return null;
+    return this.mark(this.next, time);
+  }
+  repeat(time) {
+    if (this.last < 0) return null;
+    const cue = { sectionIndex: this.last, time: round(time) };
+    this.cues.push(cue);
+    return cue;
+  }
+  mark(sectionIndex, time) {
+    const cue = { sectionIndex, time: round(time) };
+    this.cues.push(cue);
+    this.last = sectionIndex;
+    this.next = sectionIndex + 1;
+    return cue;
+  }
+}
+class CueFollower {
+  constructor(cues, lead = 0) {
+    this.lead = lead;
+    this.cues = sortCues(cues);
+  }
+  cues;
+  pos = -1;
+  manual = false;
+  get isManual() {
+    return this.manual;
+  }
+  /** Returns the section to show when a new cue is crossed, else null. */
+  update(time) {
+    const pos = cuePositionAt(this.cues, time, this.lead);
+    if (pos === this.pos) return null;
+    this.pos = pos;
+    if (pos < 0) return null;
+    this.manual = false;
+    return this.cues[pos].sectionIndex;
+  }
+  seek(time) {
+    this.manual = false;
+    this.pos = -2;
+    return this.update(time);
+  }
+  markManual() {
+    this.manual = true;
+  }
+  resumeAuto(time) {
+    this.manual = false;
+    this.pos = cuePositionAt(this.cues, time, this.lead);
+    return this.pos < 0 ? null : this.cues[this.pos].sectionIndex;
+  }
+}
+let player = null;
+const getPlayer = () => player ??= new StemPlayer();
+let follower = null;
+const getFollower = () => follower;
+function setFollowerCues(cues) {
+  follower = cues && cues.length > 0 ? new CueFollower(cues, usePlaybackStore.getState().lead) : null;
+}
+const usePlaybackStore = create((set, get) => ({
+  songId: null,
+  status: "idle",
+  error: null,
+  playing: false,
+  time: 0,
+  duration: 0,
+  volumes: { instrumental: 1, vocals: 0 },
+  manual: false,
+  recording: false,
+  lead: 0.3,
+  loadSong: async (songId) => {
+    if (get().songId === songId && get().status === "ready") return;
+    const p = getPlayer();
+    p.pause();
+    set({ songId, status: "loading", error: null, playing: false, time: 0, manual: false });
+    try {
+      const [instrumental, vocals, meta] = await Promise.all([
+        window.api.audioReadStem(songId, "instrumental"),
+        window.api.audioReadStem(songId, "vocals"),
+        window.api.audioGetSongAudio(songId)
+      ]);
+      if (get().songId !== songId) return;
+      const decoded = await p.decode({ instrumental: instrumental.slice().buffer, vocals: vocals.slice().buffer });
+      if (get().songId !== songId) return;
+      p.use(decoded);
+      const volumes = { instrumental: meta?.vol_instrumental ?? 1, vocals: meta?.vol_vocals ?? 0 };
+      p.setVolume("instrumental", volumes.instrumental);
+      p.setVolume("vocals", volumes.vocals);
+      p.onEnded = () => set({ playing: false, time: 0 });
+      set({ status: "ready", duration: p.duration, volumes });
+      if (meta && !meta.duration_sec) void window.api.audioUpdate(songId, { duration_sec: p.duration });
+    } catch (e) {
+      set({ status: "error", error: e.message });
+    }
+  },
+  toggle: () => {
+    const p = getPlayer();
+    if (get().status !== "ready") return;
+    if (p.playing) p.pause();
+    else p.play();
+    set({ playing: p.playing, time: p.currentTime });
+  },
+  seek: (t) => {
+    getPlayer().seek(t);
+    set({ time: getPlayer().currentTime });
+  },
+  setVolume: (stem, v) => {
+    getPlayer().setVolume(stem, v);
+    const volumes = { ...get().volumes, [stem]: v };
+    set({ volumes });
+    const id = get().songId;
+    if (id) void window.api.audioUpdate(id, stem === "instrumental" ? { vol_instrumental: v } : { vol_vocals: v });
+  },
+  resumeAuto: () => set({ manual: false }),
+  unload: () => {
+    getPlayer().pause();
+    follower = null;
+    set({ songId: null, status: "idle", playing: false, time: 0, duration: 0, manual: false });
+  },
+  setRecording: (recording) => set({ recording })
+}));
+const useLiveStore = create((set, get) => ({
+  isLive: false,
+  currentSong: null,
+  currentSectionIndex: 0,
+  blackout: false,
+  whiteout: false,
+  setlist: [],
+  startLive: async (setlist) => {
+    await window.api.openLive();
+    const song = setlist[0];
+    if (song) {
+      await window.api.setVideo({ videoPath: song.video_path ?? null });
+      await sendSection(song, 0);
+    }
+    set({ isLive: true, setlist, currentSong: song ?? null, currentSectionIndex: 0 });
+  },
+  stopLive: async () => {
+    await window.api.closeLive();
+    set({ isLive: false, currentSong: null, blackout: false, whiteout: false });
+  },
+  goToSection: async (index) => {
+    const { currentSong } = get();
+    if (!currentSong) return;
+    await sendSection(currentSong, index);
+    set({ currentSectionIndex: index });
+  },
+  nextSection: async () => {
+    const { currentSong, currentSectionIndex } = get();
+    if (!currentSong) return;
+    const next = currentSectionIndex + 1;
+    if (next < currentSong.sections.length) {
+      await sendSection(currentSong, next);
+      set({ currentSectionIndex: next });
+    }
+  },
+  prevSection: async () => {
+    const { currentSong, currentSectionIndex } = get();
+    if (!currentSong) return;
+    const prev = currentSectionIndex - 1;
+    if (prev >= 0) {
+      await sendSection(currentSong, prev);
+      set({ currentSectionIndex: prev });
+    }
+  },
+  toggleBlackout: async () => {
+    const active = !get().blackout;
+    await window.api.setBlackout(active);
+    set({ blackout: active });
+  },
+  toggleWhiteout: async () => {
+    const active = !get().whiteout;
+    await window.api.setWhiteout(active);
+    set({ whiteout: active });
+  },
+  changeSong: async (song) => {
+    await window.api.setVideo({ videoPath: song.video_path ?? null });
+    await sendSection(song, 0);
+    set({ currentSong: song, currentSectionIndex: 0 });
+  }
+}));
+async function sendSection(song, index) {
+  const section = song.sections[index];
+  if (!section) return;
+  await window.api.showSection({
+    songId: song.id,
+    sectionIndex: index,
+    text: section.lines.join("\n"),
+    lines: section.lines,
+    textStyle: song.text_style
+  });
+}
+const fmt$1 = (t) => `${Math.floor(t / 60)}:${String(Math.floor(t % 60)).padStart(2, "0")}`;
+function AudioTransport() {
+  const { status, playing, time, duration, volumes, manual, toggle, seek, setVolume, resumeAuto } = usePlaybackStore();
+  if (status === "idle") return null;
+  if (status === "loading") return /* @__PURE__ */ jsxRuntimeExports.jsx("span", { className: "text-xs text-slate-400", children: "Cargando audio…" });
+  if (status === "error") return /* @__PURE__ */ jsxRuntimeExports.jsx("span", { className: "text-xs text-red-400", children: "No se pudo cargar el audio" });
+  function onSeek(t) {
+    seek(t);
+    if (usePlaybackStore.getState().recording) return;
+    const idx = getFollower()?.seek(t);
+    if (idx !== null && idx !== void 0) void useLiveStore.getState().goToSection(idx);
+  }
+  return /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "flex items-center gap-3 bg-slate-900 rounded-xl px-3 py-2 border border-slate-800", children: [
+    /* @__PURE__ */ jsxRuntimeExports.jsx(
+      "button",
+      {
+        onClick: toggle,
+        title: playing ? "Pausar" : "Reproducir",
+        className: "w-9 h-9 rounded-full bg-indigo-600 hover:bg-indigo-500 text-white text-sm shrink-0",
+        children: playing ? "❚❚" : "▶"
+      }
+    ),
+    /* @__PURE__ */ jsxRuntimeExports.jsxs("span", { className: "text-xs text-slate-400 tabular-nums w-20", children: [
+      fmt$1(time),
+      " / ",
+      fmt$1(duration)
+    ] }),
+    /* @__PURE__ */ jsxRuntimeExports.jsx(
+      "input",
+      {
+        type: "range",
+        min: 0,
+        max: duration || 0,
+        step: 0.1,
+        value: time,
+        "aria-label": "Posición",
+        onChange: (e) => onSeek(Number(e.target.value)),
+        className: "w-40 accent-indigo-500"
+      }
+    ),
+    /* @__PURE__ */ jsxRuntimeExports.jsx(Vol, { label: "Inst.", value: volumes.instrumental, onChange: (v) => setVolume("instrumental", v) }),
+    /* @__PURE__ */ jsxRuntimeExports.jsx(Vol, { label: "Voz", value: volumes.vocals, onChange: (v) => setVolume("vocals", v) }),
+    getFollower() && (manual ? /* @__PURE__ */ jsxRuntimeExports.jsx("button", { onClick: resumeAuto, className: "text-xs px-2 py-1 rounded-lg bg-amber-600 text-white", children: "Manual · volver a auto" }) : /* @__PURE__ */ jsxRuntimeExports.jsx("span", { className: "text-xs px-2 py-1 rounded-lg bg-emerald-700 text-white", children: "Automático" }))
+  ] });
+}
+function Vol({ label, value, onChange }) {
+  return /* @__PURE__ */ jsxRuntimeExports.jsxs("label", { className: "flex items-center gap-1.5 text-xs text-slate-400", children: [
+    label,
+    /* @__PURE__ */ jsxRuntimeExports.jsx(
+      "input",
+      {
+        type: "range",
+        min: 0,
+        max: 1,
+        step: 0.05,
+        value,
+        onChange: (e) => onChange(Number(e.target.value)),
+        className: "w-20 accent-indigo-500"
+      }
+    )
+  ] });
+}
+function StemMixer({ songId }) {
+  const { songId: loaded, loadSong, unload } = usePlaybackStore();
+  const isLive = useLiveStore((s) => s.isLive);
+  reactExports.useEffect(() => () => {
+    if (!useLiveStore.getState().isLive) unload();
+  }, []);
+  if (isLive) {
+    return /* @__PURE__ */ jsxRuntimeExports.jsx("p", { className: "text-sm text-slate-400", children: "Hay un servicio en vivo. Termínalo para escuchar o marcar cues aquí." });
+  }
+  if (loaded !== songId) return /* @__PURE__ */ jsxRuntimeExports.jsx("div", { children: /* @__PURE__ */ jsxRuntimeExports.jsx(Btn, { onClick: () => loadSong(songId), children: "Escuchar / mezclar" }) });
+  return /* @__PURE__ */ jsxRuntimeExports.jsx(AudioTransport, {});
+}
+const fmt = (t) => `${Math.floor(t / 60)}:${(t % 60).toFixed(1).padStart(4, "0")}`;
+function CueEditor({ songId, sections }) {
+  const audio = useAudioStore((s) => s.byId[songId]);
+  const update = useAudioStore((s) => s.update);
+  const { songId: loaded, recording, setRecording, seek, toggle } = usePlaybackStore();
+  const isLive = useLiveStore((s) => s.isLive);
+  const recorder = reactExports.useRef(null);
+  const [draft, setDraft] = reactExports.useState([]);
+  const [selected, setSelected] = reactExports.useState(0);
+  const cues = recording ? draft : audio?.cues ?? [];
+  const stale = audio ? cuesAreStale(audio.cues, audio.cues_sections_sig, sections) : false;
+  const save = (next2) => update(songId, { cues: next2, cues_sections_sig: sectionsSignature(sections) });
+  reactExports.useEffect(() => {
+    if (!recording) return;
+    function onKey(e) {
+      if (["INPUT", "TEXTAREA"].includes(e.target.tagName)) return;
+      const t = getPlayer().currentTime;
+      if (e.key === " ") {
+        e.preventDefault();
+        document.activeElement?.blur();
+        recorder.current?.tap(t);
+      } else if (e.key === "r" || e.key === "R") recorder.current?.repeat(t);
+      else return;
+      setDraft(recorder.current.result);
+    }
+    window.addEventListener("keydown", onKey);
+    return () => window.removeEventListener("keydown", onKey);
+  }, [recording]);
+  reactExports.useEffect(() => () => {
+    if (usePlaybackStore.getState().recording) setRecording(false);
+  }, []);
+  if (isLive || loaded !== songId || sections.length === 0) return null;
+  function start() {
+    recorder.current = new CueRecorder(sections.length);
+    setDraft([]);
+    setRecording(true);
+    seek(0);
+    if (!getPlayer().playing) toggle();
+  }
+  async function finish() {
+    if (getPlayer().playing) toggle();
+    setRecording(false);
+    await save(recorder.current?.result ?? []);
+    recorder.current = null;
+  }
+  function markSection(i) {
+    if (!recording || !recorder.current) return;
+    recorder.current.mark(i, getPlayer().currentTime);
+    setDraft(recorder.current.result);
+  }
+  const next = recorder.current?.nextSection ?? null;
+  return /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "mt-2 border-t border-slate-700 pt-4", children: [
+    /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "flex items-center gap-3 mb-3", children: [
+      /* @__PURE__ */ jsxRuntimeExports.jsxs("h3", { className: "text-sm font-semibold flex-1", children: [
+        "Cues (",
+        cues.length,
+        ")"
+      ] }),
+      !recording && /* @__PURE__ */ jsxRuntimeExports.jsx(Btn, { onClick: start, children: cues.length ? "Volver a marcar" : "Marcar cues" }),
+      recording && /* @__PURE__ */ jsxRuntimeExports.jsx(Btn, { onClick: finish, children: "Terminar y guardar" })
+    ] }),
+    stale && !recording && /* @__PURE__ */ jsxRuntimeExports.jsx("p", { className: "text-sm text-amber-400 mb-3", children: "Las secciones cambiaron después de marcar los cues. No se usarán en vivo hasta que los vuelvas a marcar." }),
+    recording && /* @__PURE__ */ jsxRuntimeExports.jsxs("p", { className: "text-sm text-slate-300 mb-3", children: [
+      /* @__PURE__ */ jsxRuntimeExports.jsx("b", { children: "Espacio" }),
+      ": siguiente sección",
+      next !== null ? ` (${sections[next].label})` : " (no quedan)",
+      " ·",
+      /* @__PURE__ */ jsxRuntimeExports.jsx("b", { children: " R" }),
+      ": repetir la actual · ",
+      /* @__PURE__ */ jsxRuntimeExports.jsx("b", { children: "clic" }),
+      " en una sección: marcarla ahora"
+    ] }),
+    recording && /* @__PURE__ */ jsxRuntimeExports.jsx("div", { className: "flex gap-1 flex-wrap mb-3", children: sections.map((s, i) => /* @__PURE__ */ jsxRuntimeExports.jsx(
+      "button",
+      {
+        onClick: () => markSection(i),
+        className: `px-2.5 py-1 rounded-lg text-xs border ${i === next ? "bg-indigo-600 border-indigo-500 text-white" : "bg-slate-700 border-slate-600 text-slate-300"}`,
+        children: s.label
+      },
+      i
+    )) }),
+    /* @__PURE__ */ jsxRuntimeExports.jsx("ol", { className: "flex flex-col gap-1", children: cues.map((c, i) => /* @__PURE__ */ jsxRuntimeExports.jsxs(
+      "li",
+      {
+        className: `flex items-center gap-2 text-sm rounded-lg px-2 py-1 ${i === selected && !recording ? "bg-slate-700" : ""}`,
+        onClick: () => setSelected(i),
+        children: [
+          /* @__PURE__ */ jsxRuntimeExports.jsx("span", { className: "tabular-nums text-slate-400 w-16", children: fmt(c.time) }),
+          /* @__PURE__ */ jsxRuntimeExports.jsx("span", { className: "flex-1", children: sections[c.sectionIndex]?.label ?? `Sección ${c.sectionIndex + 1}` }),
+          !recording && /* @__PURE__ */ jsxRuntimeExports.jsxs(jsxRuntimeExports.Fragment, { children: [
+            /* @__PURE__ */ jsxRuntimeExports.jsx(SmallBtn, { onClick: () => save(nudgeCue(cues, i, -0.1)), children: "−0.1" }),
+            /* @__PURE__ */ jsxRuntimeExports.jsx(SmallBtn, { onClick: () => save(nudgeCue(cues, i, 0.1)), children: "+0.1" }),
+            /* @__PURE__ */ jsxRuntimeExports.jsx(SmallBtn, { onClick: () => {
+              seek(Math.max(0, c.time - 2));
+              if (!getPlayer().playing) toggle();
+            }, children: "▶" }),
+            /* @__PURE__ */ jsxRuntimeExports.jsx(SmallBtn, { onClick: () => save(upsertCueAt(cues, c.sectionIndex, getPlayer().currentTime)), children: "Marcar aquí" }),
+            /* @__PURE__ */ jsxRuntimeExports.jsx(SmallBtn, { onClick: () => save(removeCue(cues, i)), children: "✕" })
+          ] })
+        ]
+      },
+      `${c.sectionIndex}-${c.time}-${i}`
+    )) })
+  ] });
+}
+function SmallBtn({ onClick, children }) {
+  return /* @__PURE__ */ jsxRuntimeExports.jsx(
+    "button",
+    {
+      onClick: (e) => {
+        e.stopPropagation();
+        onClick();
+      },
+      className: "text-xs px-2 py-0.5 rounded-md bg-slate-700 hover:bg-slate-600 border border-slate-600",
+      children
+    }
+  );
+}
+const useDialogStore = create((set, get) => ({
+  current: null,
+  queue: [],
+  answer: (value) => {
+    const { current, queue } = get();
+    if (!current) return;
+    const [next = null, ...rest] = queue;
+    set({ current: next, queue: rest });
+    current.resolve(value);
+  }
+}));
+function ask(request) {
+  return new Promise((resolve) => {
+    const pending = { ...request, resolve };
+    const { current, queue } = useDialogStore.getState();
+    if (current) useDialogStore.setState({ queue: [...queue, pending] });
+    else useDialogStore.setState({ current: pending });
+  });
+}
+async function confirmDialog(message, opts = {}) {
+  const value = await ask({
+    title: opts.title ?? "Confirmar",
+    message,
+    actions: [
+      { label: "Cancelar", value: "cancel", variant: "neutral" },
+      { label: opts.confirmLabel ?? "Aceptar", value: "confirm", variant: opts.danger ? "danger" : "primary" }
+    ]
+  });
+  return value === "confirm";
+}
+async function alertDialog(message, title = "Aviso") {
+  await ask({ title, message, actions: [{ label: "Entendido", value: "ok", variant: "primary" }] });
+}
+const STEP_LABEL = { download: "Descargando", extract: "Extrayendo", pip: "Instalando librerías", ffmpeg: "Preparando ffmpeg", selftest: "Probando el motor" };
+const gb = (b) => (b / 1024 ** 3).toFixed(1);
+function AudioPanel({ songId, sections }) {
+  const { engine, engineProgress, installing, byId, progress, init, installEngine, load, importTrack, reprocess, cancel } = useAudioStore();
+  const [error, setError] = reactExports.useState(null);
+  const audio = songId ? byId[songId] : void 0;
+  reactExports.useEffect(() => {
+    init();
+  }, []);
+  reactExports.useEffect(() => {
+    if (songId) void load(songId);
+  }, [songId]);
+  if (!songId) {
+    return /* @__PURE__ */ jsxRuntimeExports.jsx(Box, { children: /* @__PURE__ */ jsxRuntimeExports.jsx("p", { className: "text-sm text-slate-400", children: "Guarda la canción primero para poder agregarle audio." }) });
+  }
+  async function pickAndImport() {
+    setError(null);
+    const file = await window.api.openFileDialog([{ name: "Audio", extensions: ["mp3", "wav", "flac", "m4a"] }]);
+    if (!file) return;
+    try {
+      await importTrack(songId, file);
+    } catch (e) {
+      setError(e.message);
+    }
+  }
+  async function install() {
+    setError(null);
+    const err = await installEngine();
+    if (err) setError(err);
+  }
+  const needsEngine = engine && !engine.installed;
+  return /* @__PURE__ */ jsxRuntimeExports.jsxs(Box, { children: [
+    error && /* @__PURE__ */ jsxRuntimeExports.jsx("p", { className: "text-sm text-red-400 mb-3", children: error }),
+    needsEngine && !engine.platformSupported && /* @__PURE__ */ jsxRuntimeExports.jsx("p", { className: "text-sm text-amber-400", children: "Esta computadora no es compatible con el motor de separación." }),
+    needsEngine && engine.platformSupported && !installing && /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "flex items-center gap-3", children: [
+      /* @__PURE__ */ jsxRuntimeExports.jsxs("p", { className: "text-sm text-slate-300 flex-1", children: [
+        "Para separar la voz hay que preparar el motor de audio una sola vez (~",
+        gb(engine.estimatedInstallBytes),
+        " GB de descarga y espacio en disco)."
+      ] }),
+      /* @__PURE__ */ jsxRuntimeExports.jsx(Btn, { onClick: install, children: "Preparar motor de audio" })
+    ] }),
+    installing && /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "flex items-center gap-3", children: [
+      /* @__PURE__ */ jsxRuntimeExports.jsx(Progress, { pct: engineProgress?.pct ?? 0, label: engineProgress ? STEP_LABEL[engineProgress.step] : "Iniciando" }),
+      /* @__PURE__ */ jsxRuntimeExports.jsx(Btn, { onClick: () => window.api.audioCancelInstall(), children: "Cancelar" })
+    ] }),
+    engine?.installed && !audio && /* @__PURE__ */ jsxRuntimeExports.jsx(Btn, { onClick: pickAndImport, children: "Importar pista" }),
+    audio && (audio.status === "pending" || audio.status === "processing") && /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "flex items-center gap-3", children: [
+      /* @__PURE__ */ jsxRuntimeExports.jsx(Progress, { pct: progress[songId] ?? 0, label: audio.status === "pending" ? "En espera" : "Separando voz e instrumental (tarda ≈2–3× la duración de la canción)" }),
+      /* @__PURE__ */ jsxRuntimeExports.jsx(Btn, { onClick: () => cancel(songId), children: "Cancelar" })
+    ] }),
+    audio && (audio.status === "failed" || audio.status === "cancelled") && /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "flex items-center gap-3", children: [
+      /* @__PURE__ */ jsxRuntimeExports.jsx("p", { className: "text-sm text-red-400 flex-1", children: audio.status === "cancelled" ? "Separación cancelada." : `Falló la separación: ${audio.error ?? ""}` }),
+      engine?.installed && /* @__PURE__ */ jsxRuntimeExports.jsx(Btn, { onClick: () => reprocess(songId), children: "Reintentar" }),
+      engine?.installed && /* @__PURE__ */ jsxRuntimeExports.jsx(Btn, { onClick: pickAndImport, children: "Otra pista" })
+    ] }),
+    audio?.status === "ready" && /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "flex flex-col gap-3", children: [
+      /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "flex items-center gap-3", children: [
+        /* @__PURE__ */ jsxRuntimeExports.jsx("p", { className: "text-sm text-emerald-400 flex-1", children: "Pista lista: instrumental y voz separadas." }),
+        engine?.installed && /* @__PURE__ */ jsxRuntimeExports.jsx(Btn, { onClick: pickAndImport, children: "Reemplazar pista" })
+      ] }),
+      /* @__PURE__ */ jsxRuntimeExports.jsx(StemMixer, { songId }),
+      /* @__PURE__ */ jsxRuntimeExports.jsx(CueEditor, { songId, sections }),
+      /* @__PURE__ */ jsxRuntimeExports.jsx("div", { children: /* @__PURE__ */ jsxRuntimeExports.jsx(Btn, { onClick: async () => {
+        const ok = await confirmDialog(
+          "Compartir el audio de canciones comerciales puede requerir licencia (por ejemplo CCLI o equivalente). Es responsabilidad de tu iglesia contar con ella. ¿Exportar el paquete?",
+          { title: "Exportar paquete", confirmLabel: "Exportar" }
+        );
+        if (!ok) return;
+        try {
+          await window.api.packExport(songId);
+          setError(null);
+        } catch (e) {
+          setError(e.message);
+        }
+      }, children: "Exportar paquete (.wfpack)" }) })
+    ] })
+  ] });
+}
+function Box({ children }) {
+  return /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "mb-5 bg-slate-800 rounded-2xl p-4 border border-slate-700", children: [
+    /* @__PURE__ */ jsxRuntimeExports.jsx("h2", { className: "text-xs font-semibold text-slate-400 mb-4 uppercase tracking-widest", children: "Audio" }),
+    children
+  ] });
+}
+function Btn({ onClick, children, disabled }) {
+  return /* @__PURE__ */ jsxRuntimeExports.jsx(
+    "button",
+    {
+      onClick,
+      disabled,
+      className: "bg-slate-700 hover:bg-slate-600 disabled:opacity-50 text-white px-4 py-2 rounded-xl text-sm transition-colors border border-slate-600 shrink-0",
+      children
+    }
+  );
+}
+function Progress({ pct, label }) {
+  return /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "flex-1", children: [
+    /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "flex justify-between text-xs text-slate-400 mb-1", children: [
+      /* @__PURE__ */ jsxRuntimeExports.jsx("span", { children: label }),
+      /* @__PURE__ */ jsxRuntimeExports.jsxs("span", { children: [
+        pct,
+        "%"
+      ] })
+    ] }),
+    /* @__PURE__ */ jsxRuntimeExports.jsx("div", { className: "h-2 bg-slate-700 rounded-full overflow-hidden", children: /* @__PURE__ */ jsxRuntimeExports.jsx("div", { className: "h-full bg-indigo-500 transition-all", style: { width: `${pct}%` } }) })
+  ] });
+}
+const MEDIA_SCHEME = "alado-media";
+function mediaUrl(path) {
+  return `${MEDIA_SCHEME}://video/${encodeURIComponent(path)}`;
+}
+const STAGE_W = 1920;
+const STAGE_H = 1080;
+function SongPreview({ sections, selected, onSelect, textStyle, videoPath }) {
+  const frameRef = reactExports.useRef(null);
+  const [scale, setScale] = reactExports.useState(0);
+  reactExports.useEffect(() => {
+    const frame = frameRef.current;
+    if (!frame) return;
+    const observer = new ResizeObserver(([entry]) => setScale(entry.contentRect.width / STAGE_W));
+    observer.observe(frame);
+    return () => observer.disconnect();
+  }, []);
+  const index = Math.min(selected, sections.length - 1);
+  const section = index >= 0 ? sections[index] : void 0;
+  const lines = (section?.lines ?? []).filter((l) => l.trim() !== "");
+  return /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "bg-slate-800 rounded-2xl p-3 border border-slate-700", children: [
+    /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "flex items-center gap-2 mb-2", children: [
+      /* @__PURE__ */ jsxRuntimeExports.jsx("h2", { className: "text-xs font-semibold text-slate-400 uppercase tracking-widest flex-1", children: "Vista previa" }),
+      /* @__PURE__ */ jsxRuntimeExports.jsx(
+        "button",
+        {
+          onClick: () => onSelect(index - 1),
+          disabled: index <= 0,
+          className: "w-7 h-7 rounded-lg bg-slate-700 hover:bg-slate-600 disabled:opacity-30 text-sm",
+          title: "Sección anterior",
+          children: "◀"
+        }
+      ),
+      /* @__PURE__ */ jsxRuntimeExports.jsx("span", { className: "text-xs text-slate-400 tabular-nums w-14 text-center", children: sections.length ? `${index + 1} / ${sections.length}` : "—" }),
+      /* @__PURE__ */ jsxRuntimeExports.jsx(
+        "button",
+        {
+          onClick: () => onSelect(index + 1),
+          disabled: index >= sections.length - 1,
+          className: "w-7 h-7 rounded-lg bg-slate-700 hover:bg-slate-600 disabled:opacity-30 text-sm",
+          title: "Sección siguiente",
+          children: "▶"
+        }
+      )
+    ] }),
+    /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { ref: frameRef, className: "relative w-full aspect-video rounded-xl overflow-hidden bg-black", children: [
+      scale > 0 && /* @__PURE__ */ jsxRuntimeExports.jsx("div", { style: {
+        position: "absolute",
+        top: 0,
+        left: 0,
+        width: STAGE_W,
+        height: STAGE_H,
+        transform: `scale(${scale})`,
+        transformOrigin: "top left",
+        overflow: "hidden"
+      }, children: /* @__PURE__ */ jsxRuntimeExports.jsx(SlideView, { lines, textStyle, videoSrc: videoPath ? mediaUrl(videoPath) : null }) }),
+      !section && /* @__PURE__ */ jsxRuntimeExports.jsx("p", { className: "absolute inset-0 flex items-center justify-center text-sm text-slate-500", children: "Sin secciones" })
+    ] }),
+    section && /* @__PURE__ */ jsxRuntimeExports.jsx("p", { className: "text-xs text-slate-400 mt-2 truncate", children: section.label })
+  ] });
 }
 function arrayMove(array, from, to) {
   const newArray = array.slice();
@@ -4578,7 +5341,7 @@ const SECTION_BORDER = {
   outro: "border-l-slate-400",
   custom: "border-l-teal-500"
 };
-function SortableSectionCard({ id, section, index, onUpdate, onUpdateLines, onRemove }) {
+function SortableSectionCard({ id, section, index, previewing, onPreview, onUpdate, onUpdateLines, onRemove }) {
   const { attributes, listeners, setNodeRef, transform, transition, isDragging } = useSortable({ id });
   const style = { transform: CSS.Transform.toString(transform), transition, opacity: isDragging ? 0.5 : 1 };
   return /* @__PURE__ */ jsxRuntimeExports.jsxs(
@@ -4586,7 +5349,10 @@ function SortableSectionCard({ id, section, index, onUpdate, onUpdateLines, onRe
     {
       ref: setNodeRef,
       style,
-      className: `bg-slate-800 rounded-2xl p-4 border border-slate-700 border-l-4 ${SECTION_BORDER[section.type] ?? "border-l-slate-500"}`,
+      onFocusCapture: () => onPreview(index),
+      onClick: () => onPreview(index),
+      className: `bg-slate-800 rounded-2xl p-4 border border-l-4 ${SECTION_BORDER[section.type] ?? "border-l-slate-500"}
+        ${previewing ? "border-indigo-400 ring-1 ring-indigo-400/40" : "border-slate-700"}`,
       children: [
         /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "flex gap-3 mb-3", children: [
           /* @__PURE__ */ jsxRuntimeExports.jsx(
@@ -4654,6 +5420,7 @@ function SongEditor({ song, onClose }) {
   const [textStyle, setTextStyle] = reactExports.useState(song.text_style ?? {});
   const [saving, setSaving] = reactExports.useState(false);
   const [showImport, setShowImport] = reactExports.useState(false);
+  const [previewIndex, setPreviewIndex] = reactExports.useState(0);
   function updateTextStyle(patch) {
     setTextStyle((prev) => ({ ...prev, ...patch }));
   }
@@ -4678,6 +5445,7 @@ function SongEditor({ song, onClose }) {
     if (path) setVideoPath(path);
   }
   function addSection() {
+    setPreviewIndex(sections.length);
     setSections((prev) => [...prev, {
       type: "verse",
       label: `Verso ${prev.filter((s) => s.type === "verse").length + 1}`,
@@ -4774,6 +5542,7 @@ function SongEditor({ song, onClose }) {
         )
       ] })
     ] }),
+    /* @__PURE__ */ jsxRuntimeExports.jsx(AudioPanel, { songId: song.id, sections }),
     /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "mb-6 bg-slate-800 rounded-2xl p-4 border border-slate-700", children: [
       /* @__PURE__ */ jsxRuntimeExports.jsx("h2", { className: "text-xs font-semibold text-slate-400 mb-4 uppercase tracking-widest", children: "Estilo del texto en pantalla" }),
       /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "grid grid-cols-2 gap-4", children: [
@@ -4886,18 +5655,32 @@ function SongEditor({ song, onClose }) {
         onClose: () => setShowImport(false)
       }
     ),
-    /* @__PURE__ */ jsxRuntimeExports.jsx(DndContext, { sensors, collisionDetection: closestCenter, onDragEnd: handleDragEnd, children: /* @__PURE__ */ jsxRuntimeExports.jsx(SortableContext, { items: sections.map((_, i) => `section-${i}`), strategy: verticalListSortingStrategy, children: /* @__PURE__ */ jsxRuntimeExports.jsx("div", { className: "flex flex-col gap-4", children: sections.map((section, i) => /* @__PURE__ */ jsxRuntimeExports.jsx(
-      SortableSectionCard,
-      {
-        id: `section-${i}`,
-        section,
-        index: i,
-        onUpdate: updateSection,
-        onUpdateLines: updateLines,
-        onRemove: removeSection
-      },
-      `section-${i}`
-    )) }) }) })
+    /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "grid grid-cols-[minmax(0,1fr)_minmax(300px,42%)] gap-5 items-start", children: [
+      /* @__PURE__ */ jsxRuntimeExports.jsx(DndContext, { sensors, collisionDetection: closestCenter, onDragEnd: handleDragEnd, children: /* @__PURE__ */ jsxRuntimeExports.jsx(SortableContext, { items: sections.map((_, i) => `section-${i}`), strategy: verticalListSortingStrategy, children: /* @__PURE__ */ jsxRuntimeExports.jsx("div", { className: "flex flex-col gap-4", children: sections.map((section, i) => /* @__PURE__ */ jsxRuntimeExports.jsx(
+        SortableSectionCard,
+        {
+          id: `section-${i}`,
+          section,
+          index: i,
+          previewing: i === Math.min(previewIndex, sections.length - 1),
+          onPreview: setPreviewIndex,
+          onUpdate: updateSection,
+          onUpdateLines: updateLines,
+          onRemove: removeSection
+        },
+        `section-${i}`
+      )) }) }) }),
+      /* @__PURE__ */ jsxRuntimeExports.jsx("div", { className: "sticky top-0", children: /* @__PURE__ */ jsxRuntimeExports.jsx(
+        SongPreview,
+        {
+          sections,
+          selected: previewIndex,
+          onSelect: setPreviewIndex,
+          textStyle,
+          videoPath
+        }
+      ) })
+    ] })
   ] });
 }
 function SongCard({ song, onEdit, onDelete, onRemoveFromFolder }) {
@@ -5197,6 +5980,31 @@ function SongsPage() {
     setEditingSong({ title: "", sections: [], text_style: {} });
     setShowEditor(true);
   }
+  async function importPack() {
+    try {
+      const info = await window.api.packInspect();
+      if (!info) return;
+      let mode = "copy";
+      if (info.duplicateOf !== null) {
+        const choice = await ask({
+          title: "La canción ya existe",
+          message: `"${info.title}" ya está en tu biblioteca.`,
+          actions: [
+            { label: "No importar", value: "cancel", variant: "neutral" },
+            { label: "Crear copia", value: "copy", variant: "neutral" },
+            { label: "Reemplazar", value: "replace", variant: "danger" }
+          ]
+        });
+        if (choice !== "copy" && choice !== "replace") return;
+        mode = choice;
+      }
+      await window.api.packImport(info.path, mode);
+      await fetchSongs();
+      await refreshSongsInView();
+    } catch (e) {
+      await alertDialog(e.message, "No se pudo importar");
+    }
+  }
   function openEdit(song) {
     setEditingSong(song);
     setShowEditor(true);
@@ -5208,13 +6016,13 @@ function SongsPage() {
     refreshSongsInView();
   }
   async function handleDelete(song) {
-    if (confirm(`¿Eliminar "${song.title}"?`)) {
+    if (await confirmDialog(`¿Eliminar "${song.title}"?`, { title: "Eliminar canción", confirmLabel: "Eliminar", danger: true })) {
       await deleteSong(song.id);
       refreshSongsInView();
     }
   }
   async function handleDeleteFolder(folder) {
-    if (confirm(`¿Eliminar la carpeta "${folder.name}"? Las canciones dentro quedarán sin carpeta.`)) {
+    if (await confirmDialog(`¿Eliminar la carpeta "${folder.name}"? Las canciones dentro quedarán sin carpeta.`, { title: "Eliminar carpeta", confirmLabel: "Eliminar", danger: true })) {
       await deleteFolder(folder.id);
     }
   }
@@ -5253,6 +6061,14 @@ function SongsPage() {
             onClick: () => setShowCreateModal(true),
             className: "bg-slate-700 hover:bg-slate-600 text-white px-4 py-2.5 rounded-xl font-semibold transition-all duration-200 hover:scale-105 active:scale-95 text-sm",
             children: "+ Nueva carpeta"
+          }
+        ),
+        /* @__PURE__ */ jsxRuntimeExports.jsx(
+          "button",
+          {
+            onClick: importPack,
+            className: "bg-slate-700 hover:bg-slate-600 text-white px-4 py-2.5 rounded-xl font-semibold transition-all duration-200 hover:scale-105 active:scale-95 text-sm",
+            children: "Importar paquete"
           }
         ),
         /* @__PURE__ */ jsxRuntimeExports.jsx(
@@ -5342,77 +6158,6 @@ function SongsGrid({
     song.id
   )) });
 }
-const useLiveStore = create((set, get) => ({
-  isLive: false,
-  currentSong: null,
-  currentSectionIndex: 0,
-  blackout: false,
-  whiteout: false,
-  setlist: [],
-  startLive: async (setlist) => {
-    await window.api.openLive();
-    const song = setlist[0];
-    if (song) {
-      await window.api.setVideo({ videoPath: song.video_path ?? null });
-      await sendSection(song, 0);
-    }
-    set({ isLive: true, setlist, currentSong: song ?? null, currentSectionIndex: 0 });
-  },
-  stopLive: async () => {
-    await window.api.closeLive();
-    set({ isLive: false, currentSong: null, blackout: false, whiteout: false });
-  },
-  goToSection: async (index) => {
-    const { currentSong } = get();
-    if (!currentSong) return;
-    await sendSection(currentSong, index);
-    set({ currentSectionIndex: index });
-  },
-  nextSection: async () => {
-    const { currentSong, currentSectionIndex } = get();
-    if (!currentSong) return;
-    const next = currentSectionIndex + 1;
-    if (next < currentSong.sections.length) {
-      await sendSection(currentSong, next);
-      set({ currentSectionIndex: next });
-    }
-  },
-  prevSection: async () => {
-    const { currentSong, currentSectionIndex } = get();
-    if (!currentSong) return;
-    const prev = currentSectionIndex - 1;
-    if (prev >= 0) {
-      await sendSection(currentSong, prev);
-      set({ currentSectionIndex: prev });
-    }
-  },
-  toggleBlackout: async () => {
-    const active = !get().blackout;
-    await window.api.setBlackout(active);
-    set({ blackout: active });
-  },
-  toggleWhiteout: async () => {
-    const active = !get().whiteout;
-    await window.api.setWhiteout(active);
-    set({ whiteout: active });
-  },
-  changeSong: async (song) => {
-    await window.api.setVideo({ videoPath: song.video_path ?? null });
-    await sendSection(song, 0);
-    set({ currentSong: song, currentSectionIndex: 0 });
-  }
-}));
-async function sendSection(song, index) {
-  const section = song.sections[index];
-  if (!section) return;
-  await window.api.showSection({
-    songId: song.id,
-    sectionIndex: index,
-    text: section.lines.join("\n"),
-    lines: section.lines,
-    textStyle: song.text_style
-  });
-}
 const useSetlistsStore = create((set) => ({
   setlists: [],
   loading: false,
@@ -5433,72 +6178,805 @@ const useSetlistsStore = create((set) => ({
     set({ setlists });
   }
 }));
+const __vite_import_meta_env__ = {};
+function createJSONStorage(getStorage, options) {
+  let storage;
+  try {
+    storage = getStorage();
+  } catch (_e) {
+    return;
+  }
+  const persistStorage = {
+    getItem: (name) => {
+      var _a;
+      const parse = (str2) => {
+        if (str2 === null) {
+          return null;
+        }
+        return JSON.parse(str2, void 0);
+      };
+      const str = (_a = storage.getItem(name)) != null ? _a : null;
+      if (str instanceof Promise) {
+        return str.then(parse);
+      }
+      return parse(str);
+    },
+    setItem: (name, newValue) => storage.setItem(
+      name,
+      JSON.stringify(newValue, void 0)
+    ),
+    removeItem: (name) => storage.removeItem(name)
+  };
+  return persistStorage;
+}
+const toThenable = (fn) => (input) => {
+  try {
+    const result = fn(input);
+    if (result instanceof Promise) {
+      return result;
+    }
+    return {
+      then(onFulfilled) {
+        return toThenable(onFulfilled)(result);
+      },
+      catch(_onRejected) {
+        return this;
+      }
+    };
+  } catch (e) {
+    return {
+      then(_onFulfilled) {
+        return this;
+      },
+      catch(onRejected) {
+        return toThenable(onRejected)(e);
+      }
+    };
+  }
+};
+const oldImpl = (config, baseOptions) => (set, get, api) => {
+  let options = {
+    getStorage: () => localStorage,
+    serialize: JSON.stringify,
+    deserialize: JSON.parse,
+    partialize: (state) => state,
+    version: 0,
+    merge: (persistedState, currentState) => ({
+      ...currentState,
+      ...persistedState
+    }),
+    ...baseOptions
+  };
+  let hasHydrated = false;
+  const hydrationListeners = /* @__PURE__ */ new Set();
+  const finishHydrationListeners = /* @__PURE__ */ new Set();
+  let storage;
+  try {
+    storage = options.getStorage();
+  } catch (_e) {
+  }
+  if (!storage) {
+    return config(
+      (...args) => {
+        console.warn(
+          `[zustand persist middleware] Unable to update item '${options.name}', the given storage is currently unavailable.`
+        );
+        set(...args);
+      },
+      get,
+      api
+    );
+  }
+  const thenableSerialize = toThenable(options.serialize);
+  const setItem = () => {
+    const state = options.partialize({ ...get() });
+    let errorInSync;
+    const thenable = thenableSerialize({ state, version: options.version }).then(
+      (serializedValue) => storage.setItem(options.name, serializedValue)
+    ).catch((e) => {
+      errorInSync = e;
+    });
+    if (errorInSync) {
+      throw errorInSync;
+    }
+    return thenable;
+  };
+  const savedSetState = api.setState;
+  api.setState = (state, replace) => {
+    savedSetState(state, replace);
+    void setItem();
+  };
+  const configResult = config(
+    (...args) => {
+      set(...args);
+      void setItem();
+    },
+    get,
+    api
+  );
+  let stateFromStorage;
+  const hydrate = () => {
+    var _a;
+    if (!storage) return;
+    hasHydrated = false;
+    hydrationListeners.forEach((cb) => cb(get()));
+    const postRehydrationCallback = ((_a = options.onRehydrateStorage) == null ? void 0 : _a.call(options, get())) || void 0;
+    return toThenable(storage.getItem.bind(storage))(options.name).then((storageValue) => {
+      if (storageValue) {
+        return options.deserialize(storageValue);
+      }
+    }).then((deserializedStorageValue) => {
+      if (deserializedStorageValue) {
+        if (typeof deserializedStorageValue.version === "number" && deserializedStorageValue.version !== options.version) {
+          if (options.migrate) {
+            return options.migrate(
+              deserializedStorageValue.state,
+              deserializedStorageValue.version
+            );
+          }
+          console.error(
+            `State loaded from storage couldn't be migrated since no migrate function was provided`
+          );
+        } else {
+          return deserializedStorageValue.state;
+        }
+      }
+    }).then((migratedState) => {
+      var _a2;
+      stateFromStorage = options.merge(
+        migratedState,
+        (_a2 = get()) != null ? _a2 : configResult
+      );
+      set(stateFromStorage, true);
+      return setItem();
+    }).then(() => {
+      postRehydrationCallback == null ? void 0 : postRehydrationCallback(stateFromStorage, void 0);
+      hasHydrated = true;
+      finishHydrationListeners.forEach((cb) => cb(stateFromStorage));
+    }).catch((e) => {
+      postRehydrationCallback == null ? void 0 : postRehydrationCallback(void 0, e);
+    });
+  };
+  api.persist = {
+    setOptions: (newOptions) => {
+      options = {
+        ...options,
+        ...newOptions
+      };
+      if (newOptions.getStorage) {
+        storage = newOptions.getStorage();
+      }
+    },
+    clearStorage: () => {
+      storage == null ? void 0 : storage.removeItem(options.name);
+    },
+    getOptions: () => options,
+    rehydrate: () => hydrate(),
+    hasHydrated: () => hasHydrated,
+    onHydrate: (cb) => {
+      hydrationListeners.add(cb);
+      return () => {
+        hydrationListeners.delete(cb);
+      };
+    },
+    onFinishHydration: (cb) => {
+      finishHydrationListeners.add(cb);
+      return () => {
+        finishHydrationListeners.delete(cb);
+      };
+    }
+  };
+  hydrate();
+  return stateFromStorage || configResult;
+};
+const newImpl = (config, baseOptions) => (set, get, api) => {
+  let options = {
+    storage: createJSONStorage(() => localStorage),
+    partialize: (state) => state,
+    version: 0,
+    merge: (persistedState, currentState) => ({
+      ...currentState,
+      ...persistedState
+    }),
+    ...baseOptions
+  };
+  let hasHydrated = false;
+  const hydrationListeners = /* @__PURE__ */ new Set();
+  const finishHydrationListeners = /* @__PURE__ */ new Set();
+  let storage = options.storage;
+  if (!storage) {
+    return config(
+      (...args) => {
+        console.warn(
+          `[zustand persist middleware] Unable to update item '${options.name}', the given storage is currently unavailable.`
+        );
+        set(...args);
+      },
+      get,
+      api
+    );
+  }
+  const setItem = () => {
+    const state = options.partialize({ ...get() });
+    return storage.setItem(options.name, {
+      state,
+      version: options.version
+    });
+  };
+  const savedSetState = api.setState;
+  api.setState = (state, replace) => {
+    savedSetState(state, replace);
+    void setItem();
+  };
+  const configResult = config(
+    (...args) => {
+      set(...args);
+      void setItem();
+    },
+    get,
+    api
+  );
+  api.getInitialState = () => configResult;
+  let stateFromStorage;
+  const hydrate = () => {
+    var _a, _b;
+    if (!storage) return;
+    hasHydrated = false;
+    hydrationListeners.forEach((cb) => {
+      var _a2;
+      return cb((_a2 = get()) != null ? _a2 : configResult);
+    });
+    const postRehydrationCallback = ((_b = options.onRehydrateStorage) == null ? void 0 : _b.call(options, (_a = get()) != null ? _a : configResult)) || void 0;
+    return toThenable(storage.getItem.bind(storage))(options.name).then((deserializedStorageValue) => {
+      if (deserializedStorageValue) {
+        if (typeof deserializedStorageValue.version === "number" && deserializedStorageValue.version !== options.version) {
+          if (options.migrate) {
+            return [
+              true,
+              options.migrate(
+                deserializedStorageValue.state,
+                deserializedStorageValue.version
+              )
+            ];
+          }
+          console.error(
+            `State loaded from storage couldn't be migrated since no migrate function was provided`
+          );
+        } else {
+          return [false, deserializedStorageValue.state];
+        }
+      }
+      return [false, void 0];
+    }).then((migrationResult) => {
+      var _a2;
+      const [migrated, migratedState] = migrationResult;
+      stateFromStorage = options.merge(
+        migratedState,
+        (_a2 = get()) != null ? _a2 : configResult
+      );
+      set(stateFromStorage, true);
+      if (migrated) {
+        return setItem();
+      }
+    }).then(() => {
+      postRehydrationCallback == null ? void 0 : postRehydrationCallback(stateFromStorage, void 0);
+      stateFromStorage = get();
+      hasHydrated = true;
+      finishHydrationListeners.forEach((cb) => cb(stateFromStorage));
+    }).catch((e) => {
+      postRehydrationCallback == null ? void 0 : postRehydrationCallback(void 0, e);
+    });
+  };
+  api.persist = {
+    setOptions: (newOptions) => {
+      options = {
+        ...options,
+        ...newOptions
+      };
+      if (newOptions.storage) {
+        storage = newOptions.storage;
+      }
+    },
+    clearStorage: () => {
+      storage == null ? void 0 : storage.removeItem(options.name);
+    },
+    getOptions: () => options,
+    rehydrate: () => hydrate(),
+    hasHydrated: () => hasHydrated,
+    onHydrate: (cb) => {
+      hydrationListeners.add(cb);
+      return () => {
+        hydrationListeners.delete(cb);
+      };
+    },
+    onFinishHydration: (cb) => {
+      finishHydrationListeners.add(cb);
+      return () => {
+        finishHydrationListeners.delete(cb);
+      };
+    }
+  };
+  if (!options.skipHydration) {
+    hydrate();
+  }
+  return stateFromStorage || configResult;
+};
+const persistImpl = (config, baseOptions) => {
+  if ("getStorage" in baseOptions || "serialize" in baseOptions || "deserialize" in baseOptions) {
+    if ((__vite_import_meta_env__ ? "production" : void 0) !== "production") {
+      console.warn(
+        "[DEPRECATED] `getStorage`, `serialize` and `deserialize` options are deprecated. Use `storage` option instead."
+      );
+    }
+    return oldImpl(config, baseOptions);
+  }
+  return newImpl(config, baseOptions);
+};
+const persist = persistImpl;
+function todayISO() {
+  const d = /* @__PURE__ */ new Date();
+  const pad = (n) => String(n).padStart(2, "0");
+  return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}`;
+}
+let keySeq = 0;
+const newKey = (songId) => `${songId ?? "x"}-${Date.now()}-${keySeq++}`;
+const noopStorage = { getItem: () => null, setItem: () => {
+}, removeItem: () => {
+} };
+const blank = () => ({
+  setlistId: null,
+  name: `Servicio ${(/* @__PURE__ */ new Date()).toLocaleDateString("es")}`,
+  serviceDate: todayISO(),
+  items: [],
+  dirty: false
+});
+const useServiceDraftStore = create()(persist((set, get) => ({
+  ...blank(),
+  addSong: (song) => {
+    if (get().items.some((i) => i.song.id === song.id)) return;
+    set({ items: [...get().items, { key: newKey(song.id), song, custom_video: null }], dirty: true });
+  },
+  removeItem: (key) => set({ items: get().items.filter((i) => i.key !== key), dirty: true }),
+  moveItem: (fromKey, toKey) => {
+    const items = [...get().items];
+    const from = items.findIndex((i) => i.key === fromKey);
+    const to = items.findIndex((i) => i.key === toKey);
+    if (from < 0 || to < 0 || from === to) return;
+    const [moved] = items.splice(from, 1);
+    items.splice(to, 0, moved);
+    set({ items, dirty: true });
+  },
+  setName: (name) => set({ name, dirty: true }),
+  setServiceDate: (serviceDate) => set({ serviceDate, dirty: true }),
+  loadSaved: (saved) => set({
+    setlistId: saved.id ?? null,
+    name: saved.name,
+    serviceDate: saved.service_date ?? todayISO(),
+    items: (saved.songs ?? []).map((s) => ({ key: newKey(s.song.id), song: s.song, custom_video: s.custom_video ?? null })),
+    dirty: false
+  }),
+  reset: () => set(blank()),
+  markSaved: (id) => set({ setlistId: id, dirty: false }),
+  syncWithCatalog: (all) => {
+    const byId = new Map(all.map((s) => [s.id, s]));
+    set({
+      items: get().items.filter((i) => byId.has(i.song.id)).map((i) => ({ ...i, song: byId.get(i.song.id) }))
+    });
+  }
+}), {
+  name: "alado-service-draft",
+  storage: createJSONStorage(() => typeof localStorage !== "undefined" ? localStorage : noopStorage),
+  partialize: ({ setlistId, name, serviceDate, items, dirty }) => ({ setlistId, name, serviceDate, items, dirty })
+}));
+function ipcErrorMessage(e) {
+  const msg = e instanceof Error ? e.message : String(e);
+  return msg.replace(/^Error invoking remote method '[^']*': (?:Error: )?/, "");
+}
+function importSummaryText(s) {
+  const lines = [];
+  if (s.reused > 0) {
+    lines.push(s.reused === 1 ? "1 canción ya estaba en esta compu." : `${s.reused} canciones ya estaban en esta compu.`);
+  }
+  if (s.created.length) lines.push(`Se crearon: ${s.created.join(", ")}`);
+  if (s.differing.length) lines.push(`Con letra distinta (se usó la de esta compu): ${s.differing.join(", ")}`);
+  if (s.missingVideo.length) lines.push(`Sin video (fondo por defecto): ${s.missingVideo.join(", ")}`);
+  if (s.missingAudio.length) lines.push(`Sin audio en esta compu: ${s.missingAudio.join(", ")}`);
+  return lines.join("\n");
+}
+const scriptRel = /* @__PURE__ */ (function detectScriptRel() {
+  const relList = typeof document !== "undefined" && document.createElement("link").relList;
+  return relList && relList.supports && relList.supports("modulepreload") ? "modulepreload" : "preload";
+})();
+const assetsURL = function(dep, importerUrl) {
+  return new URL(dep, importerUrl).href;
+};
+const seen = {};
+const __vitePreload = function preload(baseModule, deps, importerUrl) {
+  let promise = Promise.resolve();
+  if (deps && deps.length > 0) {
+    let allSettled = function(promises$2) {
+      return Promise.all(promises$2.map((p) => Promise.resolve(p).then((value$1) => ({
+        status: "fulfilled",
+        value: value$1
+      }), (reason) => ({
+        status: "rejected",
+        reason
+      }))));
+    };
+    const links = document.getElementsByTagName("link");
+    const cspNonceMeta = document.querySelector("meta[property=csp-nonce]");
+    const cspNonce = cspNonceMeta?.nonce || cspNonceMeta?.getAttribute("nonce");
+    promise = allSettled(deps.map((dep) => {
+      dep = assetsURL(dep, importerUrl);
+      if (dep in seen) return;
+      seen[dep] = true;
+      const isCss = dep.endsWith(".css");
+      const cssSelector = isCss ? '[rel="stylesheet"]' : "";
+      if (!!importerUrl) for (let i$1 = links.length - 1; i$1 >= 0; i$1--) {
+        const link$1 = links[i$1];
+        if (link$1.href === dep && (!isCss || link$1.rel === "stylesheet")) return;
+      }
+      else if (document.querySelector(`link[href="${dep}"]${cssSelector}`)) return;
+      const link = document.createElement("link");
+      link.rel = isCss ? "stylesheet" : scriptRel;
+      if (!isCss) link.as = "script";
+      link.crossOrigin = "";
+      link.href = dep;
+      if (cspNonce) link.setAttribute("nonce", cspNonce);
+      document.head.appendChild(link);
+      if (isCss) return new Promise((res, rej) => {
+        link.addEventListener("load", res);
+        link.addEventListener("error", () => rej(/* @__PURE__ */ new Error(`Unable to preload CSS for ${dep}`)));
+      });
+    }));
+  }
+  function handlePreloadError(err$2) {
+    const e$1 = new Event("vite:preloadError", { cancelable: true });
+    e$1.payload = err$2;
+    window.dispatchEvent(e$1);
+    if (!e$1.defaultPrevented) throw err$2;
+  }
+  return promise.then((res) => {
+    for (const item of res || []) {
+      if (item.status !== "rejected") continue;
+      handlePreloadError(item.reason);
+    }
+    return baseModule().catch(handlePreloadError);
+  });
+};
+function buildDeckPlan(songs) {
+  return songs.flatMap((song, songIndex) => [
+    { kind: "title", songIndex, title: song.title, ...song.artist ? { artist: song.artist } : {} },
+    ...song.sections.map((s) => ({ kind: "section", songIndex, text: s.lines.join("\n"), repeat: s.repeat ?? 1 }))
+  ]);
+}
+const MAX_PT = 40;
+const MIN_PT = 20;
+const BOX_W_PT = 12.3 * 72;
+const BOX_H_PT = 6.3 * 72;
+const CHAR_W = 0.55;
+const LINE_H = 1.25;
+function fitFontSize(text) {
+  const lines = text.split("\n");
+  const longest = Math.max(1, ...lines.map((l) => l.length));
+  const byHeight = BOX_H_PT / (LINE_H * lines.length);
+  const byWidth = BOX_W_PT / (CHAR_W * longest);
+  return Math.round(Math.max(MIN_PT, Math.min(MAX_PT, byHeight, byWidth)));
+}
+const FRAME_MAX_W = 1280;
+const FRAME_MAX_H = 720;
+const FRAME_TIMEOUT_MS = 8e3;
+const DARKEN = "rgba(0,0,0,0.35)";
+function grabVideoFrame(videoPath) {
+  return new Promise((resolve) => {
+    const video = document.createElement("video");
+    let done = false;
+    const finish = (value) => {
+      if (done) return;
+      done = true;
+      clearTimeout(timer);
+      video.removeAttribute("src");
+      video.load();
+      resolve(value);
+    };
+    const timer = setTimeout(() => finish(null), FRAME_TIMEOUT_MS);
+    video.crossOrigin = "anonymous";
+    video.muted = true;
+    video.preload = "auto";
+    video.onerror = () => finish(null);
+    video.onloadedmetadata = () => {
+      const d = Number.isFinite(video.duration) ? video.duration : 0;
+      video.currentTime = Math.min(1, d * 0.1);
+    };
+    video.onseeked = () => {
+      try {
+        const scale = Math.min(1, FRAME_MAX_W / video.videoWidth, FRAME_MAX_H / video.videoHeight);
+        const canvas = document.createElement("canvas");
+        canvas.width = Math.round(video.videoWidth * scale);
+        canvas.height = Math.round(video.videoHeight * scale);
+        const ctx = canvas.getContext("2d");
+        ctx.drawImage(video, 0, 0, canvas.width, canvas.height);
+        ctx.fillStyle = DARKEN;
+        ctx.fillRect(0, 0, canvas.width, canvas.height);
+        finish(canvas.toDataURL("image/jpeg", 0.7));
+      } catch (e) {
+        console.warn("No se pudo leer un cuadro del video", videoPath, e);
+        finish(null);
+      }
+    };
+    video.src = mediaUrl(videoPath);
+  });
+}
+const PLAIN_BG = "0F172A";
+const SHADOW = { type: "outer", color: "000000", blur: 6, offset: 2, angle: 45, opacity: 0.8 };
+async function exportServicePptx(name, songs) {
+  const { default: PptxGenJS } = await __vitePreload(async () => {
+    const { default: PptxGenJS2 } = await import("./pptxgen.es-DGJFxpjQ.js");
+    return { default: PptxGenJS2 };
+  }, true ? __vite__mapDeps([0,1]) : void 0, import.meta.url);
+  const pptx = new PptxGenJS();
+  pptx.layout = "LAYOUT_16x9";
+  pptx.title = name;
+  const frames = await Promise.all(songs.map((s) => s.video_path ? grabVideoFrame(s.video_path) : Promise.resolve(null)));
+  for (const spec of buildDeckPlan(songs)) {
+    const slide = pptx.addSlide();
+    const frame = frames[spec.songIndex];
+    slide.background = frame ? { data: frame.replace(/^data:/, ""), path: "frame.jpg" } : { color: PLAIN_BG };
+    if (spec.kind === "title") {
+      slide.addText(spec.title, {
+        x: 0.5,
+        y: spec.artist ? 2.4 : 2.9,
+        w: 12.33,
+        h: 1.6,
+        align: "center",
+        valign: "middle",
+        fontSize: 48,
+        bold: true,
+        color: "FFFFFF",
+        shadow: SHADOW,
+        fit: "shrink"
+      });
+      if (spec.artist) {
+        slide.addText(spec.artist, { x: 0.5, y: 4, w: 12.33, h: 0.8, align: "center", fontSize: 24, color: "CBD5E1", shadow: SHADOW });
+      }
+    } else {
+      slide.addText(spec.text, {
+        x: 0.5,
+        y: 0.6,
+        w: 12.33,
+        h: 6.3,
+        align: "center",
+        valign: "middle",
+        fontSize: fitFontSize(spec.text),
+        bold: true,
+        color: "FFFFFF",
+        shadow: SHADOW,
+        fit: "shrink"
+      });
+      if (spec.repeat > 1) {
+        slide.addText(`×${spec.repeat}`, { x: 11.3, y: 6.8, w: 1.8, h: 0.5, align: "right", fontSize: 18, color: "CBD5E1" });
+      }
+    }
+  }
+  const bytes = await pptx.write({ outputType: "uint8array" });
+  return window.api.setlistSavePptx({ bytes, defaultName: name });
+}
+const TOAST_MS = 2500;
+let seq = 0;
+const useToastStore = create(() => ({ toasts: [] }));
+function showToast(message, kind = "success") {
+  const id = ++seq;
+  useToastStore.setState((s) => ({ toasts: [...s.toasts, { id, message, kind }] }));
+  setTimeout(() => useToastStore.setState((s) => ({ toasts: s.toasts.filter((t) => t.id !== id) })), TOAST_MS);
+}
+const fold = (s) => s.normalize("NFD").replace(/[̀-ͯ]/g, "").toLowerCase();
+function matchesQuery(song, query) {
+  const q = fold(query.trim());
+  return !q || fold(song.title).includes(q) || fold(song.artist ?? "").includes(q);
+}
+function groupSongs(songs, folders, filter, query) {
+  const known = new Set(folders.map((f) => f.id));
+  const folderOf = (s) => s.folder_id != null && known.has(s.folder_id) ? s.folder_id : null;
+  const visible = songs.filter((s) => matchesQuery(s, query));
+  const groups = [
+    ...folders.map((f) => ({ key: `folder-${f.id}`, name: f.name, id: f.id })),
+    { key: "loose", name: "Sin carpeta", id: null }
+  ].filter((g) => filter === "all" || g.id === filter).map((g) => ({ key: g.key, name: g.name, songs: visible.filter((s) => folderOf(s) === g.id) }));
+  return groups.filter((g) => g.songs.length > 0);
+}
+function sectionLabel(s) {
+  return s.repeat && s.repeat > 1 ? `${s.label} ×${s.repeat}` : s.label;
+}
+function previewSections(song, maxSections = 2, maxLines = 2) {
+  return song.sections.slice(0, maxSections).map((s) => ({
+    label: sectionLabel(s),
+    lines: s.lines.slice(0, maxLines),
+    truncated: s.lines.length > maxLines
+  }));
+}
+const CARD_WIDTH = 288;
+const CARD_MAX_HEIGHT = 260;
+const GAP = 8;
+function LyricsHoverCard({ song, anchorRect }) {
+  const preview = previewSections(song);
+  const top = Math.max(GAP, Math.min(anchorRect.top, window.innerHeight - CARD_MAX_HEIGHT - GAP));
+  const left = Math.min(anchorRect.right + GAP, window.innerWidth - CARD_WIDTH - GAP);
+  return /* @__PURE__ */ jsxRuntimeExports.jsxs(
+    "div",
+    {
+      className: "fixed z-50 pointer-events-none bg-slate-800 border border-indigo-500/70 rounded-2xl shadow-2xl p-4 overflow-hidden",
+      style: { top, left, width: CARD_WIDTH, maxHeight: CARD_MAX_HEIGHT },
+      children: [
+        /* @__PURE__ */ jsxRuntimeExports.jsx("p", { className: "font-semibold text-white truncate", children: song.title }),
+        song.artist && /* @__PURE__ */ jsxRuntimeExports.jsx("p", { className: "text-xs text-slate-400 truncate mb-2", children: song.artist }),
+        preview.length === 0 ? /* @__PURE__ */ jsxRuntimeExports.jsx("p", { className: "text-sm text-slate-400 mt-2", children: "Sin letra" }) : /* @__PURE__ */ jsxRuntimeExports.jsx("div", { className: "flex flex-col gap-2 mt-2", children: preview.map((s, i) => /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { children: [
+          /* @__PURE__ */ jsxRuntimeExports.jsx("p", { className: "text-[11px] font-bold uppercase tracking-wide text-indigo-300", children: s.label }),
+          s.lines.map((l, j) => /* @__PURE__ */ jsxRuntimeExports.jsx("p", { className: "text-sm text-slate-200 leading-snug", children: l }, j)),
+          s.truncated && /* @__PURE__ */ jsxRuntimeExports.jsx("p", { className: "text-sm text-slate-400", children: "…" })
+        ] }, i)) }),
+        song.sections.length > preview.length && /* @__PURE__ */ jsxRuntimeExports.jsxs("p", { className: "text-xs text-slate-400 mt-2", children: [
+          song.sections.length,
+          " secciones en total"
+        ] })
+      ]
+    }
+  );
+}
+function SectionList({ song }) {
+  if (song.sections.length === 0) return /* @__PURE__ */ jsxRuntimeExports.jsx("p", { className: "text-sm text-slate-400", children: "Sin letra" });
+  return /* @__PURE__ */ jsxRuntimeExports.jsx("div", { className: "flex flex-col gap-3", children: song.sections.map((s, i) => /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { children: [
+    /* @__PURE__ */ jsxRuntimeExports.jsx("p", { className: "text-[11px] font-bold uppercase tracking-wide text-indigo-300", children: sectionLabel(s) }),
+    s.lines.map((l, j) => /* @__PURE__ */ jsxRuntimeExports.jsx("p", { className: "text-sm text-slate-200 leading-snug", children: l }, j))
+  ] }, i)) });
+}
+const HOVER_DELAY_MS = 400;
 function SetlistPage() {
   const { songs, fetchSongs } = useSongsStore();
   const { isLive, startLive, stopLive, changeSong, currentSong } = useLiveStore();
   const { setlists, fetchSetlists, saveSetlist } = useSetlistsStore();
-  const [setlistSongs, setSetlistSongs] = reactExports.useState([]);
-  const [setlistName, setSetlistName] = reactExports.useState(`Servicio ${(/* @__PURE__ */ new Date()).toLocaleDateString("es")}`);
+  const { folders, fetchFolders } = useFoldersStore();
+  const {
+    setlistId,
+    name: setlistName,
+    serviceDate,
+    items: setlistSongs,
+    dirty,
+    addSong,
+    removeItem,
+    moveItem,
+    setName,
+    setServiceDate,
+    loadSaved,
+    reset,
+    markSaved,
+    syncWithCatalog
+  } = useServiceDraftStore();
   const [searchQuery, setSearchQuery] = reactExports.useState("");
+  const [folderFilter, setFolderFilter] = reactExports.useState("all");
   const [showSaved, setShowSaved] = reactExports.useState(false);
   const [saving, setSaving] = reactExports.useState(false);
+  const [showExport, setShowExport] = reactExports.useState(false);
+  const [hover, setHover] = reactExports.useState(null);
+  const hoverTimer = reactExports.useRef(null);
   reactExports.useEffect(() => {
-    fetchSongs();
+    fetchSongs().then(() => syncWithCatalog(useSongsStore.getState().songs));
     fetchSetlists();
+    fetchFolders();
   }, []);
   const sensors = useSensors(
     useSensor(PointerSensor),
     useSensor(KeyboardSensor, { coordinateGetter: sortableKeyboardCoordinates })
   );
-  const filteredSongs = songs.filter(
-    (s) => s.title.toLowerCase().includes(searchQuery.toLowerCase()) || (s.artist ?? "").toLowerCase().includes(searchQuery.toLowerCase())
-  );
-  function addSong(song) {
-    if (setlistSongs.find((s) => s.song.id === song.id)) return;
-    setSetlistSongs((prev) => [...prev, { id: `${song.id}-${Date.now()}`, song }]);
-  }
-  function removeSong(id) {
-    setSetlistSongs((prev) => prev.filter((s) => s.id !== id));
-  }
+  const groups = groupSongs(songs, folders, folderFilter, searchQuery);
+  const hasLoose = songs.some((s) => s.folder_id == null || !folders.some((f) => f.id === s.folder_id));
+  const inSetlist = new Set(setlistSongs.map((s) => s.song.id));
   function handleDragEnd(event) {
     const { active, over } = event;
-    if (over && active.id !== over.id) {
-      setSetlistSongs((prev) => {
-        const oldIndex = prev.findIndex((s) => s.id === active.id);
-        const newIndex = prev.findIndex((s) => s.id === over.id);
-        return arrayMove(prev, oldIndex, newIndex);
-      });
-    }
+    if (over && active.id !== over.id) moveItem(String(active.id), String(over.id));
   }
   async function handlePresent() {
     if (setlistSongs.length === 0) return;
     await startLive(setlistSongs.map((s) => s.song));
   }
+  async function canDiscardDraft(message) {
+    return !dirty || confirmDialog(message, { title: "Cambios sin guardar", confirmLabel: "Continuar", danger: true });
+  }
   async function handleSave() {
-    if (setlistSongs.length === 0) return;
+    if (setlistSongs.length === 0 || saving) return;
     setSaving(true);
-    await saveSetlist({
-      name: setlistName,
-      service_date: (/* @__PURE__ */ new Date()).toISOString().slice(0, 10),
-      songs: setlistSongs.map((s, i) => ({ song: s.song, position: i }))
-    });
-    setSaving(false);
-  }
-  function loadSetlist(saved) {
-    if (!saved.songs) return;
-    setSetlistName(saved.name);
-    setSetlistSongs(saved.songs.map((item, i) => ({
-      id: `${item.song.id}-${i}-${Date.now()}`,
-      song: item.song
-    })));
-    setShowSaved(false);
-  }
-  function handleSongClick(item) {
-    if (isLive) {
-      changeSong(item.song);
+    try {
+      const id = await saveSetlist({
+        id: setlistId ?? void 0,
+        name: setlistName,
+        service_date: serviceDate,
+        songs: setlistSongs.map((s, i) => ({ song: s.song, position: i, custom_video: s.custom_video }))
+      });
+      markSaved(id);
+      showToast("Servicio guardado");
+    } catch (e) {
+      console.error("No se pudo guardar el servicio", e);
+      showToast("No se pudo guardar el servicio", "error");
+    } finally {
+      setSaving(false);
     }
   }
+  async function handleExportAlado() {
+    setShowExport(false);
+    try {
+      const res = await window.api.setlistExport({
+        name: setlistName,
+        service_date: serviceDate,
+        songIds: setlistSongs.map((s) => s.song.id),
+        customVideos: setlistSongs.map((s) => s.custom_video)
+      });
+      if (res) showToast("Servicio exportado");
+    } catch (e) {
+      await alertDialog(ipcErrorMessage(e), "No se pudo exportar");
+    }
+  }
+  async function handleExportPptx() {
+    setShowExport(false);
+    showToast("Generando PowerPoint…");
+    try {
+      const res = await exportServicePptx(setlistName, setlistSongs.map((s) => s.song));
+      if (res) showToast("PowerPoint exportado");
+    } catch (e) {
+      await alertDialog(ipcErrorMessage(e), "No se pudo exportar el PowerPoint");
+    }
+  }
+  async function handleImport() {
+    if (!await canDiscardDraft("Hay cambios sin guardar. ¿Importar otro servicio de todos modos?")) return;
+    try {
+      const info = await window.api.setlistImportInspect();
+      if (!info) return;
+      let mode = "new";
+      if (info.duplicateOf) {
+        const choice = await ask({
+          title: "Este servicio ya existe",
+          message: `Ya hay un servicio guardado "${info.name}"${info.service_date ? ` del ${info.service_date}` : ""}. ¿Qué quieres hacer?`,
+          actions: [
+            { label: "Cancelar", value: "cancel", variant: "neutral" },
+            { label: "Crear copia", value: "new", variant: "neutral" },
+            { label: "Reemplazar", value: "replace", variant: "primary" }
+          ]
+        });
+        if (choice !== "new" && choice !== "replace") return;
+        mode = choice;
+      }
+      const summary = await window.api.setlistImportApply({ path: info.path, mode, replaceId: info.duplicateOf ?? void 0 });
+      await fetchSetlists();
+      await fetchSongs();
+      const saved = useSetlistsStore.getState().setlists.find((sl) => sl.id === summary.setlistId);
+      if (saved) loadSaved(saved);
+      await alertDialog(importSummaryText(summary), "Servicio importado");
+    } catch (e) {
+      await alertDialog(ipcErrorMessage(e), "No se pudo importar");
+    }
+  }
+  async function handleNew() {
+    if (!await canDiscardDraft("Hay cambios sin guardar. ¿Empezar un servicio nuevo?")) return;
+    reset();
+  }
+  async function loadSetlist(saved) {
+    if (!saved.songs) return;
+    setShowSaved(false);
+    if (!await canDiscardDraft(`Hay cambios sin guardar. ¿Cargar "${saved.name}" de todos modos?`)) return;
+    loadSaved(saved);
+  }
+  function handleSongClick(song) {
+    if (isLive) changeSong(song);
+  }
+  function scheduleHover(song, el) {
+    if (hoverTimer.current) clearTimeout(hoverTimer.current);
+    hoverTimer.current = setTimeout(() => setHover({ song, rect: el.getBoundingClientRect() }), HOVER_DELAY_MS);
+  }
+  function hideHover() {
+    if (hoverTimer.current) clearTimeout(hoverTimer.current);
+    hoverTimer.current = null;
+    setHover(null);
+  }
   return /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "flex h-full", children: [
+    hover && /* @__PURE__ */ jsxRuntimeExports.jsx(LyricsHoverCard, { song: hover.song, anchorRect: hover.rect }),
     /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "w-72 border-r border-slate-800 p-4 flex flex-col bg-slate-950", children: [
       /* @__PURE__ */ jsxRuntimeExports.jsx("h2", { className: "font-semibold text-slate-300 mb-3 text-sm uppercase tracking-wide", children: "Biblioteca" }),
       /* @__PURE__ */ jsxRuntimeExports.jsx(
@@ -5511,104 +6989,195 @@ function SetlistPage() {
           className: "bg-slate-800 text-white placeholder-slate-500 rounded-xl px-3 py-2 text-sm outline-none focus:ring-2 focus:ring-indigo-500 border border-slate-700 mb-3"
         }
       ),
-      /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "flex-1 overflow-y-auto flex flex-col gap-1", children: [
-        filteredSongs.map((song) => /* @__PURE__ */ jsxRuntimeExports.jsxs(
-          "button",
-          {
-            onClick: () => addSong(song),
-            className: "text-left px-3 py-2.5 rounded-xl hover:bg-slate-800 transition-all duration-150 group border border-transparent hover:border-slate-700",
-            children: [
-              /* @__PURE__ */ jsxRuntimeExports.jsx("p", { className: "text-sm font-medium text-white truncate", children: song.title }),
-              song.artist && /* @__PURE__ */ jsxRuntimeExports.jsx("p", { className: "text-xs text-slate-500 truncate", children: song.artist })
-            ]
-          },
-          song.id
-        )),
-        filteredSongs.length === 0 && /* @__PURE__ */ jsxRuntimeExports.jsx("p", { className: "text-xs text-slate-600 text-center py-4", children: "Sin resultados" })
+      folders.length > 0 && /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "flex flex-wrap gap-1.5 mb-3", children: [
+        /* @__PURE__ */ jsxRuntimeExports.jsx(FolderChip, { active: folderFilter === "all", onClick: () => setFolderFilter("all"), children: "Todas" }),
+        folders.map((f) => /* @__PURE__ */ jsxRuntimeExports.jsx(FolderChip, { active: folderFilter === f.id, onClick: () => setFolderFilter(f.id), children: f.name }, f.id)),
+        hasLoose && /* @__PURE__ */ jsxRuntimeExports.jsx(FolderChip, { active: folderFilter === null, onClick: () => setFolderFilter(null), children: "Sin carpeta" })
+      ] }),
+      /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "flex-1 overflow-y-auto flex flex-col gap-1", onScroll: hideHover, children: [
+        groups.map((group) => /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "flex flex-col gap-1", children: [
+          folders.length > 0 && /* @__PURE__ */ jsxRuntimeExports.jsxs("p", { className: "sticky top-0 z-[1] bg-slate-950 text-[11px] font-semibold text-slate-500 uppercase tracking-wide px-1 pt-2 pb-1", children: [
+            group.name,
+            " · ",
+            group.songs.length
+          ] }),
+          group.songs.map((song) => /* @__PURE__ */ jsxRuntimeExports.jsxs(
+            "button",
+            {
+              onClick: () => addSong(song),
+              onMouseEnter: (e) => scheduleHover(song, e.currentTarget),
+              onMouseLeave: hideHover,
+              className: "text-left px-3 py-2.5 rounded-xl hover:bg-slate-800 transition-all duration-150 group border border-transparent hover:border-slate-700",
+              children: [
+                /* @__PURE__ */ jsxRuntimeExports.jsxs("p", { className: `text-sm font-medium truncate ${inSetlist.has(song.id) ? "text-slate-500" : "text-white"}`, children: [
+                  inSetlist.has(song.id) && /* @__PURE__ */ jsxRuntimeExports.jsx("span", { className: "text-emerald-500 mr-1", children: "✓" }),
+                  song.title
+                ] }),
+                song.artist && /* @__PURE__ */ jsxRuntimeExports.jsx("p", { className: "text-xs text-slate-500 truncate", children: song.artist })
+              ]
+            },
+            song.id
+          ))
+        ] }, group.key)),
+        groups.length === 0 && /* @__PURE__ */ jsxRuntimeExports.jsx("p", { className: "text-xs text-slate-600 text-center py-4", children: "Sin resultados" })
       ] })
     ] }),
     /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "flex-1 p-6 flex flex-col", children: [
-      /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "flex items-center gap-3 mb-5", children: [
-        /* @__PURE__ */ jsxRuntimeExports.jsx(
-          "input",
-          {
-            value: setlistName,
-            onChange: (e) => setSetlistName(e.target.value),
-            className: "flex-1 bg-transparent text-xl font-bold text-white outline-none border-b border-transparent hover:border-slate-600 focus:border-indigo-500 transition-colors pb-1"
-          }
-        ),
-        /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "relative", children: [
+      /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "flex flex-wrap items-center gap-3 mb-5", children: [
+        /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "flex-1 min-w-[13rem] flex flex-col gap-1", children: [
+          /* @__PURE__ */ jsxRuntimeExports.jsx(
+            "input",
+            {
+              value: setlistName,
+              onChange: (e) => setName(e.target.value),
+              "aria-label": "Nombre del servicio",
+              className: "bg-transparent text-xl font-bold text-white outline-none border-b border-transparent hover:border-slate-600 focus:border-indigo-500 transition-colors pb-1"
+            }
+          ),
+          /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "flex items-center gap-3 text-xs", children: [
+            /* @__PURE__ */ jsxRuntimeExports.jsx(
+              "input",
+              {
+                type: "date",
+                value: serviceDate,
+                onChange: (e) => e.target.value && setServiceDate(e.target.value),
+                "aria-label": "Fecha del servicio",
+                className: "bg-slate-800 border border-slate-700 rounded-lg px-2 py-1 text-slate-300 outline-none focus:border-indigo-500 [color-scheme:dark]"
+              }
+            ),
+            dirty && /* @__PURE__ */ jsxRuntimeExports.jsx("span", { className: "text-amber-400", children: "• sin guardar" })
+          ] })
+        ] }),
+        /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "flex flex-wrap items-center justify-end gap-3 ml-auto whitespace-nowrap", children: [
           /* @__PURE__ */ jsxRuntimeExports.jsx(
             "button",
             {
-              onClick: () => setShowSaved(!showSaved),
+              onClick: handleNew,
               className: "px-3 py-2 rounded-xl bg-slate-800 hover:bg-slate-700 text-slate-300 text-sm transition-colors border border-slate-700",
-              title: "Servicios guardados",
-              children: "📂 Cargar"
+              title: "Empezar un servicio nuevo",
+              children: "＋ Nuevo"
             }
           ),
-          showSaved && /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "absolute right-0 top-full mt-1 w-72 bg-slate-800 border border-slate-700 rounded-2xl shadow-xl z-10 overflow-hidden", children: [
-            /* @__PURE__ */ jsxRuntimeExports.jsx("div", { className: "p-3 border-b border-slate-700", children: /* @__PURE__ */ jsxRuntimeExports.jsx("p", { className: "text-xs font-semibold text-slate-400 uppercase tracking-wide", children: "Servicios guardados" }) }),
-            setlists.length === 0 ? /* @__PURE__ */ jsxRuntimeExports.jsx("p", { className: "text-sm text-slate-500 text-center py-6", children: "Sin servicios guardados" }) : /* @__PURE__ */ jsxRuntimeExports.jsx("div", { className: "max-h-64 overflow-y-auto", children: setlists.map((sl) => /* @__PURE__ */ jsxRuntimeExports.jsxs(
+          /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "relative", children: [
+            /* @__PURE__ */ jsxRuntimeExports.jsx(
               "button",
               {
-                onClick: () => loadSetlist(sl),
-                className: "w-full text-left px-4 py-3 hover:bg-slate-700 transition-colors border-b border-slate-700/50 last:border-0",
-                children: [
-                  /* @__PURE__ */ jsxRuntimeExports.jsx("p", { className: "text-sm font-medium text-white", children: sl.name }),
-                  sl.service_date && /* @__PURE__ */ jsxRuntimeExports.jsxs("p", { className: "text-xs text-slate-500", children: [
-                    sl.service_date,
-                    " · ",
-                    sl.songs?.length ?? 0,
-                    " canciones"
-                  ] })
-                ]
-              },
-              sl.id
-            )) })
-          ] })
-        ] }),
-        /* @__PURE__ */ jsxRuntimeExports.jsx(
-          "button",
-          {
-            onClick: handleSave,
-            disabled: setlistSongs.length === 0 || saving,
-            className: "px-4 py-2 rounded-xl bg-slate-700 hover:bg-slate-600 disabled:opacity-40 text-white text-sm font-medium transition-colors border border-slate-600",
-            children: saving ? "Guardando..." : "💾 Guardar"
-          }
-        ),
-        /* @__PURE__ */ jsxRuntimeExports.jsx(
-          "button",
-          {
-            onClick: isLive ? stopLive : handlePresent,
-            disabled: setlistSongs.length === 0 && !isLive,
-            className: `px-7 py-2.5 rounded-xl font-bold text-base transition-all duration-200 disabled:opacity-40 hover:scale-105 active:scale-95
-              ${isLive ? "bg-red-600 hover:bg-red-500 text-white" : "bg-emerald-600 hover:bg-emerald-500 text-white"}`,
-            children: isLive ? "⏹ Detener" : "▶ Presentar"
-          }
-        )
+                onClick: () => setShowSaved(!showSaved),
+                className: "px-3 py-2 rounded-xl bg-slate-800 hover:bg-slate-700 text-slate-300 text-sm transition-colors border border-slate-700",
+                title: "Abrir un servicio guardado o importarlo de un archivo",
+                children: "📂 Abrir ▾"
+              }
+            ),
+            showSaved && /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "absolute right-0 top-full mt-1 w-72 bg-slate-800 border border-slate-700 rounded-2xl shadow-xl z-10 overflow-hidden", children: [
+              /* @__PURE__ */ jsxRuntimeExports.jsx("div", { className: "p-3 border-b border-slate-700", children: /* @__PURE__ */ jsxRuntimeExports.jsx("p", { className: "text-xs font-semibold text-slate-400 uppercase tracking-wide", children: "Servicios guardados" }) }),
+              setlists.length === 0 ? /* @__PURE__ */ jsxRuntimeExports.jsx("p", { className: "text-sm text-slate-500 text-center py-6", children: "Sin servicios guardados" }) : /* @__PURE__ */ jsxRuntimeExports.jsx("div", { className: "max-h-64 overflow-y-auto", children: setlists.map((sl) => /* @__PURE__ */ jsxRuntimeExports.jsxs(
+                "button",
+                {
+                  onClick: () => loadSetlist(sl),
+                  className: "w-full text-left px-4 py-3 hover:bg-slate-700 transition-colors border-b border-slate-700/50 last:border-0",
+                  children: [
+                    /* @__PURE__ */ jsxRuntimeExports.jsx("p", { className: "text-sm font-medium text-white", children: sl.name }),
+                    sl.service_date && /* @__PURE__ */ jsxRuntimeExports.jsxs("p", { className: "text-xs text-slate-500", children: [
+                      sl.service_date,
+                      " · ",
+                      sl.songs?.length ?? 0,
+                      " canciones"
+                    ] })
+                  ]
+                },
+                sl.id
+              )) }),
+              /* @__PURE__ */ jsxRuntimeExports.jsxs(
+                "button",
+                {
+                  onClick: () => {
+                    setShowSaved(false);
+                    handleImport();
+                  },
+                  className: "w-full text-left px-4 py-3 hover:bg-slate-700 transition-colors border-t border-slate-700",
+                  children: [
+                    /* @__PURE__ */ jsxRuntimeExports.jsx("p", { className: "text-sm font-medium text-white", children: "📥 Importar archivo .alado…" }),
+                    /* @__PURE__ */ jsxRuntimeExports.jsx("p", { className: "text-xs text-slate-400", children: "Un servicio exportado desde otra compu" })
+                  ]
+                }
+              )
+            ] })
+          ] }),
+          /* @__PURE__ */ jsxRuntimeExports.jsx(
+            "button",
+            {
+              onClick: handleSave,
+              disabled: setlistSongs.length === 0 || saving,
+              className: "px-4 py-2 rounded-xl bg-slate-700 hover:bg-slate-600 disabled:opacity-40 text-white text-sm font-medium transition-colors border border-slate-600",
+              children: saving ? "Guardando..." : "💾 Guardar"
+            }
+          ),
+          /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "relative", children: [
+            /* @__PURE__ */ jsxRuntimeExports.jsx(
+              "button",
+              {
+                onClick: () => setShowExport((v) => !v),
+                disabled: setlistSongs.length === 0,
+                className: "px-3 py-2 rounded-xl bg-slate-800 hover:bg-slate-700 disabled:opacity-40 text-slate-300 text-sm transition-colors border border-slate-700",
+                title: "Exportar este servicio",
+                children: "📤 Exportar ▾"
+              }
+            ),
+            showExport && /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "absolute right-0 top-full mt-1 w-60 bg-slate-800 border border-slate-700 rounded-2xl shadow-xl z-10 overflow-hidden", children: [
+              /* @__PURE__ */ jsxRuntimeExports.jsxs("button", { onClick: handleExportAlado, className: "w-full text-left px-4 py-3 hover:bg-slate-700 transition-colors border-b border-slate-700/50", children: [
+                /* @__PURE__ */ jsxRuntimeExports.jsx("p", { className: "text-sm font-medium text-white", children: "Archivo .alado" }),
+                /* @__PURE__ */ jsxRuntimeExports.jsx("p", { className: "text-xs text-slate-400", children: "Para abrirlo en otra compu con ALADO" })
+              ] }),
+              /* @__PURE__ */ jsxRuntimeExports.jsxs("button", { onClick: handleExportPptx, className: "w-full text-left px-4 py-3 hover:bg-slate-700 transition-colors", children: [
+                /* @__PURE__ */ jsxRuntimeExports.jsx("p", { className: "text-sm font-medium text-white", children: "PowerPoint" }),
+                /* @__PURE__ */ jsxRuntimeExports.jsx("p", { className: "text-xs text-slate-400", children: "Respaldo para presentar sin ALADO" })
+              ] })
+            ] })
+          ] }),
+          /* @__PURE__ */ jsxRuntimeExports.jsx(
+            "button",
+            {
+              onClick: isLive ? stopLive : handlePresent,
+              disabled: setlistSongs.length === 0 && !isLive,
+              className: `px-7 py-2.5 rounded-xl font-bold text-base transition-all duration-200 disabled:opacity-40 hover:scale-105 active:scale-95
+                ${isLive ? "bg-red-600 hover:bg-red-500 text-white" : "bg-emerald-600 hover:bg-emerald-500 text-white"}`,
+              children: isLive ? "⏹ Detener" : "▶ Presentar"
+            }
+          )
+        ] })
       ] }),
       setlistSongs.length === 0 ? /* @__PURE__ */ jsxRuntimeExports.jsx("div", { className: "flex-1 flex items-center justify-center text-slate-600 text-center border-2 border-dashed border-slate-800 rounded-2xl", children: /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { children: [
         /* @__PURE__ */ jsxRuntimeExports.jsx("p", { className: "text-4xl mb-3", children: "📋" }),
         /* @__PURE__ */ jsxRuntimeExports.jsx("p", { className: "text-slate-500", children: "Pulsa una canción de la biblioteca para añadirla" })
-      ] }) }) : /* @__PURE__ */ jsxRuntimeExports.jsx(DndContext, { sensors, collisionDetection: closestCenter, onDragEnd: handleDragEnd, children: /* @__PURE__ */ jsxRuntimeExports.jsx(SortableContext, { items: setlistSongs.map((s) => s.id), strategy: verticalListSortingStrategy, children: /* @__PURE__ */ jsxRuntimeExports.jsx("div", { className: "flex flex-col gap-2 overflow-y-auto", children: setlistSongs.map((item, index) => {
+      ] }) }) : /* @__PURE__ */ jsxRuntimeExports.jsx(DndContext, { sensors, collisionDetection: closestCenter, onDragEnd: handleDragEnd, children: /* @__PURE__ */ jsxRuntimeExports.jsx(SortableContext, { items: setlistSongs.map((s) => s.key), strategy: verticalListSortingStrategy, children: /* @__PURE__ */ jsxRuntimeExports.jsx("div", { className: "flex flex-col gap-2 overflow-y-auto", children: setlistSongs.map((item, index) => {
         const isCurrentSong = isLive && currentSong?.id === item.song.id;
         return /* @__PURE__ */ jsxRuntimeExports.jsx(
           SortableSetlistItem,
           {
-            id: item.id,
+            id: item.key,
             song: item.song,
             index,
             isLive,
             isCurrentSong,
-            onRemove: () => removeSong(item.id),
-            onClick: () => handleSongClick(item)
+            onRemove: () => removeItem(item.key),
+            onClick: () => handleSongClick(item.song)
           },
-          item.id
+          item.key
         );
       }) }) }) })
     ] })
   ] });
+}
+function FolderChip({ active, onClick, children }) {
+  return /* @__PURE__ */ jsxRuntimeExports.jsx(
+    "button",
+    {
+      onClick,
+      className: `px-2.5 py-1 rounded-lg text-xs font-medium border transition-colors
+        ${active ? "bg-indigo-600 border-indigo-500 text-white" : "bg-slate-800 border-slate-700 text-slate-400 hover:text-white hover:bg-slate-700"}`,
+      children
+    }
+  );
 }
 function SortableSetlistItem({ id, song, index, isLive, isCurrentSong, onRemove, onClick }) {
   const { attributes, listeners, setNodeRef, transform, transition, isDragging } = useSortable({ id });
@@ -5617,42 +7186,63 @@ function SortableSetlistItem({ id, song, index, isLive, isCurrentSong, onRemove,
     transition,
     opacity: isDragging ? 0.5 : 1
   };
-  const firstLines = song.sections[0]?.lines.slice(0, 2).join(" · ");
+  const [expanded, setExpanded] = reactExports.useState(false);
   return /* @__PURE__ */ jsxRuntimeExports.jsxs(
     "div",
     {
       ref: setNodeRef,
       style,
       onClick: isLive ? onClick : void 0,
-      className: `flex items-center gap-3 rounded-2xl px-4 py-3 group border transition-all duration-150
+      className: `rounded-2xl px-4 py-3 group border transition-all duration-150
         ${isCurrentSong ? "bg-indigo-950 border-indigo-500 border-l-4" : isLive ? "bg-slate-800 border-slate-700 hover:border-indigo-400 hover:bg-slate-750 cursor-pointer" : "bg-slate-800 border-slate-700"}`,
       children: [
-        /* @__PURE__ */ jsxRuntimeExports.jsx(
-          "span",
-          {
-            ...attributes,
-            ...listeners,
-            className: "text-slate-600 cursor-grab active:cursor-grabbing text-lg select-none",
-            children: "⠿"
-          }
-        ),
-        /* @__PURE__ */ jsxRuntimeExports.jsx("span", { className: `text-sm w-6 text-center font-mono shrink-0
-        ${isCurrentSong ? "text-indigo-400" : "text-slate-600"}`, children: isCurrentSong ? "▶" : index + 1 }),
-        /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "flex-1 min-w-0", title: firstLines, children: [
-          /* @__PURE__ */ jsxRuntimeExports.jsx("p", { className: `font-medium truncate ${isCurrentSong ? "text-indigo-100" : "text-white"}`, children: song.title }),
-          song.artist && /* @__PURE__ */ jsxRuntimeExports.jsx("p", { className: "text-xs text-slate-500 truncate", children: song.artist })
+        /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "flex items-center gap-3", children: [
+          /* @__PURE__ */ jsxRuntimeExports.jsx(
+            "span",
+            {
+              ...attributes,
+              ...listeners,
+              className: "text-slate-600 cursor-grab active:cursor-grabbing text-lg select-none",
+              children: "⠿"
+            }
+          ),
+          /* @__PURE__ */ jsxRuntimeExports.jsx("span", { className: `text-sm w-6 text-center font-mono shrink-0
+          ${isCurrentSong ? "text-indigo-400" : "text-slate-600"}`, children: isCurrentSong ? "▶" : index + 1 }),
+          /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "flex-1 min-w-0", children: [
+            /* @__PURE__ */ jsxRuntimeExports.jsx("p", { className: `font-medium truncate ${isCurrentSong ? "text-indigo-100" : "text-white"}`, children: song.title }),
+            song.artist && /* @__PURE__ */ jsxRuntimeExports.jsx("p", { className: "text-xs text-slate-500 truncate", children: song.artist })
+          ] }),
+          /* @__PURE__ */ jsxRuntimeExports.jsxs(
+            "button",
+            {
+              onPointerDown: (e) => e.stopPropagation(),
+              onClick: (e) => {
+                e.stopPropagation();
+                setExpanded((v) => !v);
+              },
+              "aria-expanded": expanded,
+              title: expanded ? "Ocultar letra" : "Ver letra",
+              className: "text-slate-400 hover:text-white px-2 py-1 rounded-lg hover:bg-slate-700 transition-colors text-sm",
+              children: [
+                expanded ? "▾" : "▸",
+                " Letra"
+              ]
+            }
+          ),
+          /* @__PURE__ */ jsxRuntimeExports.jsx(
+            "button",
+            {
+              onClick: (e) => {
+                e.stopPropagation();
+                onRemove();
+              },
+              title: "Quitar del servicio",
+              className: "opacity-0 group-hover:opacity-100 text-slate-500 hover:text-red-400 transition-all px-1",
+              children: "✕"
+            }
+          )
         ] }),
-        /* @__PURE__ */ jsxRuntimeExports.jsx(
-          "button",
-          {
-            onClick: (e) => {
-              e.stopPropagation();
-              onRemove();
-            },
-            className: "opacity-0 group-hover:opacity-100 text-slate-500 hover:text-red-400 transition-all px-1",
-            children: "✕"
-          }
-        )
+        expanded && /* @__PURE__ */ jsxRuntimeExports.jsx("div", { className: "mt-3 ml-14 pl-3 border-l border-slate-700 cursor-default", onClick: (e) => e.stopPropagation(), children: /* @__PURE__ */ jsxRuntimeExports.jsx(SectionList, { song }) })
       ]
     }
   );
@@ -5840,6 +7430,7 @@ function LiveControlsPanel() {
   reactExports.useEffect(() => {
     function onKey(e) {
       if (["INPUT", "TEXTAREA"].includes(e.target.tagName)) return;
+      if (useDialogStore.getState().current) return;
       switch (e.key) {
         case "ArrowRight":
         case " ":
@@ -5893,6 +7484,7 @@ function LiveControlsPanel() {
       },
       i
     )) }),
+    /* @__PURE__ */ jsxRuntimeExports.jsx(AudioTransport, {}),
     /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "flex gap-2 shrink-0", children: [
       /* @__PURE__ */ jsxRuntimeExports.jsx(
         "button",
@@ -5939,8 +7531,8 @@ function LiveControlsPanel() {
       /* @__PURE__ */ jsxRuntimeExports.jsx(
         "button",
         {
-          onClick: () => {
-            if (confirm("¿Detener la presentación?")) stopLive();
+          onClick: async () => {
+            if (await confirmDialog("¿Detener la presentación?", { title: "Detener", confirmLabel: "Detener", danger: true })) stopLive();
           },
           className: "px-3 py-2 rounded-xl text-xs font-bold bg-red-950 border border-red-800 text-red-400 hover:bg-red-700 hover:text-white transition-all duration-150",
           title: "Detener (Escape)",
@@ -5950,10 +7542,149 @@ function LiveControlsPanel() {
     ] })
   ] });
 }
+function PlaybackController() {
+  const currentSong = useLiveStore((s) => s.currentSong);
+  const isLive = useLiveStore((s) => s.isLive);
+  const pendingAuto = reactExports.useRef(null);
+  reactExports.useEffect(() => {
+    if (!isLive || !currentSong?.id) {
+      const pb = usePlaybackStore.getState();
+      if (pb.songId !== null && !pb.recording) pb.unload();
+      return;
+    }
+    const id = currentSong.id;
+    let cancelled = false;
+    void (async () => {
+      const audio = await useAudioStore.getState().load(id);
+      if (cancelled) return;
+      if (audio?.status !== "ready") {
+        usePlaybackStore.getState().unload();
+        return;
+      }
+      setFollowerCues(null);
+      await usePlaybackStore.getState().loadSong(id);
+      if (cancelled || usePlaybackStore.getState().songId !== id) return;
+      const stale = cuesAreStale(audio.cues, audio.cues_sections_sig, currentSong.sections);
+      setFollowerCues(stale ? null : audio.cues);
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, [isLive, currentSong?.id]);
+  reactExports.useEffect(() => useLiveStore.subscribe((state, prev) => {
+    if (state.currentSectionIndex === prev.currentSectionIndex) return;
+    if (pendingAuto.current === state.currentSectionIndex) {
+      pendingAuto.current = null;
+      return;
+    }
+    const f = getFollower();
+    if (f && usePlaybackStore.getState().playing) {
+      f.markManual();
+      usePlaybackStore.setState({ manual: true });
+    }
+  }), []);
+  reactExports.useEffect(() => {
+    let lastPublished = 0;
+    const timer = setInterval(() => {
+      const pb = usePlaybackStore.getState();
+      if (pb.status !== "ready") return;
+      const p = getPlayer();
+      const t = p.currentTime;
+      if (Math.abs(t - lastPublished) > 0.1 || p.playing !== pb.playing) {
+        lastPublished = t;
+        usePlaybackStore.setState({ time: t, playing: p.playing });
+      }
+      const f = getFollower();
+      if (f && p.playing && !pb.recording) fire(f.update(t));
+    }, 50);
+    return () => clearInterval(timer);
+  }, []);
+  reactExports.useEffect(() => usePlaybackStore.subscribe((state, prev) => {
+    const f = getFollower();
+    if (!f || state.recording) return;
+    if (prev.manual && !state.manual && f.isManual) fire(f.resumeAuto(getPlayer().currentTime));
+  }), []);
+  function fire(sectionIndex) {
+    if (sectionIndex === null) return;
+    if (usePlaybackStore.getState().manual) usePlaybackStore.setState({ manual: false });
+    const live = useLiveStore.getState();
+    if (sectionIndex === live.currentSectionIndex) return;
+    pendingAuto.current = sectionIndex;
+    void live.goToSection(sectionIndex);
+  }
+  return null;
+}
+const VARIANT = {
+  primary: "bg-indigo-600 hover:bg-indigo-500 text-white font-semibold",
+  danger: "bg-red-600 hover:bg-red-500 text-white font-semibold",
+  neutral: "text-slate-400 hover:text-white hover:bg-slate-700"
+};
+function DialogHost() {
+  const current = useDialogStore((s) => s.current);
+  const answer = useDialogStore((s) => s.answer);
+  const defaultRef = reactExports.useRef(null);
+  reactExports.useEffect(() => {
+    if (!current) return;
+    defaultRef.current?.focus();
+    const onKey = (e) => {
+      if (e.key === "Escape") {
+        e.preventDefault();
+        answer(null);
+      }
+    };
+    window.addEventListener("keydown", onKey);
+    return () => window.removeEventListener("keydown", onKey);
+  }, [current]);
+  if (!current) return null;
+  const last = current.actions.length - 1;
+  return /* @__PURE__ */ jsxRuntimeExports.jsx("div", { className: "fixed inset-0 bg-black/60 flex items-center justify-center z-[200]", onClick: () => answer(null), children: /* @__PURE__ */ jsxRuntimeExports.jsxs(
+    "div",
+    {
+      role: "dialog",
+      "aria-modal": "true",
+      "aria-labelledby": "dialog-title",
+      className: "bg-slate-800 border border-slate-700 rounded-2xl p-6 w-96 max-w-[90vw] shadow-2xl",
+      onClick: (e) => e.stopPropagation(),
+      children: [
+        /* @__PURE__ */ jsxRuntimeExports.jsx("h3", { id: "dialog-title", className: "text-white font-semibold mb-2", children: current.title }),
+        current.message && /* @__PURE__ */ jsxRuntimeExports.jsx("p", { className: "text-sm text-slate-300 mb-5 whitespace-pre-line", children: current.message }),
+        /* @__PURE__ */ jsxRuntimeExports.jsx("div", { className: "flex gap-2 justify-end", children: current.actions.map((a, i) => /* @__PURE__ */ jsxRuntimeExports.jsx(
+          "button",
+          {
+            ref: i === last ? defaultRef : void 0,
+            onClick: () => answer(a.value),
+            className: `px-4 py-2 rounded-xl transition-colors ${VARIANT[a.variant ?? "neutral"]}`,
+            children: a.label
+          },
+          a.value
+        )) })
+      ]
+    }
+  ) });
+}
+function ToastHost() {
+  const toasts = useToastStore((s) => s.toasts);
+  if (toasts.length === 0) return null;
+  return /* @__PURE__ */ jsxRuntimeExports.jsx("div", { className: "fixed bottom-6 right-6 z-[250] flex flex-col gap-2 pointer-events-none", role: "status", "aria-live": "polite", children: toasts.map((t) => /* @__PURE__ */ jsxRuntimeExports.jsxs(
+    "div",
+    {
+      className: `px-4 py-3 rounded-xl shadow-2xl text-sm font-medium border
+            ${t.kind === "error" ? "bg-red-950 border-red-700 text-red-100" : "bg-slate-800 border-emerald-600 text-white"}`,
+      children: [
+        t.kind === "error" ? "⚠ " : "✓ ",
+        t.message
+      ]
+    },
+    t.id
+  )) });
+}
 function App() {
   const [page, setPage] = reactExports.useState("songs");
   const isLive = useLiveStore((s) => s.isLive);
   return /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "flex h-screen bg-slate-900 text-white overflow-hidden", children: [
+    /* @__PURE__ */ jsxRuntimeExports.jsx(PlaybackController, {}),
+    /* @__PURE__ */ jsxRuntimeExports.jsx(DialogHost, {}),
+    /* @__PURE__ */ jsxRuntimeExports.jsx(ToastHost, {}),
     /* @__PURE__ */ jsxRuntimeExports.jsxs("aside", { className: "w-20 flex flex-col items-center py-6 gap-1 bg-slate-950 border-r border-slate-800", children: [
       /* @__PURE__ */ jsxRuntimeExports.jsx(NavBtn, { icon: "🎵", label: "Canciones", active: page === "songs", onClick: () => setPage("songs") }),
       /* @__PURE__ */ jsxRuntimeExports.jsx(NavBtn, { icon: "📋", label: "Servicio", active: page === "setlist", onClick: () => setPage("setlist") }),
@@ -5991,3 +7722,6 @@ function NavBtn({ icon, label, active, onClick }) {
 ReactDOM.createRoot(document.getElementById("root")).render(
   /* @__PURE__ */ jsxRuntimeExports.jsx(React.StrictMode, { children: /* @__PURE__ */ jsxRuntimeExports.jsx(App, {}) })
 );
+export {
+  __vitePreload as _
+};

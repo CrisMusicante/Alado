@@ -7,6 +7,7 @@ import SongCard from './SongCard'
 import FolderRow from './FolderRow'
 import CreateFolderModal from './CreateFolderModal'
 import RenameFolderModal from './RenameFolderModal'
+import { ask, alertDialog, confirmDialog } from '../../store/dialog.store'
 
 // Drop zone used when inside a folder — drag song here to move it back to root
 function RootDropZone({ children }: { children: React.ReactNode }) {
@@ -54,6 +55,32 @@ export default function SongsPage() {
     setShowEditor(true)
   }
 
+  async function importPack() {
+    try {
+      const info = await window.api.packInspect()
+      if (!info) return
+      let mode: 'copy' | 'replace' = 'copy'
+      if (info.duplicateOf !== null) {
+        const choice = await ask({
+          title: 'La canción ya existe',
+          message: `"${info.title}" ya está en tu biblioteca.`,
+          actions: [
+            { label: 'No importar', value: 'cancel', variant: 'neutral' },
+            { label: 'Crear copia', value: 'copy', variant: 'neutral' },
+            { label: 'Reemplazar', value: 'replace', variant: 'danger' }
+          ]
+        })
+        if (choice !== 'copy' && choice !== 'replace') return
+        mode = choice
+      }
+      await window.api.packImport(info.path, mode)
+      await fetchSongs()
+      await refreshSongsInView()
+    } catch (e) {
+      await alertDialog((e as Error).message, 'No se pudo importar')
+    }
+  }
+
   function openEdit(song: Song) {
     setEditingSong(song)
     setShowEditor(true)
@@ -68,14 +95,14 @@ export default function SongsPage() {
   }
 
   async function handleDelete(song: Song) {
-    if (confirm(`¿Eliminar "${song.title}"?`)) {
+    if (await confirmDialog(`¿Eliminar "${song.title}"?`, { title: 'Eliminar canción', confirmLabel: 'Eliminar', danger: true })) {
       await deleteSong(song.id!)
       refreshSongsInView()
     }
   }
 
   async function handleDeleteFolder(folder: Folder) {
-    if (confirm(`¿Eliminar la carpeta "${folder.name}"? Las canciones dentro quedarán sin carpeta.`)) {
+    if (await confirmDialog(`¿Eliminar la carpeta "${folder.name}"? Las canciones dentro quedarán sin carpeta.`, { title: 'Eliminar carpeta', confirmLabel: 'Eliminar', danger: true })) {
       await deleteFolder(folder.id!)
     }
   }
@@ -124,6 +151,12 @@ export default function SongsPage() {
               + Nueva carpeta
             </button>
           )}
+          <button
+            onClick={importPack}
+            className="bg-slate-700 hover:bg-slate-600 text-white px-4 py-2.5 rounded-xl font-semibold transition-all duration-200 hover:scale-105 active:scale-95 text-sm"
+          >
+            Importar paquete
+          </button>
           <button
             onClick={openNew}
             className="bg-indigo-600 hover:bg-indigo-500 text-white px-5 py-2.5 rounded-xl font-semibold transition-all duration-200 hover:scale-105 active:scale-95"

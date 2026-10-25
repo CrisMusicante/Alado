@@ -13,7 +13,9 @@ export function createMainWindow(): BrowserWindow {
     webPreferences: {
       preload: path.join(__dirname, '../preload/index.js'),
       contextIsolation: true,
-      nodeIntegration: false
+      nodeIntegration: false,
+      // The cue clock lives in this window; throttled timers would freeze the live lyrics when minimized.
+      backgroundThrottling: false
     }
   })
 

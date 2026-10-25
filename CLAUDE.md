@@ -10,10 +10,12 @@ npm run build        # Production build → out/
 npm run preview      # Preview production build
 npm run lint         # ESLint
 npm run test         # Vitest (unit tests)
-npx vitest run src/utils/lyricsParser  # Run a single test file
+npx vitest run src/audio/cues.test.ts  # Run a single test file
 npm run dist:win     # Package for Windows (electron-builder)
 npm run dist:mac     # Package for macOS
 ```
+
+`dist:win` embeds the ALADO icon in the `.exe` via rcedit (from electron-builder's `winCodeSign` cache). On Windows without Developer Mode/admin, extracting that cache fails on macOS-only symlinks ("A required privilege is not held by the client"). Workaround: extract the downloaded archive yourself, ignoring those two errors: `node_modules/7zip-bin/win/x64/7za.exe x -y %LOCALAPPDATA%/electron-builder/Cache/winCodeSign/<n>.7z -o%LOCALAPPDATA%/electron-builder/Cache/winCodeSign/winCodeSign-2.6.0`. Don't reintroduce `signAndEditExecutable: false`: it drops the icon.
 
 ## Architecture
 
@@ -69,6 +71,16 @@ The schema includes a `songs_fts` FTS5 virtual table for full-text search, but `
 `electron/ipc/lyrics.handlers.ts` handles `lyrics:fetch-url` (scrapes letras.com, genius.com, musica.com, and a generic fallback via `cheerio`) and `lyrics:fetch-ai` (stub, not yet implemented). The shared parser in `src/utils/lyricsParser.ts` converts raw text to `Section[]` using three strategies in priority order: explicit bracket headers (`[Verse 1]`), standalone keyword lines (`CORO`, `VERSO`), and repetition analysis (identical blocks ≥2 times → chorus, unique blocks → verse). The modal in `src/components/SongEditor/LyricsImportModal.tsx` provides three tabs: paste, URL, and Claude AI (stub).
 
 The Claude AI tab reads `claudeApiKey` from `localStorage` (set in Settings → "Importar con IA" section). Implementing `lyrics:fetch-ai` in `lyrics.handlers.ts` is the remaining step to activate it.
+
+### Audio: stems, cues y paquetes
+
+- **Motor:** `electron/audio/engine.ts` descarga en el primer uso Python embebido + PyTorch CPU + Demucs (`demucs==4.1.0` de PyPI, publicado por el fork `adefossez/demucs`; versiones fijadas en `engine-manifest.json`) a `userData/audio-engine/`. `getDemucsCommand()` arma el comando con `HF_HOME`/`TORCH_HOME` dentro del motor (Demucs 4.1 baja los pesos vía Hugging Face) y `bin/ffmpeg` en `PATH`. Mac Intel no está soportado (PyTorch ya no publica wheels x86_64 para macOS).
+- **Cola:** `SeparationQueue` (`electron/audio/queue.ts`) corre un trabajo a la vez usando `runDemucs` (`--two-stems=vocals -n htdemucs`). Stems en `userData/stems/<songId>/` (`instrumental` y `vocals`, `.wav` o `.flac`). En CPU tarda ≈2–3× la duración de la canción.
+- **DB:** tabla `song_audio` (migración `user_version = 3`), con `cues` como JSON y `cues_sections_sig` para detectar cues desactualizados.
+- **IPC:** `audio:*` y `pack:*`. Canales de empuje: `audio:progress`, `audio:status-changed`, `audio:engine-progress` (en la lista permitida de `preload.ts`). Los ids y nombres de pista que llegan del renderer se validan con `electron/audio/validate.ts` antes de construir rutas.
+- **Renderer:** `src/audio/cues.ts` (lógica pura con pruebas), `StemPlayer` (Web Audio), `usePlaybackStore`, y `PlaybackController` montado en `App.tsx`, que llama a `useLiveStore.goToSection` al cruzar cues. La ventana live no reproduce audio.
+- **Paquetes:** `.wfpack` = ZIP con `manifest.json`, `song.json`, `audio/*.flac`, `video/*`. `electron/audio/pack.ts` valida entradas (anti zip-slip) y versión del formato.
+- **Pruebas:** `npx vitest run` (Node). `better-sqlite3` está compilado para Electron, así que la DB no se prueba en Vitest. `electron/audio/__fixtures__/fake-demucs.cjs` reemplaza a Demucs en las pruebas.
 
 ### Path Alias
 

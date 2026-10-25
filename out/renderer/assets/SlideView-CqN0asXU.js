@@ -1,3 +1,4 @@
+var commonjsGlobal = typeof globalThis !== "undefined" ? globalThis : typeof window !== "undefined" ? window : typeof global !== "undefined" ? global : typeof self !== "undefined" ? self : {};
 function getDefaultExportFromCjs(x) {
   return x && x.__esModule && Object.prototype.hasOwnProperty.call(x, "default") ? x["default"] : x;
 }
@@ -6984,11 +6985,112 @@ function requireClient() {
 }
 var clientExports = requireClient();
 const ReactDOM = /* @__PURE__ */ getDefaultExportFromCjs(clientExports);
+const DEFAULT_SLIDE_STYLE = {
+  size: "lg",
+  color: "#FFFFFF",
+  position: "bottom",
+  shadow: true
+};
+const SIZE_MAP = {
+  sm: "2.5rem",
+  md: "3.5rem",
+  lg: "4.5rem",
+  xl: "6rem"
+};
+const POSITION_MAP = {
+  top: "flex-start",
+  center: "center",
+  bottom: "flex-end"
+};
+const FONT_MAP = {
+  rounded: '"Nunito", "Segoe UI", sans-serif',
+  "bold-condensed": '"Barlow Condensed", "Arial Narrow", sans-serif',
+  sans: '"Inter", "Segoe UI", system-ui, sans-serif'
+};
+function SlideView({ lines, textStyle, videoSrc, visible = true, fadeMs = 250 }) {
+  const videoRef = reactExports.useRef(null);
+  reactExports.useEffect(() => {
+    const video = videoRef.current;
+    if (!video) return;
+    if (videoSrc) {
+      video.src = videoSrc;
+      video.play().catch(console.error);
+    } else {
+      video.pause();
+      video.removeAttribute("src");
+      video.load();
+    }
+  }, [videoSrc]);
+  const fontSize = SIZE_MAP[textStyle.size ?? "lg"] ?? "4.5rem";
+  const justifyContent = POSITION_MAP[textStyle.position ?? "bottom"] ?? "flex-end";
+  const fontFamily = FONT_MAP[textStyle.font ?? "sans"] ?? FONT_MAP.sans;
+  return /* @__PURE__ */ jsxRuntimeExports.jsxs(jsxRuntimeExports.Fragment, { children: [
+    /* @__PURE__ */ jsxRuntimeExports.jsx(
+      "video",
+      {
+        ref: videoRef,
+        loop: true,
+        muted: true,
+        autoPlay: true,
+        playsInline: true,
+        style: {
+          position: "absolute",
+          inset: 0,
+          width: "100%",
+          height: "100%",
+          objectFit: "cover",
+          zIndex: 0
+        }
+      }
+    ),
+    videoSrc && /* @__PURE__ */ jsxRuntimeExports.jsx("div", { style: {
+      position: "absolute",
+      inset: 0,
+      background: "rgba(0,0,0,0.3)",
+      zIndex: 1
+    } }),
+    videoSrc && textStyle.position === "bottom" && /* @__PURE__ */ jsxRuntimeExports.jsx("div", { style: {
+      position: "absolute",
+      inset: 0,
+      background: "linear-gradient(to top, rgba(0,0,0,0.5) 0%, transparent 50%)",
+      zIndex: 2
+    } }),
+    lines.length > 0 && /* @__PURE__ */ jsxRuntimeExports.jsx("div", { style: {
+      position: "absolute",
+      inset: 0,
+      zIndex: 3,
+      display: "flex",
+      flexDirection: "column",
+      alignItems: "center",
+      justifyContent,
+      padding: "4rem 6rem",
+      opacity: visible ? 1 : 0,
+      transition: `opacity ${fadeMs}ms ease`
+    }, children: lines.map((line, i) => /* @__PURE__ */ jsxRuntimeExports.jsx("p", { style: {
+      color: textStyle.color ?? "#FFFFFF",
+      fontSize,
+      fontFamily,
+      fontWeight: 700,
+      lineHeight: 1.25,
+      textAlign: "center",
+      textShadow: textStyle.shadow ? "0 2px 12px rgba(0,0,0,0.9), 0 0 30px rgba(0,0,0,0.6)" : "none",
+      WebkitTextStroke: textStyle.stroke ? "1px rgba(0,0,0,0.5)" : "none",
+      marginBottom: "0.5rem",
+      textRendering: "optimizeLegibility",
+      WebkitFontSmoothing: "antialiased",
+      wordBreak: "break-word",
+      maxWidth: "100%"
+    }, children: line }, i)) })
+  ] });
+}
 export {
+  DEFAULT_SLIDE_STYLE as D,
   React as R,
+  SlideView as S,
   reactExports as a,
   requireReact as b,
   ReactDOM as c,
+  commonjsGlobal as d,
   getDefaultExportFromCjs as g,
   jsxRuntimeExports as j,
   requireReactDom as r
