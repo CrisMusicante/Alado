@@ -51,7 +51,7 @@ export function registerPackHandlers(): void {
     const safeName = song.title.replace(/[<>:"/\\|?*]/g, '').trim() || 'cancion'
     const { canceled, filePath } = await dialog.showSaveDialog({
       defaultPath: `${safeName}.wfpack`,
-      filters: [{ name: 'Paquete WorshipFlow', extensions: ['wfpack'] }]
+      filters: [{ name: 'Paquete ALADO', extensions: ['wfpack'] }]
     })
     if (canceled || !filePath) return null
 
@@ -87,7 +87,7 @@ export function registerPackHandlers(): void {
   ipcMain.handle('pack:inspect', async () => {
     const { canceled, filePaths } = await dialog.showOpenDialog({
       properties: ['openFile'],
-      filters: [{ name: 'Paquete WorshipFlow', extensions: ['wfpack'] }]
+      filters: [{ name: 'Paquete ALADO', extensions: ['wfpack'] }]
     })
     if (canceled || !filePaths[0]) return null
     const { song } = parsePack(new Uint8Array(fs.readFileSync(filePaths[0])))

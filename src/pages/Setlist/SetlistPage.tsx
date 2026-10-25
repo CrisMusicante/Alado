@@ -12,7 +12,7 @@ import { Song, useSongsStore } from '../../store/songs.store'
 import { useLiveStore } from '../../store/live.store'
 import { useSetlistsStore, SavedSetlist } from '../../store/setlists.store'
 import { useFoldersStore } from '../../store/folders.store'
-import { useServiceDraftStore } from '../../store/serviceDraft.store'
+import { useServiceDraftStore, defaultServiceName, formatServiceDate } from '../../store/serviceDraft.store'
 import { confirmDialog, alertDialog, ask } from '../../store/dialog.store'
 import { ipcErrorMessage } from '../../utils/ipcError'
 import { importSummaryText } from '../../utils/importSummary'
@@ -27,11 +27,12 @@ const HOVER_DELAY_MS = 400
 export default function SetlistPage() {
   const { songs, fetchSongs } = useSongsStore()
   const { isLive, startLive, stopLive, changeSong, currentSong } = useLiveStore()
-  const { setlists, fetchSetlists, saveSetlist } = useSetlistsStore()
+  const { setlists, fetchSetlists, saveSetlist, deleteSetlist } = useSetlistsStore()
   const { folders, fetchFolders } = useFoldersStore()
   const {
-    setlistId, name: setlistName, serviceDate, items: setlistSongs, dirty,
-    addSong, removeItem, moveItem, setName, setServiceDate, loadSaved, reset, markSaved, syncWithCatalog
+    setlistId, name: setlistName, serviceDate, notes, items: setlistSongs, dirty,
+    addSong, removeItem, moveItem, setName, setServiceDate, setNotes, loadSaved, reset, markSaved, syncWithCatalog,
+    forgetSavedSetlist
   } = useServiceDraftStore()
 
   const [searchQuery, setSearchQuery] = useState('')
@@ -79,8 +80,9 @@ export default function SetlistPage() {
     try {
       const id = await saveSetlist({
         id: setlistId ?? undefined,
-        name: setlistName,
+        name: setlistName.trim() || defaultServiceName(serviceDate),
         service_date: serviceDate,
+        notes: notes.trim() || null,
         songs: setlistSongs.map((s, i) => ({ song: s.song, position: i, custom_video: s.custom_video }))
       })
       markSaved(id)
@@ -97,7 +99,8 @@ export default function SetlistPage() {
     setShowExport(false)
     try {
       const res = await window.api.setlistExport({
-        name: setlistName, service_date: serviceDate, songIds: setlistSongs.map(s => s.song.id!), customVideos: setlistSongs.map(s => s.custom_video)
+        name: setlistName.trim() || defaultServiceName(serviceDate), service_date: serviceDate,
+        notes: notes.trim() || null, songIds: setlistSongs.map(s => s.song.id!), customVideos: setlistSongs.map(s => s.custom_video)
       })
       if (res) showToast('Servicio exportado')
     } catch (e) {
@@ -143,6 +146,20 @@ export default function SetlistPage() {
       await alertDialog(importSummaryText(summary), 'Servicio importado')
     } catch (e) {
       await alertDialog(ipcErrorMessage(e), 'No se pudo importar')
+    }
+  }
+
+  async function handleDeleteSaved(sl: SavedSetlist) {
+    const when = sl.service_date ? ` del ${formatServiceDate(sl.service_date)}` : ''
+    const ok = await confirmDialog(`Se borrará "${sl.name}"${when}. Las canciones no se borran.`,
+      { title: 'Borrar servicio guardado', confirmLabel: 'Borrar', danger: true })
+    if (!ok || sl.id == null) return
+    try {
+      await deleteSetlist(sl.id)
+      forgetSavedSetlist(sl.id)
+      showToast('Servicio borrado')
+    } catch (e) {
+      await alertDialog(ipcErrorMessage(e), 'No se pudo borrar')
     }
   }
 
@@ -233,11 +250,23 @@ export default function SetlistPage() {
         {/* Header row */}
         <div className="flex flex-wrap items-center gap-3 mb-5">
           <div className="flex-1 min-w-[13rem] flex flex-col gap-1">
+            <label className="flex items-center gap-2 border-b border-slate-700 hover:border-slate-500 focus-within:border-indigo-500 transition-colors pb-1">
+              <input
+                value={setlistName}
+                onChange={e => setName(e.target.value)}
+                placeholder={defaultServiceName(serviceDate)}
+                aria-label="Nombre del servicio"
+                className="flex-1 min-w-0 bg-transparent text-xl font-bold text-white placeholder-slate-500 outline-none"
+              />
+              <span className="text-slate-400 text-sm" aria-hidden="true" title="Puedes cambiar el nombre">✎</span>
+            </label>
             <input
-              value={setlistName}
-              onChange={e => setName(e.target.value)}
-              aria-label="Nombre del servicio"
-              className="bg-transparent text-xl font-bold text-white outline-none border-b border-transparent hover:border-slate-600 focus:border-indigo-500 transition-colors pb-1"
+              value={notes}
+              onChange={e => setNotes(e.target.value)}
+              placeholder="Descripción (opcional)"
+              aria-label="Descripción del servicio"
+              maxLength={200}
+              className="bg-transparent text-sm text-slate-300 placeholder-slate-500 outline-none border-b border-transparent hover:border-slate-700 focus:border-indigo-500 transition-colors pb-0.5"
             />
             <div className="flex items-center gap-3 text-xs">
               <input
@@ -280,16 +309,26 @@ export default function SetlistPage() {
                   ) : (
                     <div className="max-h-64 overflow-y-auto">
                       {setlists.map((sl: SavedSetlist) => (
-                        <button
-                          key={sl.id}
-                          onClick={() => loadSetlist(sl)}
-                          className="w-full text-left px-4 py-3 hover:bg-slate-700 transition-colors border-b border-slate-700/50 last:border-0"
-                        >
-                          <p className="text-sm font-medium text-white">{sl.name}</p>
-                          {sl.service_date && (
-                            <p className="text-xs text-slate-500">{sl.service_date} · {sl.songs?.length ?? 0} canciones</p>
-                          )}
-                        </button>
+                        <div key={sl.id} className="flex items-stretch border-b border-slate-700/50 last:border-0">
+                          <button
+                            onClick={() => loadSetlist(sl)}
+                            className="flex-1 min-w-0 text-left px-4 py-3 hover:bg-slate-700 transition-colors"
+                          >
+                            <p className="text-sm font-medium text-white truncate">{sl.name}</p>
+                            {sl.notes && <p className="text-xs text-slate-300 truncate">{sl.notes}</p>}
+                            <p className="text-xs text-slate-400">
+                              {sl.service_date ? `${formatServiceDate(sl.service_date)} · ` : ''}{sl.songs?.length ?? 0} canciones
+                            </p>
+                          </button>
+                          <button
+                            onClick={() => handleDeleteSaved(sl)}
+                            title="Borrar este servicio guardado"
+                            aria-label={`Borrar ${sl.name}`}
+                            className="px-3 text-slate-500 hover:text-red-400 hover:bg-slate-700 transition-colors"
+                          >
+                            🗑
+                          </button>
+                        </div>
                       ))}
                     </div>
                   )}

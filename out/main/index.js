@@ -956,7 +956,7 @@ function parsePack(data) {
   }
   const manifest2 = readJson(raw, "manifest.json");
   if (manifest2.packVersion !== PACK_VERSION) {
-    throw new Error(`Este paquete usa la versión ${manifest2.packVersion} del formato; esta app solo entiende la versión ${PACK_VERSION}. Actualiza WorshipFlow.`);
+    throw new Error(`Este paquete usa la versión ${manifest2.packVersion} del formato; esta app solo entiende la versión ${PACK_VERSION}. Actualiza ALADO.`);
   }
   if (manifest2.kind !== "song") throw new Error(`Tipo de paquete no soportado: ${manifest2.kind}`);
   const song = readJson(raw, "song.json");
@@ -1014,7 +1014,7 @@ function registerPackHandlers() {
     const safeName = song.title.replace(/[<>:"/\\|?*]/g, "").trim() || "cancion";
     const { canceled, filePath } = await electron.dialog.showSaveDialog({
       defaultPath: `${safeName}.wfpack`,
-      filters: [{ name: "Paquete WorshipFlow", extensions: ["wfpack"] }]
+      filters: [{ name: "Paquete ALADO", extensions: ["wfpack"] }]
     });
     if (canceled || !filePath) return null;
     const files = Object.fromEntries(
@@ -1047,7 +1047,7 @@ function registerPackHandlers() {
   electron.ipcMain.handle("pack:inspect", async () => {
     const { canceled, filePaths } = await electron.dialog.showOpenDialog({
       properties: ["openFile"],
-      filters: [{ name: "Paquete WorshipFlow", extensions: ["wfpack"] }]
+      filters: [{ name: "Paquete ALADO", extensions: ["wfpack"] }]
     });
     if (canceled || !filePaths[0]) return null;
     const { song } = parsePack(new Uint8Array(fs.readFileSync(filePaths[0])));
@@ -1193,7 +1193,7 @@ function registerSetlistHandlers() {
       const row = byId.get(id);
       return row ? { ...deserializeSong(row), custom_video: p.customVideos?.[i] ?? null } : null;
     }).filter((s) => s !== null);
-    const file = buildAladoFile({ name: p.name, service_date: p.service_date || null, notes: null }, songs, /* @__PURE__ */ new Date());
+    const file = buildAladoFile({ name: p.name, service_date: p.service_date || null, notes: p.notes ?? null }, songs, /* @__PURE__ */ new Date());
     const { canceled, filePath } = await electron.dialog.showSaveDialog({
       defaultPath: `${safeFileName(p.name, "servicio")}.alado`,
       filters: [{ name: "Servicio ALADO", extensions: ["alado"] }]
