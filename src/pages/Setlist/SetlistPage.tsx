@@ -231,8 +231,8 @@ export default function SetlistPage() {
       {/* Right: Setlist */}
       <div className="flex-1 p-6 flex flex-col">
         {/* Header row */}
-        <div className="flex items-center gap-3 mb-5">
-          <div className="flex-1 min-w-0 flex flex-col gap-1">
+        <div className="flex flex-wrap items-center gap-3 mb-5">
+          <div className="flex-1 min-w-[13rem] flex flex-col gap-1">
             <input
               value={setlistName}
               onChange={e => setName(e.target.value)}
@@ -251,100 +251,102 @@ export default function SetlistPage() {
             </div>
           </div>
 
-          <button
-            onClick={handleNew}
-            className="px-3 py-2 rounded-xl bg-slate-800 hover:bg-slate-700 text-slate-300 text-sm transition-colors border border-slate-700"
-            title="Empezar un servicio nuevo"
-          >
-            ＋ Nuevo
-          </button>
-
-          {/* Saved setlists button */}
-          <div className="relative">
+          {/* Actions: stay on one line; the group wraps under the name on narrow windows. */}
+          <div className="flex flex-wrap items-center justify-end gap-3 ml-auto whitespace-nowrap">
             <button
-              onClick={() => setShowSaved(!showSaved)}
+              onClick={handleNew}
               className="px-3 py-2 rounded-xl bg-slate-800 hover:bg-slate-700 text-slate-300 text-sm transition-colors border border-slate-700"
-              title="Servicios guardados"
+              title="Empezar un servicio nuevo"
             >
-              📂 Cargar
+              ＋ Nuevo
             </button>
-            {showSaved && (
-              <div className="absolute right-0 top-full mt-1 w-72 bg-slate-800 border border-slate-700 rounded-2xl shadow-xl z-10 overflow-hidden">
-                <div className="p-3 border-b border-slate-700">
-                  <p className="text-xs font-semibold text-slate-400 uppercase tracking-wide">Servicios guardados</p>
-                </div>
-                {setlists.length === 0 ? (
-                  <p className="text-sm text-slate-500 text-center py-6">Sin servicios guardados</p>
-                ) : (
-                  <div className="max-h-64 overflow-y-auto">
-                    {setlists.map((sl: SavedSetlist) => (
-                      <button
-                        key={sl.id}
-                        onClick={() => loadSetlist(sl)}
-                        className="w-full text-left px-4 py-3 hover:bg-slate-700 transition-colors border-b border-slate-700/50 last:border-0"
-                      >
-                        <p className="text-sm font-medium text-white">{sl.name}</p>
-                        {sl.service_date && (
-                          <p className="text-xs text-slate-500">{sl.service_date} · {sl.songs?.length ?? 0} canciones</p>
-                        )}
-                      </button>
-                    ))}
+
+            {/* Saved setlists button */}
+            <div className="relative">
+              <button
+                onClick={() => setShowSaved(!showSaved)}
+                className="px-3 py-2 rounded-xl bg-slate-800 hover:bg-slate-700 text-slate-300 text-sm transition-colors border border-slate-700"
+                title="Abrir un servicio guardado o importarlo de un archivo"
+              >
+                📂 Abrir ▾
+              </button>
+              {showSaved && (
+                <div className="absolute right-0 top-full mt-1 w-72 bg-slate-800 border border-slate-700 rounded-2xl shadow-xl z-10 overflow-hidden">
+                  <div className="p-3 border-b border-slate-700">
+                    <p className="text-xs font-semibold text-slate-400 uppercase tracking-wide">Servicios guardados</p>
                   </div>
-                )}
-              </div>
-            )}
-          </div>
+                  {setlists.length === 0 ? (
+                    <p className="text-sm text-slate-500 text-center py-6">Sin servicios guardados</p>
+                  ) : (
+                    <div className="max-h-64 overflow-y-auto">
+                      {setlists.map((sl: SavedSetlist) => (
+                        <button
+                          key={sl.id}
+                          onClick={() => loadSetlist(sl)}
+                          className="w-full text-left px-4 py-3 hover:bg-slate-700 transition-colors border-b border-slate-700/50 last:border-0"
+                        >
+                          <p className="text-sm font-medium text-white">{sl.name}</p>
+                          {sl.service_date && (
+                            <p className="text-xs text-slate-500">{sl.service_date} · {sl.songs?.length ?? 0} canciones</p>
+                          )}
+                        </button>
+                      ))}
+                    </div>
+                  )}
+                  <button
+                    onClick={() => { setShowSaved(false); handleImport() }}
+                    className="w-full text-left px-4 py-3 hover:bg-slate-700 transition-colors border-t border-slate-700"
+                  >
+                    <p className="text-sm font-medium text-white">📥 Importar archivo .alado…</p>
+                    <p className="text-xs text-slate-400">Un servicio exportado desde otra compu</p>
+                  </button>
+                </div>
+              )}
+            </div>
 
-          <button
-            onClick={handleImport}
-            className="px-3 py-2 rounded-xl bg-slate-800 hover:bg-slate-700 text-slate-300 text-sm transition-colors border border-slate-700"
-            title="Importar un servicio desde un archivo .alado"
-          >
-            📥 Importar
-          </button>
-
-          <button
-            onClick={handleSave}
-            disabled={setlistSongs.length === 0 || saving}
-            className="px-4 py-2 rounded-xl bg-slate-700 hover:bg-slate-600 disabled:opacity-40 text-white text-sm font-medium transition-colors border border-slate-600"
-          >
-            {saving ? 'Guardando...' : '💾 Guardar'}
-          </button>
-
-          <div className="relative">
             <button
-              onClick={() => setShowExport(v => !v)}
-              disabled={setlistSongs.length === 0}
-              className="px-3 py-2 rounded-xl bg-slate-800 hover:bg-slate-700 disabled:opacity-40 text-slate-300 text-sm transition-colors border border-slate-700"
-              title="Exportar este servicio"
+              onClick={handleSave}
+              disabled={setlistSongs.length === 0 || saving}
+              className="px-4 py-2 rounded-xl bg-slate-700 hover:bg-slate-600 disabled:opacity-40 text-white text-sm font-medium transition-colors border border-slate-600"
             >
-              📤 Exportar ▾
+              {saving ? 'Guardando...' : '💾 Guardar'}
             </button>
-            {showExport && (
-              <div className="absolute right-0 top-full mt-1 w-60 bg-slate-800 border border-slate-700 rounded-2xl shadow-xl z-10 overflow-hidden">
-                <button onClick={handleExportAlado} className="w-full text-left px-4 py-3 hover:bg-slate-700 transition-colors border-b border-slate-700/50">
-                  <p className="text-sm font-medium text-white">Archivo .alado</p>
-                  <p className="text-xs text-slate-400">Para abrirlo en otra compu con ALADO</p>
-                </button>
-                <button onClick={handleExportPptx} className="w-full text-left px-4 py-3 hover:bg-slate-700 transition-colors">
-                  <p className="text-sm font-medium text-white">PowerPoint</p>
-                  <p className="text-xs text-slate-400">Respaldo para presentar sin ALADO</p>
-                </button>
-              </div>
-            )}
-          </div>
 
-          <button
-            onClick={isLive ? stopLive : handlePresent}
-            disabled={setlistSongs.length === 0 && !isLive}
-            className={`px-7 py-2.5 rounded-xl font-bold text-base transition-all duration-200 disabled:opacity-40 hover:scale-105 active:scale-95
-              ${isLive
-                ? 'bg-red-600 hover:bg-red-500 text-white'
-                : 'bg-emerald-600 hover:bg-emerald-500 text-white'
-              }`}
-          >
-            {isLive ? '⏹ Detener' : '▶ Presentar'}
-          </button>
+            <div className="relative">
+              <button
+                onClick={() => setShowExport(v => !v)}
+                disabled={setlistSongs.length === 0}
+                className="px-3 py-2 rounded-xl bg-slate-800 hover:bg-slate-700 disabled:opacity-40 text-slate-300 text-sm transition-colors border border-slate-700"
+                title="Exportar este servicio"
+              >
+                📤 Exportar ▾
+              </button>
+              {showExport && (
+                <div className="absolute right-0 top-full mt-1 w-60 bg-slate-800 border border-slate-700 rounded-2xl shadow-xl z-10 overflow-hidden">
+                  <button onClick={handleExportAlado} className="w-full text-left px-4 py-3 hover:bg-slate-700 transition-colors border-b border-slate-700/50">
+                    <p className="text-sm font-medium text-white">Archivo .alado</p>
+                    <p className="text-xs text-slate-400">Para abrirlo en otra compu con ALADO</p>
+                  </button>
+                  <button onClick={handleExportPptx} className="w-full text-left px-4 py-3 hover:bg-slate-700 transition-colors">
+                    <p className="text-sm font-medium text-white">PowerPoint</p>
+                    <p className="text-xs text-slate-400">Respaldo para presentar sin ALADO</p>
+                  </button>
+                </div>
+              )}
+            </div>
+
+            <button
+              onClick={isLive ? stopLive : handlePresent}
+              disabled={setlistSongs.length === 0 && !isLive}
+              className={`px-7 py-2.5 rounded-xl font-bold text-base transition-all duration-200 disabled:opacity-40 hover:scale-105 active:scale-95
+                ${isLive
+                  ? 'bg-red-600 hover:bg-red-500 text-white'
+                  : 'bg-emerald-600 hover:bg-emerald-500 text-white'
+                }`}
+            >
+              {isLive ? '⏹ Detener' : '▶ Presentar'}
+            </button>
+          </div>
         </div>
 
         {/* Setlist */}
