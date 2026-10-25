@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react'
+import { useEffect, useRef, useState } from 'react'
 import {
   DndContext, closestCenter, KeyboardSensor, PointerSensor,
   useSensor, useSensors, DragEndEvent
@@ -16,6 +16,10 @@ import { useServiceDraftStore } from '../../store/serviceDraft.store'
 import { confirmDialog } from '../../store/dialog.store'
 import { showToast } from '../../store/toast.store'
 import { groupSongs, FolderFilter } from '../../utils/songGroups'
+import LyricsHoverCard from './LyricsHoverCard'
+import SectionList from './SectionList'
+
+const HOVER_DELAY_MS = 400
 
 export default function SetlistPage() {
   const { songs, fetchSongs } = useSongsStore()
@@ -31,6 +35,8 @@ export default function SetlistPage() {
   const [folderFilter, setFolderFilter] = useState<FolderFilter>('all')
   const [showSaved, setShowSaved] = useState(false)
   const [saving, setSaving] = useState(false)
+  const [hover, setHover] = useState<{ song: Song; rect: DOMRect } | null>(null)
+  const hoverTimer = useRef<ReturnType<typeof setTimeout> | null>(null)
 
   useEffect(() => {
     // Unfiltered fetch, then refresh the draft's song snapshots (and drop deleted songs).
@@ -99,8 +105,20 @@ export default function SetlistPage() {
     if (isLive) changeSong(song)
   }
 
+  function scheduleHover(song: Song, el: HTMLElement) {
+    if (hoverTimer.current) clearTimeout(hoverTimer.current)
+    hoverTimer.current = setTimeout(() => setHover({ song, rect: el.getBoundingClientRect() }), HOVER_DELAY_MS)
+  }
+
+  function hideHover() {
+    if (hoverTimer.current) clearTimeout(hoverTimer.current)
+    hoverTimer.current = null
+    setHover(null)
+  }
+
   return (
     <div className="flex h-full">
+      {hover && <LyricsHoverCard song={hover.song} anchorRect={hover.rect} />}
       {/* Left: Song library */}
       <div className="w-72 border-r border-slate-800 p-4 flex flex-col bg-slate-950">
         <h2 className="font-semibold text-slate-300 mb-3 text-sm uppercase tracking-wide">Biblioteca</h2>
@@ -122,7 +140,7 @@ export default function SetlistPage() {
             )}
           </div>
         )}
-        <div className="flex-1 overflow-y-auto flex flex-col gap-1">
+        <div className="flex-1 overflow-y-auto flex flex-col gap-1" onScroll={hideHover}>
           {groups.map(group => (
             <div key={group.key} className="flex flex-col gap-1">
               {(folders.length > 0) && (
@@ -134,6 +152,8 @@ export default function SetlistPage() {
                 <button
                   key={song.id}
                   onClick={() => addSong(song)}
+                  onMouseEnter={e => scheduleHover(song, e.currentTarget)}
+                  onMouseLeave={hideHover}
                   className="text-left px-3 py-2.5 rounded-xl hover:bg-slate-800 transition-all duration-150 group border border-transparent hover:border-slate-700"
                 >
                   <p className={`text-sm font-medium truncate ${inSetlist.has(song.id) ? 'text-slate-500' : 'text-white'}`}>
@@ -304,14 +324,14 @@ function SortableSetlistItem({ id, song, index, isLive, isCurrentSong, onRemove,
     transition,
     opacity: isDragging ? 0.5 : 1
   }
-  const firstLines = song.sections[0]?.lines.slice(0, 2).join(' · ')
+  const [expanded, setExpanded] = useState(false)
 
   return (
     <div
       ref={setNodeRef}
       style={style}
       onClick={isLive ? onClick : undefined}
-      className={`flex items-center gap-3 rounded-2xl px-4 py-3 group border transition-all duration-150
+      className={`rounded-2xl px-4 py-3 group border transition-all duration-150
         ${isCurrentSong
           ? 'bg-indigo-950 border-indigo-500 border-l-4'
           : isLive
@@ -319,31 +339,48 @@ function SortableSetlistItem({ id, song, index, isLive, isCurrentSong, onRemove,
             : 'bg-slate-800 border-slate-700'
         }`}
     >
-      <span
-        {...attributes}
-        {...listeners}
-        className="text-slate-600 cursor-grab active:cursor-grabbing text-lg select-none"
-      >
-        ⠿
-      </span>
-      <span className={`text-sm w-6 text-center font-mono shrink-0
-        ${isCurrentSong ? 'text-indigo-400' : 'text-slate-600'}`}>
-        {isCurrentSong ? '▶' : index + 1}
-      </span>
-      <div className="flex-1 min-w-0" title={firstLines}>
-        <p className={`font-medium truncate ${isCurrentSong ? 'text-indigo-100' : 'text-white'}`}>
-          {song.title}
-        </p>
-        {song.artist && (
-          <p className="text-xs text-slate-500 truncate">{song.artist}</p>
-        )}
+      <div className="flex items-center gap-3">
+        <span
+          {...attributes}
+          {...listeners}
+          className="text-slate-600 cursor-grab active:cursor-grabbing text-lg select-none"
+        >
+          ⠿
+        </span>
+        <span className={`text-sm w-6 text-center font-mono shrink-0
+          ${isCurrentSong ? 'text-indigo-400' : 'text-slate-600'}`}>
+          {isCurrentSong ? '▶' : index + 1}
+        </span>
+        <div className="flex-1 min-w-0">
+          <p className={`font-medium truncate ${isCurrentSong ? 'text-indigo-100' : 'text-white'}`}>
+            {song.title}
+          </p>
+          {song.artist && (
+            <p className="text-xs text-slate-500 truncate">{song.artist}</p>
+          )}
+        </div>
+        <button
+          onPointerDown={e => e.stopPropagation()}
+          onClick={e => { e.stopPropagation(); setExpanded(v => !v) }}
+          aria-expanded={expanded}
+          title={expanded ? 'Ocultar letra' : 'Ver letra'}
+          className="text-slate-400 hover:text-white px-2 py-1 rounded-lg hover:bg-slate-700 transition-colors text-sm"
+        >
+          {expanded ? '▾' : '▸'} Letra
+        </button>
+        <button
+          onClick={e => { e.stopPropagation(); onRemove() }}
+          title="Quitar del servicio"
+          className="opacity-0 group-hover:opacity-100 text-slate-500 hover:text-red-400 transition-all px-1"
+        >
+          ✕
+        </button>
       </div>
-      <button
-        onClick={e => { e.stopPropagation(); onRemove() }}
-        className="opacity-0 group-hover:opacity-100 text-slate-500 hover:text-red-400 transition-all px-1"
-      >
-        ✕
-      </button>
+      {expanded && (
+        <div className="mt-3 ml-14 pl-3 border-l border-slate-700 cursor-default" onClick={e => e.stopPropagation()}>
+          <SectionList song={song} />
+        </div>
+      )}
     </div>
   )
 }
