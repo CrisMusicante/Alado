@@ -597,6 +597,9 @@ video {
 .ml-2 {
   margin-left: 0.5rem;
 }
+.ml-auto {
+  margin-left: auto;
+}
 .mr-1 {
   margin-right: 0.25rem;
 }
@@ -735,6 +738,9 @@ video {
 .min-w-0 {
   min-width: 0px;
 }
+.min-w-\[13rem\] {
+  min-width: 13rem;
+}
 .max-w-2xl {
   max-width: 42rem;
 }
@@ -870,6 +876,9 @@ video {
 .truncate {
   overflow: hidden;
   text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.whitespace-nowrap {
   white-space: nowrap;
 }
 .whitespace-pre-line {

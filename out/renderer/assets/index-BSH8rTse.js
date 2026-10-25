@@ -1,4 +1,4 @@
-const __vite__mapDeps=(i,m=__vite__mapDeps,d=(m.f||(m.f=["./pptxgen.es-BNjujjMn.js","./SlideView-CqN0asXU.js"])))=>i.map(i=>d[i]);
+const __vite__mapDeps=(i,m=__vite__mapDeps,d=(m.f||(m.f=["./pptxgen.es-DGJFxpjQ.js","./SlideView-CqN0asXU.js"])))=>i.map(i=>d[i]);
 import { r as requireReactDom, a as reactExports, R as React, b as requireReact, g as getDefaultExportFromCjs, j as jsxRuntimeExports, S as SlideView, c as ReactDOM } from "./SlideView-CqN0asXU.js";
 var reactDomExports = requireReactDom();
 function useCombinedRefs() {
@@ -6711,7 +6711,7 @@ const PLAIN_BG = "0F172A";
 const SHADOW = { type: "outer", color: "000000", blur: 6, offset: 2, angle: 45, opacity: 0.8 };
 async function exportServicePptx(name, songs) {
   const { default: PptxGenJS } = await __vitePreload(async () => {
-    const { default: PptxGenJS2 } = await import("./pptxgen.es-BNjujjMn.js");
+    const { default: PptxGenJS2 } = await import("./pptxgen.es-DGJFxpjQ.js");
     return { default: PptxGenJS2 };
   }, true ? __vite__mapDeps([0,1]) : void 0, import.meta.url);
   const pptx = new PptxGenJS();
@@ -7023,8 +7023,8 @@ function SetlistPage() {
       ] })
     ] }),
     /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "flex-1 p-6 flex flex-col", children: [
-      /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "flex items-center gap-3 mb-5", children: [
-        /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "flex-1 min-w-0 flex flex-col gap-1", children: [
+      /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "flex flex-wrap items-center gap-3 mb-5", children: [
+        /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "flex-1 min-w-[13rem] flex flex-col gap-1", children: [
           /* @__PURE__ */ jsxRuntimeExports.jsx(
             "input",
             {
@@ -7048,96 +7048,103 @@ function SetlistPage() {
             dirty && /* @__PURE__ */ jsxRuntimeExports.jsx("span", { className: "text-amber-400", children: "• sin guardar" })
           ] })
         ] }),
-        /* @__PURE__ */ jsxRuntimeExports.jsx(
-          "button",
-          {
-            onClick: handleNew,
-            className: "px-3 py-2 rounded-xl bg-slate-800 hover:bg-slate-700 text-slate-300 text-sm transition-colors border border-slate-700",
-            title: "Empezar un servicio nuevo",
-            children: "＋ Nuevo"
-          }
-        ),
-        /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "relative", children: [
+        /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "flex flex-wrap items-center justify-end gap-3 ml-auto whitespace-nowrap", children: [
           /* @__PURE__ */ jsxRuntimeExports.jsx(
             "button",
             {
-              onClick: () => setShowSaved(!showSaved),
+              onClick: handleNew,
               className: "px-3 py-2 rounded-xl bg-slate-800 hover:bg-slate-700 text-slate-300 text-sm transition-colors border border-slate-700",
-              title: "Servicios guardados",
-              children: "📂 Cargar"
+              title: "Empezar un servicio nuevo",
+              children: "＋ Nuevo"
             }
           ),
-          showSaved && /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "absolute right-0 top-full mt-1 w-72 bg-slate-800 border border-slate-700 rounded-2xl shadow-xl z-10 overflow-hidden", children: [
-            /* @__PURE__ */ jsxRuntimeExports.jsx("div", { className: "p-3 border-b border-slate-700", children: /* @__PURE__ */ jsxRuntimeExports.jsx("p", { className: "text-xs font-semibold text-slate-400 uppercase tracking-wide", children: "Servicios guardados" }) }),
-            setlists.length === 0 ? /* @__PURE__ */ jsxRuntimeExports.jsx("p", { className: "text-sm text-slate-500 text-center py-6", children: "Sin servicios guardados" }) : /* @__PURE__ */ jsxRuntimeExports.jsx("div", { className: "max-h-64 overflow-y-auto", children: setlists.map((sl) => /* @__PURE__ */ jsxRuntimeExports.jsxs(
+          /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "relative", children: [
+            /* @__PURE__ */ jsxRuntimeExports.jsx(
               "button",
               {
-                onClick: () => loadSetlist(sl),
-                className: "w-full text-left px-4 py-3 hover:bg-slate-700 transition-colors border-b border-slate-700/50 last:border-0",
-                children: [
-                  /* @__PURE__ */ jsxRuntimeExports.jsx("p", { className: "text-sm font-medium text-white", children: sl.name }),
-                  sl.service_date && /* @__PURE__ */ jsxRuntimeExports.jsxs("p", { className: "text-xs text-slate-500", children: [
-                    sl.service_date,
-                    " · ",
-                    sl.songs?.length ?? 0,
-                    " canciones"
-                  ] })
-                ]
-              },
-              sl.id
-            )) })
-          ] })
-        ] }),
-        /* @__PURE__ */ jsxRuntimeExports.jsx(
-          "button",
-          {
-            onClick: handleImport,
-            className: "px-3 py-2 rounded-xl bg-slate-800 hover:bg-slate-700 text-slate-300 text-sm transition-colors border border-slate-700",
-            title: "Importar un servicio desde un archivo .alado",
-            children: "📥 Importar"
-          }
-        ),
-        /* @__PURE__ */ jsxRuntimeExports.jsx(
-          "button",
-          {
-            onClick: handleSave,
-            disabled: setlistSongs.length === 0 || saving,
-            className: "px-4 py-2 rounded-xl bg-slate-700 hover:bg-slate-600 disabled:opacity-40 text-white text-sm font-medium transition-colors border border-slate-600",
-            children: saving ? "Guardando..." : "💾 Guardar"
-          }
-        ),
-        /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "relative", children: [
+                onClick: () => setShowSaved(!showSaved),
+                className: "px-3 py-2 rounded-xl bg-slate-800 hover:bg-slate-700 text-slate-300 text-sm transition-colors border border-slate-700",
+                title: "Abrir un servicio guardado o importarlo de un archivo",
+                children: "📂 Abrir ▾"
+              }
+            ),
+            showSaved && /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "absolute right-0 top-full mt-1 w-72 bg-slate-800 border border-slate-700 rounded-2xl shadow-xl z-10 overflow-hidden", children: [
+              /* @__PURE__ */ jsxRuntimeExports.jsx("div", { className: "p-3 border-b border-slate-700", children: /* @__PURE__ */ jsxRuntimeExports.jsx("p", { className: "text-xs font-semibold text-slate-400 uppercase tracking-wide", children: "Servicios guardados" }) }),
+              setlists.length === 0 ? /* @__PURE__ */ jsxRuntimeExports.jsx("p", { className: "text-sm text-slate-500 text-center py-6", children: "Sin servicios guardados" }) : /* @__PURE__ */ jsxRuntimeExports.jsx("div", { className: "max-h-64 overflow-y-auto", children: setlists.map((sl) => /* @__PURE__ */ jsxRuntimeExports.jsxs(
+                "button",
+                {
+                  onClick: () => loadSetlist(sl),
+                  className: "w-full text-left px-4 py-3 hover:bg-slate-700 transition-colors border-b border-slate-700/50 last:border-0",
+                  children: [
+                    /* @__PURE__ */ jsxRuntimeExports.jsx("p", { className: "text-sm font-medium text-white", children: sl.name }),
+                    sl.service_date && /* @__PURE__ */ jsxRuntimeExports.jsxs("p", { className: "text-xs text-slate-500", children: [
+                      sl.service_date,
+                      " · ",
+                      sl.songs?.length ?? 0,
+                      " canciones"
+                    ] })
+                  ]
+                },
+                sl.id
+              )) }),
+              /* @__PURE__ */ jsxRuntimeExports.jsxs(
+                "button",
+                {
+                  onClick: () => {
+                    setShowSaved(false);
+                    handleImport();
+                  },
+                  className: "w-full text-left px-4 py-3 hover:bg-slate-700 transition-colors border-t border-slate-700",
+                  children: [
+                    /* @__PURE__ */ jsxRuntimeExports.jsx("p", { className: "text-sm font-medium text-white", children: "📥 Importar archivo .alado…" }),
+                    /* @__PURE__ */ jsxRuntimeExports.jsx("p", { className: "text-xs text-slate-400", children: "Un servicio exportado desde otra compu" })
+                  ]
+                }
+              )
+            ] })
+          ] }),
           /* @__PURE__ */ jsxRuntimeExports.jsx(
             "button",
             {
-              onClick: () => setShowExport((v) => !v),
-              disabled: setlistSongs.length === 0,
-              className: "px-3 py-2 rounded-xl bg-slate-800 hover:bg-slate-700 disabled:opacity-40 text-slate-300 text-sm transition-colors border border-slate-700",
-              title: "Exportar este servicio",
-              children: "📤 Exportar ▾"
+              onClick: handleSave,
+              disabled: setlistSongs.length === 0 || saving,
+              className: "px-4 py-2 rounded-xl bg-slate-700 hover:bg-slate-600 disabled:opacity-40 text-white text-sm font-medium transition-colors border border-slate-600",
+              children: saving ? "Guardando..." : "💾 Guardar"
             }
           ),
-          showExport && /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "absolute right-0 top-full mt-1 w-60 bg-slate-800 border border-slate-700 rounded-2xl shadow-xl z-10 overflow-hidden", children: [
-            /* @__PURE__ */ jsxRuntimeExports.jsxs("button", { onClick: handleExportAlado, className: "w-full text-left px-4 py-3 hover:bg-slate-700 transition-colors border-b border-slate-700/50", children: [
-              /* @__PURE__ */ jsxRuntimeExports.jsx("p", { className: "text-sm font-medium text-white", children: "Archivo .alado" }),
-              /* @__PURE__ */ jsxRuntimeExports.jsx("p", { className: "text-xs text-slate-400", children: "Para abrirlo en otra compu con ALADO" })
-            ] }),
-            /* @__PURE__ */ jsxRuntimeExports.jsxs("button", { onClick: handleExportPptx, className: "w-full text-left px-4 py-3 hover:bg-slate-700 transition-colors", children: [
-              /* @__PURE__ */ jsxRuntimeExports.jsx("p", { className: "text-sm font-medium text-white", children: "PowerPoint" }),
-              /* @__PURE__ */ jsxRuntimeExports.jsx("p", { className: "text-xs text-slate-400", children: "Respaldo para presentar sin ALADO" })
+          /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "relative", children: [
+            /* @__PURE__ */ jsxRuntimeExports.jsx(
+              "button",
+              {
+                onClick: () => setShowExport((v) => !v),
+                disabled: setlistSongs.length === 0,
+                className: "px-3 py-2 rounded-xl bg-slate-800 hover:bg-slate-700 disabled:opacity-40 text-slate-300 text-sm transition-colors border border-slate-700",
+                title: "Exportar este servicio",
+                children: "📤 Exportar ▾"
+              }
+            ),
+            showExport && /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "absolute right-0 top-full mt-1 w-60 bg-slate-800 border border-slate-700 rounded-2xl shadow-xl z-10 overflow-hidden", children: [
+              /* @__PURE__ */ jsxRuntimeExports.jsxs("button", { onClick: handleExportAlado, className: "w-full text-left px-4 py-3 hover:bg-slate-700 transition-colors border-b border-slate-700/50", children: [
+                /* @__PURE__ */ jsxRuntimeExports.jsx("p", { className: "text-sm font-medium text-white", children: "Archivo .alado" }),
+                /* @__PURE__ */ jsxRuntimeExports.jsx("p", { className: "text-xs text-slate-400", children: "Para abrirlo en otra compu con ALADO" })
+              ] }),
+              /* @__PURE__ */ jsxRuntimeExports.jsxs("button", { onClick: handleExportPptx, className: "w-full text-left px-4 py-3 hover:bg-slate-700 transition-colors", children: [
+                /* @__PURE__ */ jsxRuntimeExports.jsx("p", { className: "text-sm font-medium text-white", children: "PowerPoint" }),
+                /* @__PURE__ */ jsxRuntimeExports.jsx("p", { className: "text-xs text-slate-400", children: "Respaldo para presentar sin ALADO" })
+              ] })
             ] })
-          ] })
-        ] }),
-        /* @__PURE__ */ jsxRuntimeExports.jsx(
-          "button",
-          {
-            onClick: isLive ? stopLive : handlePresent,
-            disabled: setlistSongs.length === 0 && !isLive,
-            className: `px-7 py-2.5 rounded-xl font-bold text-base transition-all duration-200 disabled:opacity-40 hover:scale-105 active:scale-95
-              ${isLive ? "bg-red-600 hover:bg-red-500 text-white" : "bg-emerald-600 hover:bg-emerald-500 text-white"}`,
-            children: isLive ? "⏹ Detener" : "▶ Presentar"
-          }
-        )
+          ] }),
+          /* @__PURE__ */ jsxRuntimeExports.jsx(
+            "button",
+            {
+              onClick: isLive ? stopLive : handlePresent,
+              disabled: setlistSongs.length === 0 && !isLive,
+              className: `px-7 py-2.5 rounded-xl font-bold text-base transition-all duration-200 disabled:opacity-40 hover:scale-105 active:scale-95
+                ${isLive ? "bg-red-600 hover:bg-red-500 text-white" : "bg-emerald-600 hover:bg-emerald-500 text-white"}`,
+              children: isLive ? "⏹ Detener" : "▶ Presentar"
+            }
+          )
+        ] })
       ] }),
       setlistSongs.length === 0 ? /* @__PURE__ */ jsxRuntimeExports.jsx("div", { className: "flex-1 flex items-center justify-center text-slate-600 text-center border-2 border-dashed border-slate-800 rounded-2xl", children: /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { children: [
         /* @__PURE__ */ jsxRuntimeExports.jsx("p", { className: "text-4xl mb-3", children: "📋" }),
