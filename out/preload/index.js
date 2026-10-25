@@ -9,6 +9,10 @@ electron.contextBridge.exposeInMainWorld("api", {
   getSetlists: () => electron.ipcRenderer.invoke("db:get-setlists"),
   saveSetlist: (setlist) => electron.ipcRenderer.invoke("db:save-setlist", setlist),
   deleteSetlist: (id) => electron.ipcRenderer.invoke("db:delete-setlist", id),
+  setlistExport: (payload) => electron.ipcRenderer.invoke("setlist:export", payload),
+  setlistSavePptx: (payload) => electron.ipcRenderer.invoke("setlist:save-pptx", payload),
+  setlistImportInspect: () => electron.ipcRenderer.invoke("setlist:import-inspect"),
+  setlistImportApply: (payload) => electron.ipcRenderer.invoke("setlist:import-apply", payload),
   // Live window
   openLive: () => electron.ipcRenderer.invoke("live:open"),
   closeLive: () => electron.ipcRenderer.invoke("live:close"),

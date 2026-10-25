@@ -1,4 +1,5 @@
-import { r as requireReactDom, a as reactExports, R as React, b as requireReact, g as getDefaultExportFromCjs, j as jsxRuntimeExports, S as SlideView, c as ReactDOM } from "./SlideView-_N3UuWWH.js";
+const __vite__mapDeps=(i,m=__vite__mapDeps,d=(m.f||(m.f=["./pptxgen.es-CGqMXVdN.js","./SlideView-CqN0asXU.js"])))=>i.map(i=>d[i]);
+import { r as requireReactDom, a as reactExports, R as React, b as requireReact, g as getDefaultExportFromCjs, j as jsxRuntimeExports, S as SlideView, c as ReactDOM } from "./SlideView-CqN0asXU.js";
 var reactDomExports = requireReactDom();
 function useCombinedRefs() {
   for (var _len = arguments.length, refs = new Array(_len), _key = 0; _key < _len; _key++) {
@@ -3386,7 +3387,7 @@ function useDroppable(_ref) {
     setNodeRef
   };
 }
-const __vite_import_meta_env__$1 = {};
+const __vite_import_meta_env__$2 = {};
 const createStoreImpl = (createState) => {
   let state;
   const listeners = /* @__PURE__ */ new Set();
@@ -3405,7 +3406,7 @@ const createStoreImpl = (createState) => {
     return () => listeners.delete(listener);
   };
   const destroy = () => {
-    if ((__vite_import_meta_env__$1 ? "production" : void 0) !== "production") {
+    if ((__vite_import_meta_env__$2 ? "production" : void 0) !== "production") {
       console.warn(
         "[DEPRECATED] The `destroy` method will be unsupported in a future version. Instead use unsubscribe function returned by subscribe. Everything will be garbage-collected if store is garbage-collected."
       );
@@ -3551,13 +3552,13 @@ function requireWithSelector() {
 }
 var withSelectorExports = requireWithSelector();
 const useSyncExternalStoreExports = /* @__PURE__ */ getDefaultExportFromCjs(withSelectorExports);
-const __vite_import_meta_env__ = {};
+const __vite_import_meta_env__$1 = {};
 const { useDebugValue } = React;
 const { useSyncExternalStoreWithSelector } = useSyncExternalStoreExports;
 let didWarnAboutEqualityFn = false;
 const identity = (arg) => arg;
 function useStore(api, selector = identity, equalityFn) {
-  if ((__vite_import_meta_env__ ? "production" : void 0) !== "production" && equalityFn && !didWarnAboutEqualityFn) {
+  if ((__vite_import_meta_env__$1 ? "production" : void 0) !== "production" && equalityFn && !didWarnAboutEqualityFn) {
     console.warn(
       "[DEPRECATED] Use `createWithEqualityFn` instead of `create` or use `useStoreWithEqualityFn` instead of `useStore`. They can be imported from 'zustand/traditional'. https://github.com/pmndrs/zustand/discussions/1937"
     );
@@ -3574,7 +3575,7 @@ function useStore(api, selector = identity, equalityFn) {
   return slice;
 }
 const createImpl = (createState) => {
-  if ((__vite_import_meta_env__ ? "production" : void 0) !== "production" && typeof createState !== "function") {
+  if ((__vite_import_meta_env__$1 ? "production" : void 0) !== "production" && typeof createState !== "function") {
     console.warn(
       "[DEPRECATED] Passing a vanilla store will be unsupported in a future version. Instead use `import { useStore } from 'zustand'`."
     );
@@ -6177,6 +6178,597 @@ const useSetlistsStore = create((set) => ({
     set({ setlists });
   }
 }));
+const __vite_import_meta_env__ = {};
+function createJSONStorage(getStorage, options) {
+  let storage;
+  try {
+    storage = getStorage();
+  } catch (_e) {
+    return;
+  }
+  const persistStorage = {
+    getItem: (name) => {
+      var _a;
+      const parse = (str2) => {
+        if (str2 === null) {
+          return null;
+        }
+        return JSON.parse(str2, void 0);
+      };
+      const str = (_a = storage.getItem(name)) != null ? _a : null;
+      if (str instanceof Promise) {
+        return str.then(parse);
+      }
+      return parse(str);
+    },
+    setItem: (name, newValue) => storage.setItem(
+      name,
+      JSON.stringify(newValue, void 0)
+    ),
+    removeItem: (name) => storage.removeItem(name)
+  };
+  return persistStorage;
+}
+const toThenable = (fn) => (input) => {
+  try {
+    const result = fn(input);
+    if (result instanceof Promise) {
+      return result;
+    }
+    return {
+      then(onFulfilled) {
+        return toThenable(onFulfilled)(result);
+      },
+      catch(_onRejected) {
+        return this;
+      }
+    };
+  } catch (e) {
+    return {
+      then(_onFulfilled) {
+        return this;
+      },
+      catch(onRejected) {
+        return toThenable(onRejected)(e);
+      }
+    };
+  }
+};
+const oldImpl = (config, baseOptions) => (set, get, api) => {
+  let options = {
+    getStorage: () => localStorage,
+    serialize: JSON.stringify,
+    deserialize: JSON.parse,
+    partialize: (state) => state,
+    version: 0,
+    merge: (persistedState, currentState) => ({
+      ...currentState,
+      ...persistedState
+    }),
+    ...baseOptions
+  };
+  let hasHydrated = false;
+  const hydrationListeners = /* @__PURE__ */ new Set();
+  const finishHydrationListeners = /* @__PURE__ */ new Set();
+  let storage;
+  try {
+    storage = options.getStorage();
+  } catch (_e) {
+  }
+  if (!storage) {
+    return config(
+      (...args) => {
+        console.warn(
+          `[zustand persist middleware] Unable to update item '${options.name}', the given storage is currently unavailable.`
+        );
+        set(...args);
+      },
+      get,
+      api
+    );
+  }
+  const thenableSerialize = toThenable(options.serialize);
+  const setItem = () => {
+    const state = options.partialize({ ...get() });
+    let errorInSync;
+    const thenable = thenableSerialize({ state, version: options.version }).then(
+      (serializedValue) => storage.setItem(options.name, serializedValue)
+    ).catch((e) => {
+      errorInSync = e;
+    });
+    if (errorInSync) {
+      throw errorInSync;
+    }
+    return thenable;
+  };
+  const savedSetState = api.setState;
+  api.setState = (state, replace) => {
+    savedSetState(state, replace);
+    void setItem();
+  };
+  const configResult = config(
+    (...args) => {
+      set(...args);
+      void setItem();
+    },
+    get,
+    api
+  );
+  let stateFromStorage;
+  const hydrate = () => {
+    var _a;
+    if (!storage) return;
+    hasHydrated = false;
+    hydrationListeners.forEach((cb) => cb(get()));
+    const postRehydrationCallback = ((_a = options.onRehydrateStorage) == null ? void 0 : _a.call(options, get())) || void 0;
+    return toThenable(storage.getItem.bind(storage))(options.name).then((storageValue) => {
+      if (storageValue) {
+        return options.deserialize(storageValue);
+      }
+    }).then((deserializedStorageValue) => {
+      if (deserializedStorageValue) {
+        if (typeof deserializedStorageValue.version === "number" && deserializedStorageValue.version !== options.version) {
+          if (options.migrate) {
+            return options.migrate(
+              deserializedStorageValue.state,
+              deserializedStorageValue.version
+            );
+          }
+          console.error(
+            `State loaded from storage couldn't be migrated since no migrate function was provided`
+          );
+        } else {
+          return deserializedStorageValue.state;
+        }
+      }
+    }).then((migratedState) => {
+      var _a2;
+      stateFromStorage = options.merge(
+        migratedState,
+        (_a2 = get()) != null ? _a2 : configResult
+      );
+      set(stateFromStorage, true);
+      return setItem();
+    }).then(() => {
+      postRehydrationCallback == null ? void 0 : postRehydrationCallback(stateFromStorage, void 0);
+      hasHydrated = true;
+      finishHydrationListeners.forEach((cb) => cb(stateFromStorage));
+    }).catch((e) => {
+      postRehydrationCallback == null ? void 0 : postRehydrationCallback(void 0, e);
+    });
+  };
+  api.persist = {
+    setOptions: (newOptions) => {
+      options = {
+        ...options,
+        ...newOptions
+      };
+      if (newOptions.getStorage) {
+        storage = newOptions.getStorage();
+      }
+    },
+    clearStorage: () => {
+      storage == null ? void 0 : storage.removeItem(options.name);
+    },
+    getOptions: () => options,
+    rehydrate: () => hydrate(),
+    hasHydrated: () => hasHydrated,
+    onHydrate: (cb) => {
+      hydrationListeners.add(cb);
+      return () => {
+        hydrationListeners.delete(cb);
+      };
+    },
+    onFinishHydration: (cb) => {
+      finishHydrationListeners.add(cb);
+      return () => {
+        finishHydrationListeners.delete(cb);
+      };
+    }
+  };
+  hydrate();
+  return stateFromStorage || configResult;
+};
+const newImpl = (config, baseOptions) => (set, get, api) => {
+  let options = {
+    storage: createJSONStorage(() => localStorage),
+    partialize: (state) => state,
+    version: 0,
+    merge: (persistedState, currentState) => ({
+      ...currentState,
+      ...persistedState
+    }),
+    ...baseOptions
+  };
+  let hasHydrated = false;
+  const hydrationListeners = /* @__PURE__ */ new Set();
+  const finishHydrationListeners = /* @__PURE__ */ new Set();
+  let storage = options.storage;
+  if (!storage) {
+    return config(
+      (...args) => {
+        console.warn(
+          `[zustand persist middleware] Unable to update item '${options.name}', the given storage is currently unavailable.`
+        );
+        set(...args);
+      },
+      get,
+      api
+    );
+  }
+  const setItem = () => {
+    const state = options.partialize({ ...get() });
+    return storage.setItem(options.name, {
+      state,
+      version: options.version
+    });
+  };
+  const savedSetState = api.setState;
+  api.setState = (state, replace) => {
+    savedSetState(state, replace);
+    void setItem();
+  };
+  const configResult = config(
+    (...args) => {
+      set(...args);
+      void setItem();
+    },
+    get,
+    api
+  );
+  api.getInitialState = () => configResult;
+  let stateFromStorage;
+  const hydrate = () => {
+    var _a, _b;
+    if (!storage) return;
+    hasHydrated = false;
+    hydrationListeners.forEach((cb) => {
+      var _a2;
+      return cb((_a2 = get()) != null ? _a2 : configResult);
+    });
+    const postRehydrationCallback = ((_b = options.onRehydrateStorage) == null ? void 0 : _b.call(options, (_a = get()) != null ? _a : configResult)) || void 0;
+    return toThenable(storage.getItem.bind(storage))(options.name).then((deserializedStorageValue) => {
+      if (deserializedStorageValue) {
+        if (typeof deserializedStorageValue.version === "number" && deserializedStorageValue.version !== options.version) {
+          if (options.migrate) {
+            return [
+              true,
+              options.migrate(
+                deserializedStorageValue.state,
+                deserializedStorageValue.version
+              )
+            ];
+          }
+          console.error(
+            `State loaded from storage couldn't be migrated since no migrate function was provided`
+          );
+        } else {
+          return [false, deserializedStorageValue.state];
+        }
+      }
+      return [false, void 0];
+    }).then((migrationResult) => {
+      var _a2;
+      const [migrated, migratedState] = migrationResult;
+      stateFromStorage = options.merge(
+        migratedState,
+        (_a2 = get()) != null ? _a2 : configResult
+      );
+      set(stateFromStorage, true);
+      if (migrated) {
+        return setItem();
+      }
+    }).then(() => {
+      postRehydrationCallback == null ? void 0 : postRehydrationCallback(stateFromStorage, void 0);
+      stateFromStorage = get();
+      hasHydrated = true;
+      finishHydrationListeners.forEach((cb) => cb(stateFromStorage));
+    }).catch((e) => {
+      postRehydrationCallback == null ? void 0 : postRehydrationCallback(void 0, e);
+    });
+  };
+  api.persist = {
+    setOptions: (newOptions) => {
+      options = {
+        ...options,
+        ...newOptions
+      };
+      if (newOptions.storage) {
+        storage = newOptions.storage;
+      }
+    },
+    clearStorage: () => {
+      storage == null ? void 0 : storage.removeItem(options.name);
+    },
+    getOptions: () => options,
+    rehydrate: () => hydrate(),
+    hasHydrated: () => hasHydrated,
+    onHydrate: (cb) => {
+      hydrationListeners.add(cb);
+      return () => {
+        hydrationListeners.delete(cb);
+      };
+    },
+    onFinishHydration: (cb) => {
+      finishHydrationListeners.add(cb);
+      return () => {
+        finishHydrationListeners.delete(cb);
+      };
+    }
+  };
+  if (!options.skipHydration) {
+    hydrate();
+  }
+  return stateFromStorage || configResult;
+};
+const persistImpl = (config, baseOptions) => {
+  if ("getStorage" in baseOptions || "serialize" in baseOptions || "deserialize" in baseOptions) {
+    if ((__vite_import_meta_env__ ? "production" : void 0) !== "production") {
+      console.warn(
+        "[DEPRECATED] `getStorage`, `serialize` and `deserialize` options are deprecated. Use `storage` option instead."
+      );
+    }
+    return oldImpl(config, baseOptions);
+  }
+  return newImpl(config, baseOptions);
+};
+const persist = persistImpl;
+function todayISO() {
+  const d = /* @__PURE__ */ new Date();
+  const pad = (n) => String(n).padStart(2, "0");
+  return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}`;
+}
+let keySeq = 0;
+const newKey = (songId) => `${songId ?? "x"}-${Date.now()}-${keySeq++}`;
+const noopStorage = { getItem: () => null, setItem: () => {
+}, removeItem: () => {
+} };
+const blank = () => ({
+  setlistId: null,
+  name: `Servicio ${(/* @__PURE__ */ new Date()).toLocaleDateString("es")}`,
+  serviceDate: todayISO(),
+  items: [],
+  dirty: false
+});
+const useServiceDraftStore = create()(persist((set, get) => ({
+  ...blank(),
+  addSong: (song) => {
+    if (get().items.some((i) => i.song.id === song.id)) return;
+    set({ items: [...get().items, { key: newKey(song.id), song }], dirty: true });
+  },
+  removeItem: (key) => set({ items: get().items.filter((i) => i.key !== key), dirty: true }),
+  moveItem: (fromKey, toKey) => {
+    const items = [...get().items];
+    const from = items.findIndex((i) => i.key === fromKey);
+    const to = items.findIndex((i) => i.key === toKey);
+    if (from < 0 || to < 0 || from === to) return;
+    const [moved] = items.splice(from, 1);
+    items.splice(to, 0, moved);
+    set({ items, dirty: true });
+  },
+  setName: (name) => set({ name, dirty: true }),
+  setServiceDate: (serviceDate) => set({ serviceDate, dirty: true }),
+  loadSaved: (saved) => set({
+    setlistId: saved.id ?? null,
+    name: saved.name,
+    serviceDate: saved.service_date ?? todayISO(),
+    items: (saved.songs ?? []).map((s) => ({ key: newKey(s.song.id), song: s.song })),
+    dirty: false
+  }),
+  reset: () => set(blank()),
+  markSaved: (id) => set({ setlistId: id, dirty: false }),
+  syncWithCatalog: (all) => {
+    const byId = new Map(all.map((s) => [s.id, s]));
+    set({
+      items: get().items.filter((i) => byId.has(i.song.id)).map((i) => ({ ...i, song: byId.get(i.song.id) }))
+    });
+  }
+}), {
+  name: "alado-service-draft",
+  storage: createJSONStorage(() => typeof localStorage !== "undefined" ? localStorage : noopStorage),
+  partialize: ({ setlistId, name, serviceDate, items, dirty }) => ({ setlistId, name, serviceDate, items, dirty })
+}));
+function ipcErrorMessage(e) {
+  const msg = e instanceof Error ? e.message : String(e);
+  return msg.replace(/^Error invoking remote method '[^']*': (?:Error: )?/, "");
+}
+function importSummaryText(s) {
+  const lines = [];
+  if (s.reused > 0) {
+    lines.push(s.reused === 1 ? "1 canción ya estaba en esta compu." : `${s.reused} canciones ya estaban en esta compu.`);
+  }
+  if (s.created.length) lines.push(`Se crearon: ${s.created.join(", ")}`);
+  if (s.differing.length) lines.push(`Con letra distinta (se usó la de esta compu): ${s.differing.join(", ")}`);
+  if (s.missingVideo.length) lines.push(`Sin video (fondo por defecto): ${s.missingVideo.join(", ")}`);
+  if (s.missingAudio.length) lines.push(`Sin audio en esta compu: ${s.missingAudio.join(", ")}`);
+  return lines.join("\n");
+}
+const scriptRel = /* @__PURE__ */ (function detectScriptRel() {
+  const relList = typeof document !== "undefined" && document.createElement("link").relList;
+  return relList && relList.supports && relList.supports("modulepreload") ? "modulepreload" : "preload";
+})();
+const assetsURL = function(dep, importerUrl) {
+  return new URL(dep, importerUrl).href;
+};
+const seen = {};
+const __vitePreload = function preload(baseModule, deps, importerUrl) {
+  let promise = Promise.resolve();
+  if (deps && deps.length > 0) {
+    let allSettled = function(promises$2) {
+      return Promise.all(promises$2.map((p) => Promise.resolve(p).then((value$1) => ({
+        status: "fulfilled",
+        value: value$1
+      }), (reason) => ({
+        status: "rejected",
+        reason
+      }))));
+    };
+    const links = document.getElementsByTagName("link");
+    const cspNonceMeta = document.querySelector("meta[property=csp-nonce]");
+    const cspNonce = cspNonceMeta?.nonce || cspNonceMeta?.getAttribute("nonce");
+    promise = allSettled(deps.map((dep) => {
+      dep = assetsURL(dep, importerUrl);
+      if (dep in seen) return;
+      seen[dep] = true;
+      const isCss = dep.endsWith(".css");
+      const cssSelector = isCss ? '[rel="stylesheet"]' : "";
+      if (!!importerUrl) for (let i$1 = links.length - 1; i$1 >= 0; i$1--) {
+        const link$1 = links[i$1];
+        if (link$1.href === dep && (!isCss || link$1.rel === "stylesheet")) return;
+      }
+      else if (document.querySelector(`link[href="${dep}"]${cssSelector}`)) return;
+      const link = document.createElement("link");
+      link.rel = isCss ? "stylesheet" : scriptRel;
+      if (!isCss) link.as = "script";
+      link.crossOrigin = "";
+      link.href = dep;
+      if (cspNonce) link.setAttribute("nonce", cspNonce);
+      document.head.appendChild(link);
+      if (isCss) return new Promise((res, rej) => {
+        link.addEventListener("load", res);
+        link.addEventListener("error", () => rej(/* @__PURE__ */ new Error(`Unable to preload CSS for ${dep}`)));
+      });
+    }));
+  }
+  function handlePreloadError(err$2) {
+    const e$1 = new Event("vite:preloadError", { cancelable: true });
+    e$1.payload = err$2;
+    window.dispatchEvent(e$1);
+    if (!e$1.defaultPrevented) throw err$2;
+  }
+  return promise.then((res) => {
+    for (const item of res || []) {
+      if (item.status !== "rejected") continue;
+      handlePreloadError(item.reason);
+    }
+    return baseModule().catch(handlePreloadError);
+  });
+};
+function buildDeckPlan(songs) {
+  return songs.flatMap((song, songIndex) => [
+    { kind: "title", songIndex, title: song.title, ...song.artist ? { artist: song.artist } : {} },
+    ...song.sections.map((s) => ({ kind: "section", songIndex, text: s.lines.join("\n"), repeat: s.repeat ?? 1 }))
+  ]);
+}
+const MAX_PT = 40;
+const MIN_PT = 20;
+const BOX_W_PT = 12.3 * 72;
+const BOX_H_PT = 6.3 * 72;
+const CHAR_W = 0.55;
+const LINE_H = 1.25;
+function fitFontSize(text) {
+  const lines = text.split("\n");
+  const longest = Math.max(1, ...lines.map((l) => l.length));
+  const byHeight = BOX_H_PT / (LINE_H * lines.length);
+  const byWidth = BOX_W_PT / (CHAR_W * longest);
+  return Math.round(Math.max(MIN_PT, Math.min(MAX_PT, byHeight, byWidth)));
+}
+const FRAME_MAX_W = 1280;
+const FRAME_MAX_H = 720;
+const FRAME_TIMEOUT_MS = 8e3;
+const DARKEN = "rgba(0,0,0,0.35)";
+function grabVideoFrame(videoPath) {
+  return new Promise((resolve) => {
+    const video = document.createElement("video");
+    let done = false;
+    const finish = (value) => {
+      if (done) return;
+      done = true;
+      clearTimeout(timer);
+      video.removeAttribute("src");
+      video.load();
+      resolve(value);
+    };
+    const timer = setTimeout(() => finish(null), FRAME_TIMEOUT_MS);
+    video.crossOrigin = "anonymous";
+    video.muted = true;
+    video.preload = "auto";
+    video.onerror = () => finish(null);
+    video.onloadedmetadata = () => {
+      const d = Number.isFinite(video.duration) ? video.duration : 0;
+      video.currentTime = Math.min(1, d * 0.1);
+    };
+    video.onseeked = () => {
+      try {
+        const scale = Math.min(1, FRAME_MAX_W / video.videoWidth, FRAME_MAX_H / video.videoHeight);
+        const canvas = document.createElement("canvas");
+        canvas.width = Math.round(video.videoWidth * scale);
+        canvas.height = Math.round(video.videoHeight * scale);
+        const ctx = canvas.getContext("2d");
+        ctx.drawImage(video, 0, 0, canvas.width, canvas.height);
+        ctx.fillStyle = DARKEN;
+        ctx.fillRect(0, 0, canvas.width, canvas.height);
+        finish(canvas.toDataURL("image/jpeg", 0.7));
+      } catch (e) {
+        console.warn("No se pudo leer un cuadro del video", videoPath, e);
+        finish(null);
+      }
+    };
+    video.src = mediaUrl(videoPath);
+  });
+}
+const PLAIN_BG = "0F172A";
+const SHADOW = { type: "outer", color: "000000", blur: 6, offset: 2, angle: 45, opacity: 0.8 };
+async function exportServicePptx(name, songs) {
+  const { default: PptxGenJS } = await __vitePreload(async () => {
+    const { default: PptxGenJS2 } = await import("./pptxgen.es-CGqMXVdN.js");
+    return { default: PptxGenJS2 };
+  }, true ? __vite__mapDeps([0,1]) : void 0, import.meta.url);
+  const pptx = new PptxGenJS();
+  pptx.layout = "LAYOUT_16x9";
+  pptx.title = name;
+  const frames = await Promise.all(songs.map((s) => s.video_path ? grabVideoFrame(s.video_path) : Promise.resolve(null)));
+  for (const spec of buildDeckPlan(songs)) {
+    const slide = pptx.addSlide();
+    const frame = frames[spec.songIndex];
+    slide.background = frame ? { data: frame.replace(/^data:/, ""), path: "frame.jpg" } : { color: PLAIN_BG };
+    if (spec.kind === "title") {
+      slide.addText(spec.title, {
+        x: 0.5,
+        y: spec.artist ? 2.4 : 2.9,
+        w: 12.33,
+        h: 1.6,
+        align: "center",
+        valign: "middle",
+        fontSize: 48,
+        bold: true,
+        color: "FFFFFF",
+        shadow: SHADOW,
+        fit: "shrink"
+      });
+      if (spec.artist) {
+        slide.addText(spec.artist, { x: 0.5, y: 4, w: 12.33, h: 0.8, align: "center", fontSize: 24, color: "CBD5E1", shadow: SHADOW });
+      }
+    } else {
+      slide.addText(spec.text, {
+        x: 0.5,
+        y: 0.6,
+        w: 12.33,
+        h: 6.3,
+        align: "center",
+        valign: "middle",
+        fontSize: fitFontSize(spec.text),
+        bold: true,
+        color: "FFFFFF",
+        shadow: SHADOW,
+        fit: "shrink"
+      });
+      if (spec.repeat > 1) {
+        slide.addText(`×${spec.repeat}`, { x: 11.3, y: 6.8, w: 1.8, h: 0.5, align: "right", fontSize: 18, color: "CBD5E1" });
+      }
+    }
+  }
+  const bytes = await pptx.write({ outputType: "uint8array" });
+  return window.api.setlistSavePptx({ bytes, defaultName: name });
+}
+const TOAST_MS = 2500;
+let seq = 0;
+const useToastStore = create(() => ({ toasts: [] }));
+function showToast(message, kind = "success") {
+  const id = ++seq;
+  useToastStore.setState((s) => ({ toasts: [...s.toasts, { id, message, kind }] }));
+  setTimeout(() => useToastStore.setState((s) => ({ toasts: s.toasts.filter((t) => t.id !== id) })), TOAST_MS);
+}
 const fold = (s) => s.normalize("NFD").replace(/[̀-ͯ]/g, "").toLowerCase();
 function matchesQuery(song, query) {
   const q = fold(query.trim());
@@ -6192,19 +6784,82 @@ function groupSongs(songs, folders, filter, query) {
   ].filter((g) => filter === "all" || g.id === filter).map((g) => ({ key: g.key, name: g.name, songs: visible.filter((s) => folderOf(s) === g.id) }));
   return groups.filter((g) => g.songs.length > 0);
 }
+function sectionLabel(s) {
+  return s.repeat && s.repeat > 1 ? `${s.label} ×${s.repeat}` : s.label;
+}
+function previewSections(song, maxSections = 2, maxLines = 2) {
+  return song.sections.slice(0, maxSections).map((s) => ({
+    label: sectionLabel(s),
+    lines: s.lines.slice(0, maxLines),
+    truncated: s.lines.length > maxLines
+  }));
+}
+const CARD_WIDTH = 288;
+const CARD_MAX_HEIGHT = 260;
+const GAP = 8;
+function LyricsHoverCard({ song, anchorRect }) {
+  const preview = previewSections(song);
+  const top = Math.max(GAP, Math.min(anchorRect.top, window.innerHeight - CARD_MAX_HEIGHT - GAP));
+  const left = Math.min(anchorRect.right + GAP, window.innerWidth - CARD_WIDTH - GAP);
+  return /* @__PURE__ */ jsxRuntimeExports.jsxs(
+    "div",
+    {
+      className: "fixed z-50 pointer-events-none bg-slate-800 border border-indigo-500/70 rounded-2xl shadow-2xl p-4 overflow-hidden",
+      style: { top, left, width: CARD_WIDTH, maxHeight: CARD_MAX_HEIGHT },
+      children: [
+        /* @__PURE__ */ jsxRuntimeExports.jsx("p", { className: "font-semibold text-white truncate", children: song.title }),
+        song.artist && /* @__PURE__ */ jsxRuntimeExports.jsx("p", { className: "text-xs text-slate-400 truncate mb-2", children: song.artist }),
+        preview.length === 0 ? /* @__PURE__ */ jsxRuntimeExports.jsx("p", { className: "text-sm text-slate-400 mt-2", children: "Sin letra" }) : /* @__PURE__ */ jsxRuntimeExports.jsx("div", { className: "flex flex-col gap-2 mt-2", children: preview.map((s, i) => /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { children: [
+          /* @__PURE__ */ jsxRuntimeExports.jsx("p", { className: "text-[11px] font-bold uppercase tracking-wide text-indigo-300", children: s.label }),
+          s.lines.map((l, j) => /* @__PURE__ */ jsxRuntimeExports.jsx("p", { className: "text-sm text-slate-200 leading-snug", children: l }, j)),
+          s.truncated && /* @__PURE__ */ jsxRuntimeExports.jsx("p", { className: "text-sm text-slate-400", children: "…" })
+        ] }, i)) }),
+        song.sections.length > preview.length && /* @__PURE__ */ jsxRuntimeExports.jsxs("p", { className: "text-xs text-slate-400 mt-2", children: [
+          song.sections.length,
+          " secciones en total"
+        ] })
+      ]
+    }
+  );
+}
+function SectionList({ song }) {
+  if (song.sections.length === 0) return /* @__PURE__ */ jsxRuntimeExports.jsx("p", { className: "text-sm text-slate-400", children: "Sin letra" });
+  return /* @__PURE__ */ jsxRuntimeExports.jsx("div", { className: "flex flex-col gap-3", children: song.sections.map((s, i) => /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { children: [
+    /* @__PURE__ */ jsxRuntimeExports.jsx("p", { className: "text-[11px] font-bold uppercase tracking-wide text-indigo-300", children: sectionLabel(s) }),
+    s.lines.map((l, j) => /* @__PURE__ */ jsxRuntimeExports.jsx("p", { className: "text-sm text-slate-200 leading-snug", children: l }, j))
+  ] }, i)) });
+}
+const HOVER_DELAY_MS = 400;
 function SetlistPage() {
   const { songs, fetchSongs } = useSongsStore();
   const { isLive, startLive, stopLive, changeSong, currentSong } = useLiveStore();
   const { setlists, fetchSetlists, saveSetlist } = useSetlistsStore();
   const { folders, fetchFolders } = useFoldersStore();
-  const [setlistSongs, setSetlistSongs] = reactExports.useState([]);
-  const [setlistName, setSetlistName] = reactExports.useState(`Servicio ${(/* @__PURE__ */ new Date()).toLocaleDateString("es")}`);
+  const {
+    setlistId,
+    name: setlistName,
+    serviceDate,
+    items: setlistSongs,
+    dirty,
+    addSong,
+    removeItem,
+    moveItem,
+    setName,
+    setServiceDate,
+    loadSaved,
+    reset,
+    markSaved,
+    syncWithCatalog
+  } = useServiceDraftStore();
   const [searchQuery, setSearchQuery] = reactExports.useState("");
   const [folderFilter, setFolderFilter] = reactExports.useState("all");
   const [showSaved, setShowSaved] = reactExports.useState(false);
   const [saving, setSaving] = reactExports.useState(false);
+  const [showExport, setShowExport] = reactExports.useState(false);
+  const [hover, setHover] = reactExports.useState(null);
+  const hoverTimer = reactExports.useRef(null);
   reactExports.useEffect(() => {
-    fetchSongs();
+    fetchSongs().then(() => syncWithCatalog(useSongsStore.getState().songs));
     fetchSetlists();
     fetchFolders();
   }, []);
@@ -6215,52 +6870,112 @@ function SetlistPage() {
   const groups = groupSongs(songs, folders, folderFilter, searchQuery);
   const hasLoose = songs.some((s) => s.folder_id == null || !folders.some((f) => f.id === s.folder_id));
   const inSetlist = new Set(setlistSongs.map((s) => s.song.id));
-  function addSong(song) {
-    if (setlistSongs.find((s) => s.song.id === song.id)) return;
-    setSetlistSongs((prev) => [...prev, { id: `${song.id}-${Date.now()}`, song }]);
-  }
-  function removeSong(id) {
-    setSetlistSongs((prev) => prev.filter((s) => s.id !== id));
-  }
   function handleDragEnd(event) {
     const { active, over } = event;
-    if (over && active.id !== over.id) {
-      setSetlistSongs((prev) => {
-        const oldIndex = prev.findIndex((s) => s.id === active.id);
-        const newIndex = prev.findIndex((s) => s.id === over.id);
-        return arrayMove(prev, oldIndex, newIndex);
-      });
-    }
+    if (over && active.id !== over.id) moveItem(String(active.id), String(over.id));
   }
   async function handlePresent() {
     if (setlistSongs.length === 0) return;
     await startLive(setlistSongs.map((s) => s.song));
   }
+  async function canDiscardDraft(message) {
+    return !dirty || confirmDialog(message, { title: "Cambios sin guardar", confirmLabel: "Continuar", danger: true });
+  }
   async function handleSave() {
-    if (setlistSongs.length === 0) return;
+    if (setlistSongs.length === 0 || saving) return;
     setSaving(true);
-    await saveSetlist({
-      name: setlistName,
-      service_date: (/* @__PURE__ */ new Date()).toISOString().slice(0, 10),
-      songs: setlistSongs.map((s, i) => ({ song: s.song, position: i }))
-    });
-    setSaving(false);
-  }
-  function loadSetlist(saved) {
-    if (!saved.songs) return;
-    setSetlistName(saved.name);
-    setSetlistSongs(saved.songs.map((item, i) => ({
-      id: `${item.song.id}-${i}-${Date.now()}`,
-      song: item.song
-    })));
-    setShowSaved(false);
-  }
-  function handleSongClick(item) {
-    if (isLive) {
-      changeSong(item.song);
+    try {
+      const id = await saveSetlist({
+        id: setlistId ?? void 0,
+        name: setlistName,
+        service_date: serviceDate,
+        songs: setlistSongs.map((s, i) => ({ song: s.song, position: i }))
+      });
+      markSaved(id);
+      showToast("Servicio guardado");
+    } catch (e) {
+      console.error("No se pudo guardar el servicio", e);
+      showToast("No se pudo guardar el servicio", "error");
+    } finally {
+      setSaving(false);
     }
   }
+  async function handleExportAlado() {
+    setShowExport(false);
+    try {
+      const res = await window.api.setlistExport({
+        name: setlistName,
+        service_date: serviceDate,
+        songIds: setlistSongs.map((s) => s.song.id)
+      });
+      if (res) showToast("Servicio exportado");
+    } catch (e) {
+      await alertDialog(ipcErrorMessage(e), "No se pudo exportar");
+    }
+  }
+  async function handleExportPptx() {
+    setShowExport(false);
+    showToast("Generando PowerPoint…");
+    try {
+      const res = await exportServicePptx(setlistName, setlistSongs.map((s) => s.song));
+      if (res) showToast("PowerPoint exportado");
+    } catch (e) {
+      await alertDialog(ipcErrorMessage(e), "No se pudo exportar el PowerPoint");
+    }
+  }
+  async function handleImport() {
+    if (!await canDiscardDraft("Hay cambios sin guardar. ¿Importar otro servicio de todos modos?")) return;
+    try {
+      const info = await window.api.setlistImportInspect();
+      if (!info) return;
+      let mode = "new";
+      if (info.duplicateOf) {
+        const choice = await ask({
+          title: "Este servicio ya existe",
+          message: `Ya hay un servicio guardado "${info.name}"${info.service_date ? ` del ${info.service_date}` : ""}. ¿Qué quieres hacer?`,
+          actions: [
+            { label: "Cancelar", value: "cancel", variant: "neutral" },
+            { label: "Crear copia", value: "new", variant: "neutral" },
+            { label: "Reemplazar", value: "replace", variant: "primary" }
+          ]
+        });
+        if (choice !== "new" && choice !== "replace") return;
+        mode = choice;
+      }
+      const summary = await window.api.setlistImportApply({ path: info.path, mode, replaceId: info.duplicateOf ?? void 0 });
+      await fetchSetlists();
+      await fetchSongs();
+      const saved = useSetlistsStore.getState().setlists.find((sl) => sl.id === summary.setlistId);
+      if (saved) loadSaved(saved);
+      await alertDialog(importSummaryText(summary), "Servicio importado");
+    } catch (e) {
+      await alertDialog(ipcErrorMessage(e), "No se pudo importar");
+    }
+  }
+  async function handleNew() {
+    if (!await canDiscardDraft("Hay cambios sin guardar. ¿Empezar un servicio nuevo?")) return;
+    reset();
+  }
+  async function loadSetlist(saved) {
+    if (!saved.songs) return;
+    setShowSaved(false);
+    if (!await canDiscardDraft(`Hay cambios sin guardar. ¿Cargar "${saved.name}" de todos modos?`)) return;
+    loadSaved(saved);
+  }
+  function handleSongClick(song) {
+    if (isLive) changeSong(song);
+  }
+  function scheduleHover(song, el) {
+    if (hoverTimer.current) clearTimeout(hoverTimer.current);
+    hoverTimer.current = setTimeout(() => setHover({ song, rect: el.getBoundingClientRect() }), HOVER_DELAY_MS);
+  }
+  function hideHover() {
+    if (hoverTimer.current) clearTimeout(hoverTimer.current);
+    hoverTimer.current = null;
+    setHover(null);
+  }
   return /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "flex h-full", children: [
+    hover && /* @__PURE__ */ jsxRuntimeExports.jsx(LyricsHoverCard, { song: hover.song, anchorRect: hover.rect }),
     /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "w-72 border-r border-slate-800 p-4 flex flex-col bg-slate-950", children: [
       /* @__PURE__ */ jsxRuntimeExports.jsx("h2", { className: "font-semibold text-slate-300 mb-3 text-sm uppercase tracking-wide", children: "Biblioteca" }),
       /* @__PURE__ */ jsxRuntimeExports.jsx(
@@ -6278,7 +6993,7 @@ function SetlistPage() {
         folders.map((f) => /* @__PURE__ */ jsxRuntimeExports.jsx(FolderChip, { active: folderFilter === f.id, onClick: () => setFolderFilter(f.id), children: f.name }, f.id)),
         hasLoose && /* @__PURE__ */ jsxRuntimeExports.jsx(FolderChip, { active: folderFilter === null, onClick: () => setFolderFilter(null), children: "Sin carpeta" })
       ] }),
-      /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "flex-1 overflow-y-auto flex flex-col gap-1", children: [
+      /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "flex-1 overflow-y-auto flex flex-col gap-1", onScroll: hideHover, children: [
         groups.map((group) => /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "flex flex-col gap-1", children: [
           folders.length > 0 && /* @__PURE__ */ jsxRuntimeExports.jsxs("p", { className: "sticky top-0 z-[1] bg-slate-950 text-[11px] font-semibold text-slate-500 uppercase tracking-wide px-1 pt-2 pb-1", children: [
             group.name,
@@ -6289,6 +7004,8 @@ function SetlistPage() {
             "button",
             {
               onClick: () => addSong(song),
+              onMouseEnter: (e) => scheduleHover(song, e.currentTarget),
+              onMouseLeave: hideHover,
               className: "text-left px-3 py-2.5 rounded-xl hover:bg-slate-800 transition-all duration-150 group border border-transparent hover:border-slate-700",
               children: [
                 /* @__PURE__ */ jsxRuntimeExports.jsxs("p", { className: `text-sm font-medium truncate ${inSetlist.has(song.id) ? "text-slate-500" : "text-white"}`, children: [
@@ -6306,12 +7023,37 @@ function SetlistPage() {
     ] }),
     /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "flex-1 p-6 flex flex-col", children: [
       /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "flex items-center gap-3 mb-5", children: [
+        /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "flex-1 min-w-0 flex flex-col gap-1", children: [
+          /* @__PURE__ */ jsxRuntimeExports.jsx(
+            "input",
+            {
+              value: setlistName,
+              onChange: (e) => setName(e.target.value),
+              "aria-label": "Nombre del servicio",
+              className: "bg-transparent text-xl font-bold text-white outline-none border-b border-transparent hover:border-slate-600 focus:border-indigo-500 transition-colors pb-1"
+            }
+          ),
+          /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "flex items-center gap-3 text-xs", children: [
+            /* @__PURE__ */ jsxRuntimeExports.jsx(
+              "input",
+              {
+                type: "date",
+                value: serviceDate,
+                onChange: (e) => e.target.value && setServiceDate(e.target.value),
+                "aria-label": "Fecha del servicio",
+                className: "bg-slate-800 border border-slate-700 rounded-lg px-2 py-1 text-slate-300 outline-none focus:border-indigo-500 [color-scheme:dark]"
+              }
+            ),
+            dirty && /* @__PURE__ */ jsxRuntimeExports.jsx("span", { className: "text-amber-400", children: "• sin guardar" })
+          ] })
+        ] }),
         /* @__PURE__ */ jsxRuntimeExports.jsx(
-          "input",
+          "button",
           {
-            value: setlistName,
-            onChange: (e) => setSetlistName(e.target.value),
-            className: "flex-1 bg-transparent text-xl font-bold text-white outline-none border-b border-transparent hover:border-slate-600 focus:border-indigo-500 transition-colors pb-1"
+            onClick: handleNew,
+            className: "px-3 py-2 rounded-xl bg-slate-800 hover:bg-slate-700 text-slate-300 text-sm transition-colors border border-slate-700",
+            title: "Empezar un servicio nuevo",
+            children: "＋ Nuevo"
           }
         ),
         /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "relative", children: [
@@ -6348,12 +7090,43 @@ function SetlistPage() {
         /* @__PURE__ */ jsxRuntimeExports.jsx(
           "button",
           {
+            onClick: handleImport,
+            className: "px-3 py-2 rounded-xl bg-slate-800 hover:bg-slate-700 text-slate-300 text-sm transition-colors border border-slate-700",
+            title: "Importar un servicio desde un archivo .alado",
+            children: "📥 Importar"
+          }
+        ),
+        /* @__PURE__ */ jsxRuntimeExports.jsx(
+          "button",
+          {
             onClick: handleSave,
             disabled: setlistSongs.length === 0 || saving,
             className: "px-4 py-2 rounded-xl bg-slate-700 hover:bg-slate-600 disabled:opacity-40 text-white text-sm font-medium transition-colors border border-slate-600",
             children: saving ? "Guardando..." : "💾 Guardar"
           }
         ),
+        /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "relative", children: [
+          /* @__PURE__ */ jsxRuntimeExports.jsx(
+            "button",
+            {
+              onClick: () => setShowExport((v) => !v),
+              disabled: setlistSongs.length === 0,
+              className: "px-3 py-2 rounded-xl bg-slate-800 hover:bg-slate-700 disabled:opacity-40 text-slate-300 text-sm transition-colors border border-slate-700",
+              title: "Exportar este servicio",
+              children: "📤 Exportar ▾"
+            }
+          ),
+          showExport && /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "absolute right-0 top-full mt-1 w-60 bg-slate-800 border border-slate-700 rounded-2xl shadow-xl z-10 overflow-hidden", children: [
+            /* @__PURE__ */ jsxRuntimeExports.jsxs("button", { onClick: handleExportAlado, className: "w-full text-left px-4 py-3 hover:bg-slate-700 transition-colors border-b border-slate-700/50", children: [
+              /* @__PURE__ */ jsxRuntimeExports.jsx("p", { className: "text-sm font-medium text-white", children: "Archivo .alado" }),
+              /* @__PURE__ */ jsxRuntimeExports.jsx("p", { className: "text-xs text-slate-400", children: "Para abrirlo en otra compu con ALADO" })
+            ] }),
+            /* @__PURE__ */ jsxRuntimeExports.jsxs("button", { onClick: handleExportPptx, className: "w-full text-left px-4 py-3 hover:bg-slate-700 transition-colors", children: [
+              /* @__PURE__ */ jsxRuntimeExports.jsx("p", { className: "text-sm font-medium text-white", children: "PowerPoint" }),
+              /* @__PURE__ */ jsxRuntimeExports.jsx("p", { className: "text-xs text-slate-400", children: "Respaldo para presentar sin ALADO" })
+            ] })
+          ] })
+        ] }),
         /* @__PURE__ */ jsxRuntimeExports.jsx(
           "button",
           {
@@ -6368,20 +7141,20 @@ function SetlistPage() {
       setlistSongs.length === 0 ? /* @__PURE__ */ jsxRuntimeExports.jsx("div", { className: "flex-1 flex items-center justify-center text-slate-600 text-center border-2 border-dashed border-slate-800 rounded-2xl", children: /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { children: [
         /* @__PURE__ */ jsxRuntimeExports.jsx("p", { className: "text-4xl mb-3", children: "📋" }),
         /* @__PURE__ */ jsxRuntimeExports.jsx("p", { className: "text-slate-500", children: "Pulsa una canción de la biblioteca para añadirla" })
-      ] }) }) : /* @__PURE__ */ jsxRuntimeExports.jsx(DndContext, { sensors, collisionDetection: closestCenter, onDragEnd: handleDragEnd, children: /* @__PURE__ */ jsxRuntimeExports.jsx(SortableContext, { items: setlistSongs.map((s) => s.id), strategy: verticalListSortingStrategy, children: /* @__PURE__ */ jsxRuntimeExports.jsx("div", { className: "flex flex-col gap-2 overflow-y-auto", children: setlistSongs.map((item, index) => {
+      ] }) }) : /* @__PURE__ */ jsxRuntimeExports.jsx(DndContext, { sensors, collisionDetection: closestCenter, onDragEnd: handleDragEnd, children: /* @__PURE__ */ jsxRuntimeExports.jsx(SortableContext, { items: setlistSongs.map((s) => s.key), strategy: verticalListSortingStrategy, children: /* @__PURE__ */ jsxRuntimeExports.jsx("div", { className: "flex flex-col gap-2 overflow-y-auto", children: setlistSongs.map((item, index) => {
         const isCurrentSong = isLive && currentSong?.id === item.song.id;
         return /* @__PURE__ */ jsxRuntimeExports.jsx(
           SortableSetlistItem,
           {
-            id: item.id,
+            id: item.key,
             song: item.song,
             index,
             isLive,
             isCurrentSong,
-            onRemove: () => removeSong(item.id),
-            onClick: () => handleSongClick(item)
+            onRemove: () => removeItem(item.key),
+            onClick: () => handleSongClick(item.song)
           },
-          item.id
+          item.key
         );
       }) }) }) })
     ] })
@@ -6405,42 +7178,63 @@ function SortableSetlistItem({ id, song, index, isLive, isCurrentSong, onRemove,
     transition,
     opacity: isDragging ? 0.5 : 1
   };
-  const firstLines = song.sections[0]?.lines.slice(0, 2).join(" · ");
+  const [expanded, setExpanded] = reactExports.useState(false);
   return /* @__PURE__ */ jsxRuntimeExports.jsxs(
     "div",
     {
       ref: setNodeRef,
       style,
       onClick: isLive ? onClick : void 0,
-      className: `flex items-center gap-3 rounded-2xl px-4 py-3 group border transition-all duration-150
+      className: `rounded-2xl px-4 py-3 group border transition-all duration-150
         ${isCurrentSong ? "bg-indigo-950 border-indigo-500 border-l-4" : isLive ? "bg-slate-800 border-slate-700 hover:border-indigo-400 hover:bg-slate-750 cursor-pointer" : "bg-slate-800 border-slate-700"}`,
       children: [
-        /* @__PURE__ */ jsxRuntimeExports.jsx(
-          "span",
-          {
-            ...attributes,
-            ...listeners,
-            className: "text-slate-600 cursor-grab active:cursor-grabbing text-lg select-none",
-            children: "⠿"
-          }
-        ),
-        /* @__PURE__ */ jsxRuntimeExports.jsx("span", { className: `text-sm w-6 text-center font-mono shrink-0
-        ${isCurrentSong ? "text-indigo-400" : "text-slate-600"}`, children: isCurrentSong ? "▶" : index + 1 }),
-        /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "flex-1 min-w-0", title: firstLines, children: [
-          /* @__PURE__ */ jsxRuntimeExports.jsx("p", { className: `font-medium truncate ${isCurrentSong ? "text-indigo-100" : "text-white"}`, children: song.title }),
-          song.artist && /* @__PURE__ */ jsxRuntimeExports.jsx("p", { className: "text-xs text-slate-500 truncate", children: song.artist })
+        /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "flex items-center gap-3", children: [
+          /* @__PURE__ */ jsxRuntimeExports.jsx(
+            "span",
+            {
+              ...attributes,
+              ...listeners,
+              className: "text-slate-600 cursor-grab active:cursor-grabbing text-lg select-none",
+              children: "⠿"
+            }
+          ),
+          /* @__PURE__ */ jsxRuntimeExports.jsx("span", { className: `text-sm w-6 text-center font-mono shrink-0
+          ${isCurrentSong ? "text-indigo-400" : "text-slate-600"}`, children: isCurrentSong ? "▶" : index + 1 }),
+          /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "flex-1 min-w-0", children: [
+            /* @__PURE__ */ jsxRuntimeExports.jsx("p", { className: `font-medium truncate ${isCurrentSong ? "text-indigo-100" : "text-white"}`, children: song.title }),
+            song.artist && /* @__PURE__ */ jsxRuntimeExports.jsx("p", { className: "text-xs text-slate-500 truncate", children: song.artist })
+          ] }),
+          /* @__PURE__ */ jsxRuntimeExports.jsxs(
+            "button",
+            {
+              onPointerDown: (e) => e.stopPropagation(),
+              onClick: (e) => {
+                e.stopPropagation();
+                setExpanded((v) => !v);
+              },
+              "aria-expanded": expanded,
+              title: expanded ? "Ocultar letra" : "Ver letra",
+              className: "text-slate-400 hover:text-white px-2 py-1 rounded-lg hover:bg-slate-700 transition-colors text-sm",
+              children: [
+                expanded ? "▾" : "▸",
+                " Letra"
+              ]
+            }
+          ),
+          /* @__PURE__ */ jsxRuntimeExports.jsx(
+            "button",
+            {
+              onClick: (e) => {
+                e.stopPropagation();
+                onRemove();
+              },
+              title: "Quitar del servicio",
+              className: "opacity-0 group-hover:opacity-100 text-slate-500 hover:text-red-400 transition-all px-1",
+              children: "✕"
+            }
+          )
         ] }),
-        /* @__PURE__ */ jsxRuntimeExports.jsx(
-          "button",
-          {
-            onClick: (e) => {
-              e.stopPropagation();
-              onRemove();
-            },
-            className: "opacity-0 group-hover:opacity-100 text-slate-500 hover:text-red-400 transition-all px-1",
-            children: "✕"
-          }
-        )
+        expanded && /* @__PURE__ */ jsxRuntimeExports.jsx("div", { className: "mt-3 ml-14 pl-3 border-l border-slate-700 cursor-default", onClick: (e) => e.stopPropagation(), children: /* @__PURE__ */ jsxRuntimeExports.jsx(SectionList, { song }) })
       ]
     }
   );
@@ -6860,12 +7654,29 @@ function DialogHost() {
     }
   ) });
 }
+function ToastHost() {
+  const toasts = useToastStore((s) => s.toasts);
+  if (toasts.length === 0) return null;
+  return /* @__PURE__ */ jsxRuntimeExports.jsx("div", { className: "fixed bottom-6 right-6 z-[250] flex flex-col gap-2 pointer-events-none", role: "status", "aria-live": "polite", children: toasts.map((t) => /* @__PURE__ */ jsxRuntimeExports.jsxs(
+    "div",
+    {
+      className: `px-4 py-3 rounded-xl shadow-2xl text-sm font-medium border
+            ${t.kind === "error" ? "bg-red-950 border-red-700 text-red-100" : "bg-slate-800 border-emerald-600 text-white"}`,
+      children: [
+        t.kind === "error" ? "⚠ " : "✓ ",
+        t.message
+      ]
+    },
+    t.id
+  )) });
+}
 function App() {
   const [page, setPage] = reactExports.useState("songs");
   const isLive = useLiveStore((s) => s.isLive);
   return /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "flex h-screen bg-slate-900 text-white overflow-hidden", children: [
     /* @__PURE__ */ jsxRuntimeExports.jsx(PlaybackController, {}),
     /* @__PURE__ */ jsxRuntimeExports.jsx(DialogHost, {}),
+    /* @__PURE__ */ jsxRuntimeExports.jsx(ToastHost, {}),
     /* @__PURE__ */ jsxRuntimeExports.jsxs("aside", { className: "w-20 flex flex-col items-center py-6 gap-1 bg-slate-950 border-r border-slate-800", children: [
       /* @__PURE__ */ jsxRuntimeExports.jsx(NavBtn, { icon: "🎵", label: "Canciones", active: page === "songs", onClick: () => setPage("songs") }),
       /* @__PURE__ */ jsxRuntimeExports.jsx(NavBtn, { icon: "📋", label: "Servicio", active: page === "setlist", onClick: () => setPage("setlist") }),
@@ -6903,3 +7714,6 @@ function NavBtn({ icon, label, active, onClick }) {
 ReactDOM.createRoot(document.getElementById("root")).render(
   /* @__PURE__ */ jsxRuntimeExports.jsx(React.StrictMode, { children: /* @__PURE__ */ jsxRuntimeExports.jsx(App, {}) })
 );
+export {
+  __vitePreload as _
+};

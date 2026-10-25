@@ -1,4 +1,4 @@
-import { a as reactExports, D as DEFAULT_SLIDE_STYLE, j as jsxRuntimeExports, S as SlideView, c as ReactDOM, R as React } from "./SlideView-_N3UuWWH.js";
+import { a as reactExports, D as DEFAULT_SLIDE_STYLE, j as jsxRuntimeExports, S as SlideView, c as ReactDOM, R as React } from "./SlideView-CqN0asXU.js";
 function VideoOverlay() {
   const [lines, setLines] = reactExports.useState([]);
   const [textStyle, setTextStyle] = reactExports.useState(DEFAULT_SLIDE_STYLE);

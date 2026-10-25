@@ -644,6 +644,20 @@ async function purgeSongAudio(songId) {
   await queue?.cancel(songId);
   fs.rmSync(stemsDir(songId), { recursive: true, force: true, maxRetries: 5, retryDelay: 200 });
 }
+function toSetlistItem(row) {
+  return {
+    position: row.position,
+    custom_video: row.custom_video ?? null,
+    song: {
+      id: row.song_id,
+      title: row.title,
+      artist: row.artist,
+      video_path: row.video_path,
+      sections: JSON.parse(row.sections || "[]"),
+      text_style: JSON.parse(row.text_style || "{}")
+    }
+  };
+}
 function registerDbHandlers() {
   electron.ipcMain.handle("db:get-songs", (_e, query) => {
     const db2 = getDb();
@@ -683,7 +697,7 @@ function registerDbHandlers() {
         `SELECT si.*, s.title, s.artist, s.sections, s.video_path, s.text_style
          FROM setlist_items si JOIN songs s ON s.id = si.song_id
          WHERE si.setlist_id = ? ORDER BY si.position`
-      ).all(sl.id).map((row) => ({ ...row, ...deserializeSong(row) }))
+      ).all(sl.id).map(toSetlistItem)
     }));
   });
   electron.ipcMain.handle("db:save-setlist", (_e, setlist) => {
@@ -1077,6 +1091,191 @@ function registerPackHandlers() {
     return songId;
   });
 }
+const ALADO_FORMAT = "alado-setlist";
+const ALADO_VERSION = 1;
+const fileName = (p) => p ? p.split(/[\\/]/).pop() || null : null;
+function buildAladoFile(setlist, songs, now) {
+  return {
+    format: ALADO_FORMAT,
+    version: ALADO_VERSION,
+    exported_at: now.toISOString(),
+    setlist,
+    items: songs.map((s, position) => ({
+      position,
+      song: {
+        title: s.title,
+        artist: s.artist ?? null,
+        sections: s.sections,
+        text_style: s.text_style,
+        video_file: fileName(s.video_path)
+      },
+      custom_video_file: fileName(s.custom_video)
+    }))
+  };
+}
+const NOT_ALADO = "El archivo no es un servicio de ALADO.";
+const isObj = (v) => typeof v === "object" && v !== null && !Array.isArray(v);
+function assertSections(v, title) {
+  const ok = Array.isArray(v) && v.every((s) => isObj(s) && typeof s.label === "string" && Array.isArray(s.lines) && s.lines.every((l) => typeof l === "string"));
+  if (!ok) throw new Error(`El archivo está dañado: la letra de "${title}" no es válida.`);
+}
+function parseAladoFile(text) {
+  let data;
+  try {
+    data = JSON.parse(text);
+  } catch {
+    throw new Error(NOT_ALADO);
+  }
+  if (!isObj(data) || data.format !== ALADO_FORMAT || typeof data.version !== "number") throw new Error(NOT_ALADO);
+  if (data.version > ALADO_VERSION) {
+    throw new Error("El servicio se exportó con una versión más nueva de ALADO. Actualiza la app para importarlo.");
+  }
+  if (!isObj(data.setlist) || typeof data.setlist.name !== "string" || !Array.isArray(data.items)) {
+    throw new Error("El archivo está dañado: faltan los datos del servicio.");
+  }
+  data.items.forEach((item, i) => {
+    if (!isObj(item) || !isObj(item.song) || typeof item.song.title !== "string" || !item.song.title.trim()) {
+      throw new Error(`El archivo está dañado: la canción ${i + 1} no tiene título.`);
+    }
+    assertSections(item.song.sections, item.song.title);
+  });
+  return data;
+}
+function normalizeTitle(t) {
+  return t.normalize("NFD").replace(new RegExp("\\p{Diacritic}", "gu"), "").toLowerCase().replace(/\s+/g, " ").trim();
+}
+function pickMatch(song, local) {
+  const key = normalizeTitle(song.title);
+  const same = local.filter((l) => normalizeTitle(l.title) === key);
+  if (same.length === 0) return null;
+  const artist = song.artist ? normalizeTitle(song.artist) : "";
+  const byArtist = artist ? same.filter((l) => l.artist && normalizeTitle(l.artist) === artist) : [];
+  const pool = byArtist.length > 0 ? byArtist : same;
+  return pool.reduce((best, l) => (l.updated_at ?? "") > (best.updated_at ?? "") ? l : best);
+}
+function sectionsDiffer(a, b) {
+  if (a.length !== b.length) return true;
+  return a.some((s, i) => {
+    const o = b[i];
+    return s.label !== o.label || s.type !== o.type || (s.repeat ?? 1) !== (o.repeat ?? 1) || s.lines.length !== o.lines.length || s.lines.some((l, j) => l !== o.lines[j]);
+  });
+}
+function planImport(file, local, videosDir2, videoNames2) {
+  return file.items.map(({ song }) => {
+    const match = pickMatch(song, local);
+    if (match) return { kind: "existing", songId: match.id, title: match.title, differs: sectionsDiffer(match.sections, song.sections) };
+    const videoPath = song.video_file && videoNames2.has(song.video_file) ? path.join(videosDir2, song.video_file) : null;
+    return { kind: "create", song, videoPath };
+  });
+}
+const safeFileName = (name, fallback) => name.replace(/[<>:"/\\|?*]/g, "").trim() || fallback;
+const videosDir = () => path.join(electron.app.getPath("userData"), "videos");
+function videoNames(dir) {
+  try {
+    return new Set(fs.readdirSync(dir));
+  } catch {
+    return /* @__PURE__ */ new Set();
+  }
+}
+function findDuplicateSetlist(name, serviceDate) {
+  const row = getDb().prepare(
+    `SELECT id FROM setlists WHERE name = ? AND IFNULL(service_date, '') = IFNULL(?, '') ORDER BY id DESC LIMIT 1`
+  ).get(name, serviceDate);
+  return row?.id ?? null;
+}
+function registerSetlistHandlers() {
+  electron.ipcMain.handle("setlist:export", async (_e, p) => {
+    const db2 = getDb();
+    const byId = db2.prepare("SELECT * FROM songs WHERE id = ?");
+    const songs = p.songIds.map((id) => byId.get(id)).filter(Boolean).map(deserializeSong);
+    const file = buildAladoFile({ name: p.name, service_date: p.service_date || null, notes: null }, songs, /* @__PURE__ */ new Date());
+    const { canceled, filePath } = await electron.dialog.showSaveDialog({
+      defaultPath: `${safeFileName(p.name, "servicio")}.alado`,
+      filters: [{ name: "Servicio ALADO", extensions: ["alado"] }]
+    });
+    if (canceled || !filePath) return null;
+    fs.writeFileSync(filePath, JSON.stringify(file, null, 2), "utf-8");
+    return { path: filePath };
+  });
+  electron.ipcMain.handle("setlist:save-pptx", async (_e, p) => {
+    const { canceled, filePath } = await electron.dialog.showSaveDialog({
+      defaultPath: `${safeFileName(p.defaultName, "servicio")}.pptx`,
+      filters: [{ name: "Presentación de PowerPoint", extensions: ["pptx"] }]
+    });
+    if (canceled || !filePath) return null;
+    fs.writeFileSync(filePath, Buffer.from(p.bytes));
+    return { path: filePath };
+  });
+  electron.ipcMain.handle("setlist:import-inspect", async () => {
+    const { canceled, filePaths } = await electron.dialog.showOpenDialog({
+      properties: ["openFile"],
+      filters: [{ name: "Servicio ALADO", extensions: ["alado"] }]
+    });
+    if (canceled || !filePaths[0]) return null;
+    const file = parseAladoFile(fs.readFileSync(filePaths[0], "utf-8"));
+    return {
+      path: filePaths[0],
+      name: file.setlist.name,
+      service_date: file.setlist.service_date,
+      songCount: file.items.length,
+      duplicateOf: findDuplicateSetlist(file.setlist.name, file.setlist.service_date)
+    };
+  });
+  electron.ipcMain.handle("setlist:import-apply", (_e, p) => {
+    const file = parseAladoFile(fs.readFileSync(p.path, "utf-8"));
+    const db2 = getDb();
+    const local = db2.prepare("SELECT id, title, artist, sections, updated_at FROM songs").all().map((r) => ({ ...r, sections: JSON.parse(r.sections || "[]") }));
+    const dir = videosDir();
+    const names = videoNames(dir);
+    const steps = planImport(file, local, dir, names);
+    const summary = { reused: 0, created: [], differing: [], missingVideo: [] };
+    const insertSong = db2.prepare(
+      "INSERT INTO songs (title, artist, sections, video_path, text_style, folder_id) VALUES (?,?,?,?,?,NULL)"
+    );
+    const insertItem = db2.prepare(
+      "INSERT INTO setlist_items (setlist_id, song_id, position, custom_video) VALUES (?,?,?,?)"
+    );
+    const run2 = db2.transaction(() => {
+      const songIds2 = steps.map((step) => {
+        if (step.kind === "existing") {
+          summary.reused++;
+          if (step.differs) summary.differing.push(step.title);
+          return step.songId;
+        }
+        const { song } = step;
+        summary.created.push(song.title);
+        if (!step.videoPath) summary.missingVideo.push(song.title);
+        const r = insertSong.run(
+          song.title,
+          song.artist ?? null,
+          JSON.stringify(song.sections),
+          step.videoPath,
+          JSON.stringify(song.text_style ?? {})
+        );
+        return Number(r.lastInsertRowid);
+      });
+      const { name, service_date, notes } = file.setlist;
+      let setlistId2;
+      if (p.mode === "replace" && p.replaceId) {
+        db2.prepare("UPDATE setlists SET name=?, service_date=?, notes=? WHERE id=?").run(name, service_date, notes, p.replaceId);
+        db2.prepare("DELETE FROM setlist_items WHERE setlist_id = ?").run(p.replaceId);
+        setlistId2 = p.replaceId;
+      } else {
+        setlistId2 = Number(db2.prepare("INSERT INTO setlists (name, service_date, notes) VALUES (?,?,?)").run(name, service_date, notes).lastInsertRowid);
+      }
+      file.items.forEach((item, i) => {
+        const custom = item.custom_video_file && names.has(item.custom_video_file) ? path.join(dir, item.custom_video_file) : null;
+        insertItem.run(setlistId2, songIds2[i], i, custom);
+      });
+      return { setlistId: setlistId2, songIds: songIds2 };
+    });
+    const { setlistId, songIds } = run2();
+    const ready = db2.prepare(`SELECT 1 FROM song_audio WHERE song_id = ? AND status = 'ready'`);
+    const titles = new Map(db2.prepare("SELECT id, title FROM songs").all().map((r) => [r.id, r.title]));
+    const missingAudio = [...new Set(songIds)].filter((id) => !ready.get(id)).map((id) => titles.get(id));
+    return { setlistId, ...summary, missingAudio };
+  });
+}
 const MEDIA_SCHEME = "alado-media";
 const VIDEO_EXT = /\.(mp4|m4v|webm|mov)$/i;
 const ABSOLUTE = /^([A-Za-z]:[\\/]|\/)/;
@@ -1099,14 +1298,17 @@ function mediaPathFromUrl(url2) {
 }
 function registerMediaSchemePrivileges() {
   electron.protocol.registerSchemesAsPrivileged([
-    { scheme: MEDIA_SCHEME, privileges: { standard: true, secure: true, stream: true, supportFetchAPI: true } }
+    { scheme: MEDIA_SCHEME, privileges: { standard: true, secure: true, stream: true, supportFetchAPI: true, corsEnabled: true } }
   ]);
 }
 function registerMediaProtocol() {
-  electron.protocol.handle(MEDIA_SCHEME, (request) => {
+  electron.protocol.handle(MEDIA_SCHEME, async (request) => {
     const path2 = mediaPathFromUrl(request.url);
     if (!path2 || !fs.existsSync(path2)) return new Response("Not found", { status: 404 });
-    return electron.net.fetch(url.pathToFileURL(path2).toString(), { headers: request.headers });
+    const res = await electron.net.fetch(url.pathToFileURL(path2).toString(), { headers: request.headers });
+    const headers = new Headers(res.headers);
+    headers.set("Access-Control-Allow-Origin", "*");
+    return new Response(res.body, { status: res.status, statusText: res.statusText, headers });
   });
 }
 if (process.env.NODE_ENV === "development") {
@@ -1123,6 +1325,7 @@ electron.app.whenReady().then(() => {
   registerLyricsHandlers();
   registerAudioHandlers(() => mainWindow);
   registerPackHandlers();
+  registerSetlistHandlers();
   mainWindow = createMainWindow();
   electron.ipcMain.handle("live:open", async () => {
     if (!liveWindow || liveWindow.isDestroyed()) {
