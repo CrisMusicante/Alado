@@ -1,6 +1,7 @@
 import { ipcMain } from 'electron'
 import { getDb } from '../db/database'
 import { purgeSongAudio } from './audio.handlers'
+import { toSetlistItem } from '../setlist/setlistRows'
 
 export interface Section {
   type: 'verse' | 'chorus' | 'estribillo' | 'pre-chorus' | 'bridge' | 'outro' | 'intro' | 'custom'
@@ -93,7 +94,7 @@ export function registerDbHandlers(): void {
         `SELECT si.*, s.title, s.artist, s.sections, s.video_path, s.text_style
          FROM setlist_items si JOIN songs s ON s.id = si.song_id
          WHERE si.setlist_id = ? ORDER BY si.position`
-      ).all(sl.id).map((row: any) => ({ ...row, ...deserializeSong(row) }))
+      ).all(sl.id).map(toSetlistItem)
     }))
   })
 
@@ -159,7 +160,7 @@ export function registerDbHandlers(): void {
   })
 }
 
-function deserializeSong(row: any): Song {
+export function deserializeSong(row: any): Song {
   return {
     ...row,
     sections: JSON.parse(row.sections || '[]'),
