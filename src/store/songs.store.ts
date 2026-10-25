@@ -64,7 +64,7 @@ declare global {
       getSetlists: () => Promise<any[]>
       saveSetlist: (s: any) => Promise<number>
       deleteSetlist: (id: number) => Promise<void>
-      setlistExport: (p: { name: string; service_date: string; songIds: number[] }) => Promise<{ path: string } | null>
+      setlistExport: (p: { name: string; service_date: string; songIds: number[]; customVideos?: Array<string | null> }) => Promise<{ path: string } | null>
       setlistSavePptx: (p: { bytes: Uint8Array; defaultName: string }) => Promise<{ path: string } | null>
       setlistImportInspect: () => Promise<{ path: string; name: string; service_date: string | null; songCount: number; duplicateOf: number | null } | null>
       setlistImportApply: (p: { path: string; mode: 'new' | 'replace'; replaceId?: number }) => Promise<ImportSummary>

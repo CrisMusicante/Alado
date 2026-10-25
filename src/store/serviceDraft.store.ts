@@ -11,6 +11,8 @@ import type { SavedSetlist } from './setlists.store'
 export interface DraftItem {
   key: string
   song: Song
+  /** Per-service video override (setlist_items.custom_video); kept so saving doesn't erase it. */
+  custom_video: string | null
 }
 
 export interface ServiceDraftState {
@@ -55,7 +57,7 @@ export const useServiceDraftStore = create<ServiceDraftState>()(persist((set, ge
 
   addSong: (song) => {
     if (get().items.some(i => i.song.id === song.id)) return
-    set({ items: [...get().items, { key: newKey(song.id), song }], dirty: true })
+    set({ items: [...get().items, { key: newKey(song.id), song, custom_video: null }], dirty: true })
   },
 
   removeItem: (key) => set({ items: get().items.filter(i => i.key !== key), dirty: true }),
@@ -77,7 +79,7 @@ export const useServiceDraftStore = create<ServiceDraftState>()(persist((set, ge
     setlistId: saved.id ?? null,
     name: saved.name,
     serviceDate: saved.service_date ?? todayISO(),
-    items: (saved.songs ?? []).map(s => ({ key: newKey(s.song.id), song: s.song })),
+    items: (saved.songs ?? []).map(s => ({ key: newKey(s.song.id), song: s.song, custom_video: s.custom_video ?? null })),
     dirty: false
   }),
 

@@ -38,6 +38,13 @@ describe('serviceDraft', () => {
     expect(ids()).toEqual([2])
   })
 
+  it('loadSaved conserva el video especial de cada canción del servicio', () => {
+    draft().loadSaved({ id: 7, name: 'Dom', songs: [{ song: song(2), position: 0, custom_video: '/videos/esp.mp4' }] })
+    expect(draft().items[0].custom_video).toBe('/videos/esp.mp4')
+    draft().addSong(song(3))
+    expect(draft().items[1].custom_video).toBeNull()
+  })
+
   it('markSaved fija el id y limpia dirty', () => {
     draft().addSong(song(1))
     draft().markSaved(9)

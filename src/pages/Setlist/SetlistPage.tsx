@@ -81,7 +81,7 @@ export default function SetlistPage() {
         id: setlistId ?? undefined,
         name: setlistName,
         service_date: serviceDate,
-        songs: setlistSongs.map((s, i) => ({ song: s.song, position: i }))
+        songs: setlistSongs.map((s, i) => ({ song: s.song, position: i, custom_video: s.custom_video }))
       })
       markSaved(id)
       showToast('Servicio guardado')
@@ -97,7 +97,7 @@ export default function SetlistPage() {
     setShowExport(false)
     try {
       const res = await window.api.setlistExport({
-        name: setlistName, service_date: serviceDate, songIds: setlistSongs.map(s => s.song.id!)
+        name: setlistName, service_date: serviceDate, songIds: setlistSongs.map(s => s.song.id!), customVideos: setlistSongs.map(s => s.custom_video)
       })
       if (res) showToast('Servicio exportado')
     } catch (e) {

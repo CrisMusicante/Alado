@@ -100,28 +100,32 @@ export function registerDbHandlers(): void {
 
   ipcMain.handle('db:save-setlist', (_e, setlist: Setlist) => {
     const db = getDb()
-    let setlistId = setlist.id
+    // One transaction: a failure must not leave a half-saved service (or a new row the renderer
+    // never learns about, which the next save would duplicate).
+    return db.transaction((): number => {
+      let setlistId = setlist.id
 
-    if (setlistId) {
-      db.prepare('UPDATE setlists SET name=?, service_date=?, notes=? WHERE id=?')
-        .run(setlist.name, setlist.service_date ?? null, setlist.notes ?? null, setlistId)
-    } else {
-      const result = db.prepare(
-        'INSERT INTO setlists (name, service_date, notes) VALUES (?,?,?)'
-      ).run(setlist.name, setlist.service_date ?? null, setlist.notes ?? null)
-      setlistId = result.lastInsertRowid as number
-    }
+      if (setlistId) {
+        db.prepare('UPDATE setlists SET name=?, service_date=?, notes=? WHERE id=?')
+          .run(setlist.name, setlist.service_date ?? null, setlist.notes ?? null, setlistId)
+      } else {
+        const result = db.prepare(
+          'INSERT INTO setlists (name, service_date, notes) VALUES (?,?,?)'
+        ).run(setlist.name, setlist.service_date ?? null, setlist.notes ?? null)
+        setlistId = result.lastInsertRowid as number
+      }
 
-    // Replace items
-    db.prepare('DELETE FROM setlist_items WHERE setlist_id = ?').run(setlistId)
-    const insertItem = db.prepare(
-      'INSERT INTO setlist_items (setlist_id, song_id, position, custom_video) VALUES (?,?,?,?)'
-    )
-    setlist.songs?.forEach((item, i) => {
-      insertItem.run(setlistId, item.song.id, i, item.custom_video ?? null)
-    })
+      // Replace items
+      db.prepare('DELETE FROM setlist_items WHERE setlist_id = ?').run(setlistId)
+      const insertItem = db.prepare(
+        'INSERT INTO setlist_items (setlist_id, song_id, position, custom_video) VALUES (?,?,?,?)'
+      )
+      setlist.songs?.forEach((item, i) => {
+        insertItem.run(setlistId, item.song.id, i, item.custom_video ?? null)
+      })
 
-    return setlistId
+      return setlistId
+    })()
   })
 
   ipcMain.handle('db:delete-setlist', (_e, id: number) => {
