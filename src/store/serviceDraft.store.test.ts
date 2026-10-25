@@ -1,5 +1,5 @@
 import { describe, it, expect, beforeEach } from 'vitest'
-import { useServiceDraftStore, todayISO } from './serviceDraft.store'
+import { useServiceDraftStore, todayISO, defaultServiceName, migrateDraft } from './serviceDraft.store'
 import type { Song } from './songs.store'
 
 const song = (id: number, title = `Canción ${id}`): Song => ({ id, title, sections: [], text_style: {} })
@@ -70,5 +70,54 @@ describe('serviceDraft', () => {
     expect(draft().serviceDate).toBe(todayISO())
     expect(draft().setlistId).toBeNull()
     expect(draft().items).toEqual([])
+  })
+
+  it('el nombre por defecto sigue a la fecha mientras no se edite', () => {
+    draft().setServiceDate('2026-11-01')
+    expect(draft().name).toBe('Servicio 01/11/2026')
+    draft().setName('Culto de jóvenes')
+    draft().setServiceDate('2026-11-08')
+    expect(draft().name).toBe('Culto de jóvenes')
+  })
+
+  it('setNotes guarda la descripción y marca dirty; loadSaved la trae', () => {
+    draft().setNotes('Tono en Re')
+    expect(draft().notes).toBe('Tono en Re')
+    expect(draft().dirty).toBe(true)
+    draft().loadSaved({ id: 4, name: 'Dom', service_date: '2026-10-26', notes: 'Santa cena', songs: [] })
+    expect(draft().notes).toBe('Santa cena')
+    draft().reset()
+    expect(draft().notes).toBe('')
+  })
+
+  it('un servicio cargado con nombre propio no se renombra al cambiar la fecha', () => {
+    draft().loadSaved({ id: 4, name: 'Santa cena', service_date: '2026-10-26', songs: [] })
+    draft().setServiceDate('2026-11-02')
+    expect(draft().name).toBe('Santa cena')
+  })
+
+  it('forgetSavedSetlist suelta el id si se borró el servicio cargado', () => {
+    draft().addSong(song(1))
+    draft().markSaved(5)
+    draft().forgetSavedSetlist(6)
+    expect(draft().setlistId).toBe(5)
+    draft().forgetSavedSetlist(5)
+    expect(draft().setlistId).toBeNull()
+    expect(draft().dirty).toBe(true)
+  })
+})
+
+describe('defaultServiceName', () => {
+  it('formatea la fecha como DD/MM/AAAA', () => {
+    expect(defaultServiceName('2026-10-25')).toBe('Servicio 25/10/2026')
+  })
+})
+
+describe('migrateDraft', () => {
+  it('un borrador de la versión anterior conserva su nombre propio', () => {
+    expect(migrateDraft({ name: 'Culto de jóvenes', serviceDate: '2026-10-25' }, 0))
+      .toMatchObject({ name: 'Culto de jóvenes', nameIsDefault: false, notes: '' })
+    expect(migrateDraft({ name: 'Servicio 25/10/2026', serviceDate: '2026-10-25' }, 0))
+      .toMatchObject({ nameIsDefault: true })
   })
 })

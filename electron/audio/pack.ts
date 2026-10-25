@@ -62,7 +62,7 @@ export function parsePack(data: Uint8Array): PackContents {
 
   const manifest = readJson(raw, 'manifest.json') as PackManifest
   if (manifest.packVersion !== PACK_VERSION) {
-    throw new Error(`Este paquete usa la versión ${manifest.packVersion} del formato; esta app solo entiende la versión ${PACK_VERSION}. Actualiza WorshipFlow.`)
+    throw new Error(`Este paquete usa la versión ${manifest.packVersion} del formato; esta app solo entiende la versión ${PACK_VERSION}. Actualiza ALADO.`)
   }
   if (manifest.kind !== 'song') throw new Error(`Tipo de paquete no soportado: ${manifest.kind}`)
 

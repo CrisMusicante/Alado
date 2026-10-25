@@ -5,7 +5,7 @@ export interface SavedSetlist {
   id?: number
   name: string
   service_date?: string
-  notes?: string
+  notes?: string | null
   songs?: Array<{ song: Song; position: number; custom_video?: string | null }>
 }
 

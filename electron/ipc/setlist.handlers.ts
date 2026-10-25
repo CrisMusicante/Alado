@@ -29,7 +29,7 @@ function findDuplicateSetlist(name: string, serviceDate: string | null): number 
 }
 
 export function registerSetlistHandlers(): void {
-  ipcMain.handle('setlist:export', async (_e, p: { name: string; service_date: string; songIds: number[]; customVideos?: Array<string | null> }) => {
+  ipcMain.handle('setlist:export', async (_e, p: { name: string; service_date: string; notes?: string | null; songIds: number[]; customVideos?: Array<string | null> }) => {
     const db = getDb()
     const byId = db.prepare('SELECT * FROM songs WHERE id = ?')
     const songs = p.songIds
@@ -38,7 +38,7 @@ export function registerSetlistHandlers(): void {
         return row ? { ...deserializeSong(row), custom_video: p.customVideos?.[i] ?? null } : null
       })
       .filter((s): s is NonNullable<typeof s> => s !== null)
-    const file = buildAladoFile({ name: p.name, service_date: p.service_date || null, notes: null }, songs, new Date())
+    const file = buildAladoFile({ name: p.name, service_date: p.service_date || null, notes: p.notes ?? null }, songs, new Date())
 
     const { canceled, filePath } = await dialog.showSaveDialog({
       defaultPath: `${safeFileName(p.name, 'servicio')}.alado`,
