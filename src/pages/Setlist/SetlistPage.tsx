@@ -300,7 +300,7 @@ export default function SetlistPage() {
                 📂 Abrir ▾
               </button>
               {showSaved && (
-                <div className="absolute right-0 top-full mt-1 w-72 bg-slate-800 border border-slate-700 rounded-2xl shadow-xl z-10 overflow-hidden">
+                <div className="absolute right-0 top-full mt-1 w-72 bg-slate-800 border border-slate-700 rounded-2xl shadow-xl z-10 overflow-hidden whitespace-normal">
                   <div className="p-3 border-b border-slate-700">
                     <p className="text-xs font-semibold text-slate-400 uppercase tracking-wide">Servicios guardados</p>
                   </div>
@@ -361,12 +361,12 @@ export default function SetlistPage() {
                 📤 Exportar ▾
               </button>
               {showExport && (
-                <div className="absolute right-0 top-full mt-1 w-60 bg-slate-800 border border-slate-700 rounded-2xl shadow-xl z-10 overflow-hidden">
-                  <button onClick={handleExportAlado} className="w-full text-left px-4 py-3 hover:bg-slate-700 transition-colors border-b border-slate-700/50">
+                <div className="absolute right-0 top-full mt-1 w-60 bg-slate-800 border border-slate-700 rounded-2xl shadow-xl z-10 overflow-hidden whitespace-normal">
+                  <button onClick={handleExportAlado} className="block w-full text-left px-4 py-3 hover:bg-slate-700 transition-colors border-b border-slate-700/50">
                     <p className="text-sm font-medium text-white">Archivo .alado</p>
                     <p className="text-xs text-slate-400">Para abrirlo en otra compu con ALADO</p>
                   </button>
-                  <button onClick={handleExportPptx} className="w-full text-left px-4 py-3 hover:bg-slate-700 transition-colors">
+                  <button onClick={handleExportPptx} className="block w-full text-left px-4 py-3 hover:bg-slate-700 transition-colors">
                     <p className="text-sm font-medium text-white">PowerPoint</p>
                     <p className="text-xs text-slate-400">Respaldo para presentar sin ALADO</p>
                   </button>

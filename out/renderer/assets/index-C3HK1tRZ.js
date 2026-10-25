@@ -1,4 +1,4 @@
-const __vite__mapDeps=(i,m=__vite__mapDeps,d=(m.f||(m.f=["./pptxgen.es-Br8S8v2g.js","./SlideView-CqN0asXU.js"])))=>i.map(i=>d[i]);
+const __vite__mapDeps=(i,m=__vite__mapDeps,d=(m.f||(m.f=["./pptxgen.es-Bpua9stQ.js","./SlideView-CqN0asXU.js"])))=>i.map(i=>d[i]);
 import { r as requireReactDom, a as reactExports, R as React, b as requireReact, g as getDefaultExportFromCjs, j as jsxRuntimeExports, S as SlideView, c as ReactDOM } from "./SlideView-CqN0asXU.js";
 var reactDomExports = requireReactDom();
 function useCombinedRefs() {
@@ -6740,7 +6740,7 @@ const PLAIN_BG = "0F172A";
 const SHADOW = { type: "outer", color: "000000", blur: 6, offset: 2, angle: 45, opacity: 0.8 };
 async function exportServicePptx(name, songs) {
   const { default: PptxGenJS } = await __vitePreload(async () => {
-    const { default: PptxGenJS2 } = await import("./pptxgen.es-Br8S8v2g.js");
+    const { default: PptxGenJS2 } = await import("./pptxgen.es-Bpua9stQ.js");
     return { default: PptxGenJS2 };
   }, true ? __vite__mapDeps([0,1]) : void 0, import.meta.url);
   const pptx = new PptxGenJS();
@@ -7132,7 +7132,7 @@ function SetlistPage() {
                 children: "📂 Abrir ▾"
               }
             ),
-            showSaved && /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "absolute right-0 top-full mt-1 w-72 bg-slate-800 border border-slate-700 rounded-2xl shadow-xl z-10 overflow-hidden", children: [
+            showSaved && /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "absolute right-0 top-full mt-1 w-72 bg-slate-800 border border-slate-700 rounded-2xl shadow-xl z-10 overflow-hidden whitespace-normal", children: [
               /* @__PURE__ */ jsxRuntimeExports.jsx("div", { className: "p-3 border-b border-slate-700", children: /* @__PURE__ */ jsxRuntimeExports.jsx("p", { className: "text-xs font-semibold text-slate-400 uppercase tracking-wide", children: "Servicios guardados" }) }),
               setlists.length === 0 ? /* @__PURE__ */ jsxRuntimeExports.jsx("p", { className: "text-sm text-slate-500 text-center py-6", children: "Sin servicios guardados" }) : /* @__PURE__ */ jsxRuntimeExports.jsx("div", { className: "max-h-64 overflow-y-auto", children: setlists.map((sl) => /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "flex items-stretch border-b border-slate-700/50 last:border-0", children: [
                 /* @__PURE__ */ jsxRuntimeExports.jsxs(
@@ -7198,12 +7198,12 @@ function SetlistPage() {
                 children: "📤 Exportar ▾"
               }
             ),
-            showExport && /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "absolute right-0 top-full mt-1 w-60 bg-slate-800 border border-slate-700 rounded-2xl shadow-xl z-10 overflow-hidden", children: [
-              /* @__PURE__ */ jsxRuntimeExports.jsxs("button", { onClick: handleExportAlado, className: "w-full text-left px-4 py-3 hover:bg-slate-700 transition-colors border-b border-slate-700/50", children: [
+            showExport && /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "absolute right-0 top-full mt-1 w-60 bg-slate-800 border border-slate-700 rounded-2xl shadow-xl z-10 overflow-hidden whitespace-normal", children: [
+              /* @__PURE__ */ jsxRuntimeExports.jsxs("button", { onClick: handleExportAlado, className: "block w-full text-left px-4 py-3 hover:bg-slate-700 transition-colors border-b border-slate-700/50", children: [
                 /* @__PURE__ */ jsxRuntimeExports.jsx("p", { className: "text-sm font-medium text-white", children: "Archivo .alado" }),
                 /* @__PURE__ */ jsxRuntimeExports.jsx("p", { className: "text-xs text-slate-400", children: "Para abrirlo en otra compu con ALADO" })
               ] }),
-              /* @__PURE__ */ jsxRuntimeExports.jsxs("button", { onClick: handleExportPptx, className: "w-full text-left px-4 py-3 hover:bg-slate-700 transition-colors", children: [
+              /* @__PURE__ */ jsxRuntimeExports.jsxs("button", { onClick: handleExportPptx, className: "block w-full text-left px-4 py-3 hover:bg-slate-700 transition-colors", children: [
                 /* @__PURE__ */ jsxRuntimeExports.jsx("p", { className: "text-sm font-medium text-white", children: "PowerPoint" }),
                 /* @__PURE__ */ jsxRuntimeExports.jsx("p", { className: "text-xs text-slate-400", children: "Respaldo para presentar sin ALADO" })
               ] })
