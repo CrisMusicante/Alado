@@ -4,7 +4,7 @@ import {
   useSensor, useSensors, DragEndEvent
 } from '@dnd-kit/core'
 import {
-  arrayMove, SortableContext, sortableKeyboardCoordinates,
+  SortableContext, sortableKeyboardCoordinates,
   verticalListSortingStrategy, useSortable
 } from '@dnd-kit/sortable'
 import { CSS } from '@dnd-kit/utilities'
@@ -12,28 +12,29 @@ import { Song, useSongsStore } from '../../store/songs.store'
 import { useLiveStore } from '../../store/live.store'
 import { useSetlistsStore, SavedSetlist } from '../../store/setlists.store'
 import { useFoldersStore } from '../../store/folders.store'
+import { useServiceDraftStore } from '../../store/serviceDraft.store'
+import { confirmDialog } from '../../store/dialog.store'
+import { showToast } from '../../store/toast.store'
 import { groupSongs, FolderFilter } from '../../utils/songGroups'
-
-interface SetlistSong {
-  id: string
-  song: Song
-}
 
 export default function SetlistPage() {
   const { songs, fetchSongs } = useSongsStore()
   const { isLive, startLive, stopLive, changeSong, currentSong } = useLiveStore()
   const { setlists, fetchSetlists, saveSetlist } = useSetlistsStore()
   const { folders, fetchFolders } = useFoldersStore()
+  const {
+    setlistId, name: setlistName, serviceDate, items: setlistSongs, dirty,
+    addSong, removeItem, moveItem, setName, setServiceDate, loadSaved, reset, markSaved, syncWithCatalog
+  } = useServiceDraftStore()
 
-  const [setlistSongs, setSetlistSongs] = useState<SetlistSong[]>([])
-  const [setlistName, setSetlistName] = useState(`Servicio ${new Date().toLocaleDateString('es')}`)
   const [searchQuery, setSearchQuery] = useState('')
   const [folderFilter, setFolderFilter] = useState<FolderFilter>('all')
   const [showSaved, setShowSaved] = useState(false)
   const [saving, setSaving] = useState(false)
 
   useEffect(() => {
-    fetchSongs()
+    // Unfiltered fetch, then refresh the draft's song snapshots (and drop deleted songs).
+    fetchSongs().then(() => syncWithCatalog(useSongsStore.getState().songs))
     fetchSetlists()
     fetchFolders()
   }, [])
@@ -47,24 +48,9 @@ export default function SetlistPage() {
   const hasLoose = songs.some(s => s.folder_id == null || !folders.some(f => f.id === s.folder_id))
   const inSetlist = new Set(setlistSongs.map(s => s.song.id))
 
-  function addSong(song: Song) {
-    if (setlistSongs.find(s => s.song.id === song.id)) return
-    setSetlistSongs(prev => [...prev, { id: `${song.id}-${Date.now()}`, song }])
-  }
-
-  function removeSong(id: string) {
-    setSetlistSongs(prev => prev.filter(s => s.id !== id))
-  }
-
   function handleDragEnd(event: DragEndEvent) {
     const { active, over } = event
-    if (over && active.id !== over.id) {
-      setSetlistSongs(prev => {
-        const oldIndex = prev.findIndex(s => s.id === active.id)
-        const newIndex = prev.findIndex(s => s.id === over.id)
-        return arrayMove(prev, oldIndex, newIndex)
-      })
-    }
+    if (over && active.id !== over.id) moveItem(String(active.id), String(over.id))
   }
 
   async function handlePresent() {
@@ -72,31 +58,45 @@ export default function SetlistPage() {
     await startLive(setlistSongs.map(s => s.song))
   }
 
+  /** Asks before discarding unsaved changes in the draft. */
+  async function canDiscardDraft(message: string): Promise<boolean> {
+    return !dirty || confirmDialog(message, { title: 'Cambios sin guardar', confirmLabel: 'Continuar', danger: true })
+  }
+
   async function handleSave() {
-    if (setlistSongs.length === 0) return
+    if (setlistSongs.length === 0 || saving) return
     setSaving(true)
-    await saveSetlist({
-      name: setlistName,
-      service_date: new Date().toISOString().slice(0, 10),
-      songs: setlistSongs.map((s, i) => ({ song: s.song, position: i }))
-    })
-    setSaving(false)
-  }
-
-  function loadSetlist(saved: SavedSetlist) {
-    if (!saved.songs) return
-    setSetlistName(saved.name)
-    setSetlistSongs(saved.songs.map((item, i) => ({
-      id: `${item.song.id}-${i}-${Date.now()}`,
-      song: item.song
-    })))
-    setShowSaved(false)
-  }
-
-  function handleSongClick(item: SetlistSong) {
-    if (isLive) {
-      changeSong(item.song)
+    try {
+      const id = await saveSetlist({
+        id: setlistId ?? undefined,
+        name: setlistName,
+        service_date: serviceDate,
+        songs: setlistSongs.map((s, i) => ({ song: s.song, position: i }))
+      })
+      markSaved(id)
+      showToast('Servicio guardado')
+    } catch (e) {
+      console.error('No se pudo guardar el servicio', e)
+      showToast('No se pudo guardar el servicio', 'error')
+    } finally {
+      setSaving(false)
     }
+  }
+
+  async function handleNew() {
+    if (!(await canDiscardDraft('Hay cambios sin guardar. ¿Empezar un servicio nuevo?'))) return
+    reset()
+  }
+
+  async function loadSetlist(saved: SavedSetlist) {
+    if (!saved.songs) return
+    setShowSaved(false)
+    if (!(await canDiscardDraft(`Hay cambios sin guardar. ¿Cargar "${saved.name}" de todos modos?`))) return
+    loadSaved(saved)
+  }
+
+  function handleSongClick(song: Song) {
+    if (isLive) changeSong(song)
   }
 
   return (
@@ -155,11 +155,32 @@ export default function SetlistPage() {
       <div className="flex-1 p-6 flex flex-col">
         {/* Header row */}
         <div className="flex items-center gap-3 mb-5">
-          <input
-            value={setlistName}
-            onChange={e => setSetlistName(e.target.value)}
-            className="flex-1 bg-transparent text-xl font-bold text-white outline-none border-b border-transparent hover:border-slate-600 focus:border-indigo-500 transition-colors pb-1"
-          />
+          <div className="flex-1 min-w-0 flex flex-col gap-1">
+            <input
+              value={setlistName}
+              onChange={e => setName(e.target.value)}
+              aria-label="Nombre del servicio"
+              className="bg-transparent text-xl font-bold text-white outline-none border-b border-transparent hover:border-slate-600 focus:border-indigo-500 transition-colors pb-1"
+            />
+            <div className="flex items-center gap-3 text-xs">
+              <input
+                type="date"
+                value={serviceDate}
+                onChange={e => e.target.value && setServiceDate(e.target.value)}
+                aria-label="Fecha del servicio"
+                className="bg-slate-800 border border-slate-700 rounded-lg px-2 py-1 text-slate-300 outline-none focus:border-indigo-500 [color-scheme:dark]"
+              />
+              {dirty && <span className="text-amber-400">• sin guardar</span>}
+            </div>
+          </div>
+
+          <button
+            onClick={handleNew}
+            className="px-3 py-2 rounded-xl bg-slate-800 hover:bg-slate-700 text-slate-300 text-sm transition-colors border border-slate-700"
+            title="Empezar un servicio nuevo"
+          >
+            ＋ Nuevo
+          </button>
 
           {/* Saved setlists button */}
           <div className="relative">
@@ -228,20 +249,20 @@ export default function SetlistPage() {
           </div>
         ) : (
           <DndContext sensors={sensors} collisionDetection={closestCenter} onDragEnd={handleDragEnd}>
-            <SortableContext items={setlistSongs.map(s => s.id)} strategy={verticalListSortingStrategy}>
+            <SortableContext items={setlistSongs.map(s => s.key)} strategy={verticalListSortingStrategy}>
               <div className="flex flex-col gap-2 overflow-y-auto">
                 {setlistSongs.map((item, index) => {
                   const isCurrentSong = isLive && currentSong?.id === item.song.id
                   return (
                     <SortableSetlistItem
-                      key={item.id}
-                      id={item.id}
+                      key={item.key}
+                      id={item.key}
                       song={item.song}
                       index={index}
                       isLive={isLive}
                       isCurrentSong={isCurrentSong}
-                      onRemove={() => removeSong(item.id)}
-                      onClick={() => handleSongClick(item)}
+                      onRemove={() => removeItem(item.key)}
+                      onClick={() => handleSongClick(item.song)}
                     />
                   )
                 })}
