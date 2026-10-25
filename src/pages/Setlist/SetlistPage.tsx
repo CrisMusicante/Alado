@@ -13,7 +13,9 @@ import { useLiveStore } from '../../store/live.store'
 import { useSetlistsStore, SavedSetlist } from '../../store/setlists.store'
 import { useFoldersStore } from '../../store/folders.store'
 import { useServiceDraftStore } from '../../store/serviceDraft.store'
-import { confirmDialog } from '../../store/dialog.store'
+import { confirmDialog, alertDialog, ask } from '../../store/dialog.store'
+import { ipcErrorMessage } from '../../utils/ipcError'
+import { importSummaryText } from '../../utils/importSummary'
 import { showToast } from '../../store/toast.store'
 import { groupSongs, FolderFilter } from '../../utils/songGroups'
 import LyricsHoverCard from './LyricsHoverCard'
@@ -35,6 +37,7 @@ export default function SetlistPage() {
   const [folderFilter, setFolderFilter] = useState<FolderFilter>('all')
   const [showSaved, setShowSaved] = useState(false)
   const [saving, setSaving] = useState(false)
+  const [showExport, setShowExport] = useState(false)
   const [hover, setHover] = useState<{ song: Song; rect: DOMRect } | null>(null)
   const hoverTimer = useRef<ReturnType<typeof setTimeout> | null>(null)
 
@@ -86,6 +89,52 @@ export default function SetlistPage() {
       showToast('No se pudo guardar el servicio', 'error')
     } finally {
       setSaving(false)
+    }
+  }
+
+  async function handleExportAlado() {
+    setShowExport(false)
+    try {
+      const res = await window.api.setlistExport({
+        name: setlistName, service_date: serviceDate, songIds: setlistSongs.map(s => s.song.id!)
+      })
+      if (res) showToast('Servicio exportado')
+    } catch (e) {
+      await alertDialog(ipcErrorMessage(e), 'No se pudo exportar')
+    }
+  }
+
+  async function handleExportPptx() {
+    setShowExport(false)
+  }
+
+  async function handleImport() {
+    if (!(await canDiscardDraft('Hay cambios sin guardar. ¿Importar otro servicio de todos modos?'))) return
+    try {
+      const info = await window.api.setlistImportInspect()
+      if (!info) return
+      let mode: 'new' | 'replace' = 'new'
+      if (info.duplicateOf) {
+        const choice = await ask({
+          title: 'Este servicio ya existe',
+          message: `Ya hay un servicio guardado "${info.name}"${info.service_date ? ` del ${info.service_date}` : ''}. ¿Qué quieres hacer?`,
+          actions: [
+            { label: 'Cancelar', value: 'cancel', variant: 'neutral' },
+            { label: 'Crear copia', value: 'new', variant: 'neutral' },
+            { label: 'Reemplazar', value: 'replace', variant: 'primary' }
+          ]
+        })
+        if (choice !== 'new' && choice !== 'replace') return
+        mode = choice
+      }
+      const summary = await window.api.setlistImportApply({ path: info.path, mode, replaceId: info.duplicateOf ?? undefined })
+      await fetchSetlists()
+      await fetchSongs()
+      const saved = useSetlistsStore.getState().setlists.find(sl => sl.id === summary.setlistId)
+      if (saved) loadSaved(saved)
+      await alertDialog(importSummaryText(summary), 'Servicio importado')
+    } catch (e) {
+      await alertDialog(ipcErrorMessage(e), 'No se pudo importar')
     }
   }
 
@@ -239,12 +288,43 @@ export default function SetlistPage() {
           </div>
 
           <button
+            onClick={handleImport}
+            className="px-3 py-2 rounded-xl bg-slate-800 hover:bg-slate-700 text-slate-300 text-sm transition-colors border border-slate-700"
+            title="Importar un servicio desde un archivo .alado"
+          >
+            📥 Importar
+          </button>
+
+          <button
             onClick={handleSave}
             disabled={setlistSongs.length === 0 || saving}
             className="px-4 py-2 rounded-xl bg-slate-700 hover:bg-slate-600 disabled:opacity-40 text-white text-sm font-medium transition-colors border border-slate-600"
           >
             {saving ? 'Guardando...' : '💾 Guardar'}
           </button>
+
+          <div className="relative">
+            <button
+              onClick={() => setShowExport(v => !v)}
+              disabled={setlistSongs.length === 0}
+              className="px-3 py-2 rounded-xl bg-slate-800 hover:bg-slate-700 disabled:opacity-40 text-slate-300 text-sm transition-colors border border-slate-700"
+              title="Exportar este servicio"
+            >
+              📤 Exportar ▾
+            </button>
+            {showExport && (
+              <div className="absolute right-0 top-full mt-1 w-60 bg-slate-800 border border-slate-700 rounded-2xl shadow-xl z-10 overflow-hidden">
+                <button onClick={handleExportAlado} className="w-full text-left px-4 py-3 hover:bg-slate-700 transition-colors border-b border-slate-700/50">
+                  <p className="text-sm font-medium text-white">Archivo .alado</p>
+                  <p className="text-xs text-slate-400">Para abrirlo en otra compu con ALADO</p>
+                </button>
+                <button onClick={handleExportPptx} className="w-full text-left px-4 py-3 hover:bg-slate-700 transition-colors">
+                  <p className="text-sm font-medium text-white">PowerPoint</p>
+                  <p className="text-xs text-slate-400">Respaldo para presentar sin ALADO</p>
+                </button>
+              </div>
+            )}
+          </div>
 
           <button
             onClick={isLive ? stopLive : handlePresent}

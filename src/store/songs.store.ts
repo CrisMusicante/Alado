@@ -29,6 +29,16 @@ export interface Song {
   updated_at?: string
 }
 
+/** Result of importing a .alado service (mirrors electron/ipc/setlist.handlers.ts). */
+export interface ImportSummary {
+  setlistId: number
+  reused: number
+  created: string[]
+  differing: string[]
+  missingVideo: string[]
+  missingAudio: string[]
+}
+
 export interface Folder {
   id?: number
   name: string
@@ -54,6 +64,9 @@ declare global {
       getSetlists: () => Promise<any[]>
       saveSetlist: (s: any) => Promise<number>
       deleteSetlist: (id: number) => Promise<void>
+      setlistExport: (p: { name: string; service_date: string; songIds: number[] }) => Promise<{ path: string } | null>
+      setlistImportInspect: () => Promise<{ path: string; name: string; service_date: string | null; songCount: number; duplicateOf: number | null } | null>
+      setlistImportApply: (p: { path: string; mode: 'new' | 'replace'; replaceId?: number }) => Promise<ImportSummary>
       openLive: () => Promise<void>
       closeLive: () => Promise<void>
       showSection: (p: any) => Promise<void>

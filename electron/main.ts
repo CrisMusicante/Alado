@@ -12,6 +12,7 @@ import { registerSystemHandlers } from './ipc/system.handlers'
 import { registerLyricsHandlers } from './ipc/lyrics.handlers'
 import { registerAudioHandlers } from './ipc/audio.handlers'
 import { registerPackHandlers } from './ipc/pack.handlers'
+import { registerSetlistHandlers } from './ipc/setlist.handlers'
 import { registerMediaSchemePrivileges, registerMediaProtocol } from './media/protocol'
 import { ipcMain } from 'electron'
 
@@ -28,6 +29,7 @@ app.whenReady().then(() => {
   registerLyricsHandlers()
   registerAudioHandlers(() => mainWindow)
   registerPackHandlers()
+  registerSetlistHandlers()
 
   mainWindow = createMainWindow()
 
