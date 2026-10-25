@@ -702,23 +702,25 @@ function registerDbHandlers() {
   });
   electron.ipcMain.handle("db:save-setlist", (_e, setlist) => {
     const db2 = getDb();
-    let setlistId = setlist.id;
-    if (setlistId) {
-      db2.prepare("UPDATE setlists SET name=?, service_date=?, notes=? WHERE id=?").run(setlist.name, setlist.service_date ?? null, setlist.notes ?? null, setlistId);
-    } else {
-      const result = db2.prepare(
-        "INSERT INTO setlists (name, service_date, notes) VALUES (?,?,?)"
-      ).run(setlist.name, setlist.service_date ?? null, setlist.notes ?? null);
-      setlistId = result.lastInsertRowid;
-    }
-    db2.prepare("DELETE FROM setlist_items WHERE setlist_id = ?").run(setlistId);
-    const insertItem = db2.prepare(
-      "INSERT INTO setlist_items (setlist_id, song_id, position, custom_video) VALUES (?,?,?,?)"
-    );
-    setlist.songs?.forEach((item, i) => {
-      insertItem.run(setlistId, item.song.id, i, item.custom_video ?? null);
-    });
-    return setlistId;
+    return db2.transaction(() => {
+      let setlistId = setlist.id;
+      if (setlistId) {
+        db2.prepare("UPDATE setlists SET name=?, service_date=?, notes=? WHERE id=?").run(setlist.name, setlist.service_date ?? null, setlist.notes ?? null, setlistId);
+      } else {
+        const result = db2.prepare(
+          "INSERT INTO setlists (name, service_date, notes) VALUES (?,?,?)"
+        ).run(setlist.name, setlist.service_date ?? null, setlist.notes ?? null);
+        setlistId = result.lastInsertRowid;
+      }
+      db2.prepare("DELETE FROM setlist_items WHERE setlist_id = ?").run(setlistId);
+      const insertItem = db2.prepare(
+        "INSERT INTO setlist_items (setlist_id, song_id, position, custom_video) VALUES (?,?,?,?)"
+      );
+      setlist.songs?.forEach((item, i) => {
+        insertItem.run(setlistId, item.song.id, i, item.custom_video ?? null);
+      });
+      return setlistId;
+    })();
   });
   electron.ipcMain.handle("db:delete-setlist", (_e, id) => {
     getDb().prepare("DELETE FROM setlists WHERE id = ?").run(id);
@@ -1187,7 +1189,10 @@ function registerSetlistHandlers() {
   electron.ipcMain.handle("setlist:export", async (_e, p) => {
     const db2 = getDb();
     const byId = db2.prepare("SELECT * FROM songs WHERE id = ?");
-    const songs = p.songIds.map((id) => byId.get(id)).filter(Boolean).map(deserializeSong);
+    const songs = p.songIds.map((id, i) => {
+      const row = byId.get(id);
+      return row ? { ...deserializeSong(row), custom_video: p.customVideos?.[i] ?? null } : null;
+    }).filter((s) => s !== null);
     const file = buildAladoFile({ name: p.name, service_date: p.service_date || null, notes: null }, songs, /* @__PURE__ */ new Date());
     const { canceled, filePath } = await electron.dialog.showSaveDialog({
       defaultPath: `${safeFileName(p.name, "servicio")}.alado`,

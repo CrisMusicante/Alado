@@ -1,4 +1,4 @@
-import { _ as __vitePreload } from "./index-BeZ9_M2F.js";
+import { _ as __vitePreload } from "./index-MAKbLCtW.js";
 import { d as commonjsGlobal, g as getDefaultExportFromCjs } from "./SlideView-CqN0asXU.js";
 function commonjsRequire(path) {
   throw new Error('Could not dynamically require "' + path + '". Please configure the dynamicRequireTargets or/and ignoreDynamicRequires option of @rollup/plugin-commonjs appropriately for this require call to work.');

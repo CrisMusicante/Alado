@@ -1,4 +1,4 @@
-const __vite__mapDeps=(i,m=__vite__mapDeps,d=(m.f||(m.f=["./pptxgen.es-CGqMXVdN.js","./SlideView-CqN0asXU.js"])))=>i.map(i=>d[i]);
+const __vite__mapDeps=(i,m=__vite__mapDeps,d=(m.f||(m.f=["./pptxgen.es-BNjujjMn.js","./SlideView-CqN0asXU.js"])))=>i.map(i=>d[i]);
 import { r as requireReactDom, a as reactExports, R as React, b as requireReact, g as getDefaultExportFromCjs, j as jsxRuntimeExports, S as SlideView, c as ReactDOM } from "./SlideView-CqN0asXU.js";
 var reactDomExports = requireReactDom();
 function useCombinedRefs() {
@@ -6534,7 +6534,7 @@ const useServiceDraftStore = create()(persist((set, get) => ({
   ...blank(),
   addSong: (song) => {
     if (get().items.some((i) => i.song.id === song.id)) return;
-    set({ items: [...get().items, { key: newKey(song.id), song }], dirty: true });
+    set({ items: [...get().items, { key: newKey(song.id), song, custom_video: null }], dirty: true });
   },
   removeItem: (key) => set({ items: get().items.filter((i) => i.key !== key), dirty: true }),
   moveItem: (fromKey, toKey) => {
@@ -6552,7 +6552,7 @@ const useServiceDraftStore = create()(persist((set, get) => ({
     setlistId: saved.id ?? null,
     name: saved.name,
     serviceDate: saved.service_date ?? todayISO(),
-    items: (saved.songs ?? []).map((s) => ({ key: newKey(s.song.id), song: s.song })),
+    items: (saved.songs ?? []).map((s) => ({ key: newKey(s.song.id), song: s.song, custom_video: s.custom_video ?? null })),
     dirty: false
   }),
   reset: () => set(blank()),
@@ -6711,7 +6711,7 @@ const PLAIN_BG = "0F172A";
 const SHADOW = { type: "outer", color: "000000", blur: 6, offset: 2, angle: 45, opacity: 0.8 };
 async function exportServicePptx(name, songs) {
   const { default: PptxGenJS } = await __vitePreload(async () => {
-    const { default: PptxGenJS2 } = await import("./pptxgen.es-CGqMXVdN.js");
+    const { default: PptxGenJS2 } = await import("./pptxgen.es-BNjujjMn.js");
     return { default: PptxGenJS2 };
   }, true ? __vite__mapDeps([0,1]) : void 0, import.meta.url);
   const pptx = new PptxGenJS();
@@ -6889,7 +6889,7 @@ function SetlistPage() {
         id: setlistId ?? void 0,
         name: setlistName,
         service_date: serviceDate,
-        songs: setlistSongs.map((s, i) => ({ song: s.song, position: i }))
+        songs: setlistSongs.map((s, i) => ({ song: s.song, position: i, custom_video: s.custom_video }))
       });
       markSaved(id);
       showToast("Servicio guardado");
@@ -6906,7 +6906,8 @@ function SetlistPage() {
       const res = await window.api.setlistExport({
         name: setlistName,
         service_date: serviceDate,
-        songIds: setlistSongs.map((s) => s.song.id)
+        songIds: setlistSongs.map((s) => s.song.id),
+        customVideos: setlistSongs.map((s) => s.custom_video)
       });
       if (res) showToast("Servicio exportado");
     } catch (e) {
