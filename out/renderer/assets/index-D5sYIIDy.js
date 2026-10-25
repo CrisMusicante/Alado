@@ -1,4 +1,4 @@
-const __vite__mapDeps=(i,m=__vite__mapDeps,d=(m.f||(m.f=["./pptxgen.es-DGJFxpjQ.js","./SlideView-CqN0asXU.js"])))=>i.map(i=>d[i]);
+const __vite__mapDeps=(i,m=__vite__mapDeps,d=(m.f||(m.f=["./pptxgen.es-Br8S8v2g.js","./SlideView-CqN0asXU.js"])))=>i.map(i=>d[i]);
 import { r as requireReactDom, a as reactExports, R as React, b as requireReact, g as getDefaultExportFromCjs, j as jsxRuntimeExports, S as SlideView, c as ReactDOM } from "./SlideView-CqN0asXU.js";
 var reactDomExports = requireReactDom();
 function useCombinedRefs() {
@@ -6518,6 +6518,20 @@ function todayISO() {
   const pad = (n) => String(n).padStart(2, "0");
   return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}`;
 }
+function formatServiceDate(date) {
+  const [y, m, d] = date.split("-");
+  return `${d}/${m}/${y}`;
+}
+function defaultServiceName(date) {
+  return `Servicio ${formatServiceDate(date)}`;
+}
+function migrateDraft(persisted, version) {
+  if (version < 1 && persisted) {
+    const date = persisted.serviceDate ?? todayISO();
+    return { ...persisted, notes: persisted.notes ?? "", nameIsDefault: persisted.name === defaultServiceName(date) };
+  }
+  return persisted;
+}
 let keySeq = 0;
 const newKey = (songId) => `${songId ?? "x"}-${Date.now()}-${keySeq++}`;
 const noopStorage = { getItem: () => null, setItem: () => {
@@ -6525,7 +6539,9 @@ const noopStorage = { getItem: () => null, setItem: () => {
 } };
 const blank = () => ({
   setlistId: null,
-  name: `Servicio ${(/* @__PURE__ */ new Date()).toLocaleDateString("es")}`,
+  name: defaultServiceName(todayISO()),
+  nameIsDefault: true,
+  notes: "",
   serviceDate: todayISO(),
   items: [],
   dirty: false
@@ -6546,11 +6562,22 @@ const useServiceDraftStore = create()(persist((set, get) => ({
     items.splice(to, 0, moved);
     set({ items, dirty: true });
   },
-  setName: (name) => set({ name, dirty: true }),
-  setServiceDate: (serviceDate) => set({ serviceDate, dirty: true }),
+  setName: (name) => set({ name, nameIsDefault: false, dirty: true }),
+  setServiceDate: (serviceDate) => set({
+    serviceDate,
+    ...get().nameIsDefault ? { name: defaultServiceName(serviceDate) } : {},
+    dirty: true
+  }),
+  setNotes: (notes) => set({ notes, dirty: true }),
+  // The saved service this draft points at was deleted: the next save must create a new one.
+  forgetSavedSetlist: (id) => {
+    if (get().setlistId === id) set({ setlistId: null, dirty: true });
+  },
   loadSaved: (saved) => set({
     setlistId: saved.id ?? null,
     name: saved.name,
+    nameIsDefault: saved.name === defaultServiceName(saved.service_date ?? todayISO()),
+    notes: saved.notes ?? "",
     serviceDate: saved.service_date ?? todayISO(),
     items: (saved.songs ?? []).map((s) => ({ key: newKey(s.song.id), song: s.song, custom_video: s.custom_video ?? null })),
     dirty: false
@@ -6565,8 +6592,10 @@ const useServiceDraftStore = create()(persist((set, get) => ({
   }
 }), {
   name: "alado-service-draft",
+  version: 1,
+  migrate: migrateDraft,
   storage: createJSONStorage(() => typeof localStorage !== "undefined" ? localStorage : noopStorage),
-  partialize: ({ setlistId, name, serviceDate, items, dirty }) => ({ setlistId, name, serviceDate, items, dirty })
+  partialize: ({ setlistId, name, nameIsDefault, notes, serviceDate, items, dirty }) => ({ setlistId, name, nameIsDefault, notes, serviceDate, items, dirty })
 }));
 function ipcErrorMessage(e) {
   const msg = e instanceof Error ? e.message : String(e);
@@ -6711,7 +6740,7 @@ const PLAIN_BG = "0F172A";
 const SHADOW = { type: "outer", color: "000000", blur: 6, offset: 2, angle: 45, opacity: 0.8 };
 async function exportServicePptx(name, songs) {
   const { default: PptxGenJS } = await __vitePreload(async () => {
-    const { default: PptxGenJS2 } = await import("./pptxgen.es-DGJFxpjQ.js");
+    const { default: PptxGenJS2 } = await import("./pptxgen.es-Br8S8v2g.js");
     return { default: PptxGenJS2 };
   }, true ? __vite__mapDeps([0,1]) : void 0, import.meta.url);
   const pptx = new PptxGenJS();
@@ -6833,12 +6862,13 @@ const HOVER_DELAY_MS = 400;
 function SetlistPage() {
   const { songs, fetchSongs } = useSongsStore();
   const { isLive, startLive, stopLive, changeSong, currentSong } = useLiveStore();
-  const { setlists, fetchSetlists, saveSetlist } = useSetlistsStore();
+  const { setlists, fetchSetlists, saveSetlist, deleteSetlist } = useSetlistsStore();
   const { folders, fetchFolders } = useFoldersStore();
   const {
     setlistId,
     name: setlistName,
     serviceDate,
+    notes,
     items: setlistSongs,
     dirty,
     addSong,
@@ -6846,10 +6876,12 @@ function SetlistPage() {
     moveItem,
     setName,
     setServiceDate,
+    setNotes,
     loadSaved,
     reset,
     markSaved,
-    syncWithCatalog
+    syncWithCatalog,
+    forgetSavedSetlist
   } = useServiceDraftStore();
   const [searchQuery, setSearchQuery] = reactExports.useState("");
   const [folderFilter, setFolderFilter] = reactExports.useState("all");
@@ -6887,8 +6919,9 @@ function SetlistPage() {
     try {
       const id = await saveSetlist({
         id: setlistId ?? void 0,
-        name: setlistName,
+        name: setlistName.trim() || defaultServiceName(serviceDate),
         service_date: serviceDate,
+        notes: notes.trim() || null,
         songs: setlistSongs.map((s, i) => ({ song: s.song, position: i, custom_video: s.custom_video }))
       });
       markSaved(id);
@@ -6904,8 +6937,9 @@ function SetlistPage() {
     setShowExport(false);
     try {
       const res = await window.api.setlistExport({
-        name: setlistName,
+        name: setlistName.trim() || defaultServiceName(serviceDate),
         service_date: serviceDate,
+        notes: notes.trim() || null,
         songIds: setlistSongs.map((s) => s.song.id),
         customVideos: setlistSongs.map((s) => s.custom_video)
       });
@@ -6951,6 +6985,21 @@ function SetlistPage() {
       await alertDialog(importSummaryText(summary), "Servicio importado");
     } catch (e) {
       await alertDialog(ipcErrorMessage(e), "No se pudo importar");
+    }
+  }
+  async function handleDeleteSaved(sl) {
+    const when = sl.service_date ? ` del ${formatServiceDate(sl.service_date)}` : "";
+    const ok = await confirmDialog(
+      `Se borrará "${sl.name}"${when}. Las canciones no se borran.`,
+      { title: "Borrar servicio guardado", confirmLabel: "Borrar", danger: true }
+    );
+    if (!ok || sl.id == null) return;
+    try {
+      await deleteSetlist(sl.id);
+      forgetSavedSetlist(sl.id);
+      showToast("Servicio borrado");
+    } catch (e) {
+      await alertDialog(ipcErrorMessage(e), "No se pudo borrar");
     }
   }
   async function handleNew() {
@@ -7025,13 +7074,28 @@ function SetlistPage() {
     /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "flex-1 p-6 flex flex-col", children: [
       /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "flex flex-wrap items-center gap-3 mb-5", children: [
         /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "flex-1 min-w-[13rem] flex flex-col gap-1", children: [
+          /* @__PURE__ */ jsxRuntimeExports.jsxs("label", { className: "flex items-center gap-2 border-b border-slate-700 hover:border-slate-500 focus-within:border-indigo-500 transition-colors pb-1", children: [
+            /* @__PURE__ */ jsxRuntimeExports.jsx(
+              "input",
+              {
+                value: setlistName,
+                onChange: (e) => setName(e.target.value),
+                placeholder: defaultServiceName(serviceDate),
+                "aria-label": "Nombre del servicio",
+                className: "flex-1 min-w-0 bg-transparent text-xl font-bold text-white placeholder-slate-500 outline-none"
+              }
+            ),
+            /* @__PURE__ */ jsxRuntimeExports.jsx("span", { className: "text-slate-400 text-sm", "aria-hidden": "true", title: "Puedes cambiar el nombre", children: "✎" })
+          ] }),
           /* @__PURE__ */ jsxRuntimeExports.jsx(
             "input",
             {
-              value: setlistName,
-              onChange: (e) => setName(e.target.value),
-              "aria-label": "Nombre del servicio",
-              className: "bg-transparent text-xl font-bold text-white outline-none border-b border-transparent hover:border-slate-600 focus:border-indigo-500 transition-colors pb-1"
+              value: notes,
+              onChange: (e) => setNotes(e.target.value),
+              placeholder: "Descripción (opcional)",
+              "aria-label": "Descripción del servicio",
+              maxLength: 200,
+              className: "bg-transparent text-sm text-slate-300 placeholder-slate-500 outline-none border-b border-transparent hover:border-slate-700 focus:border-indigo-500 transition-colors pb-0.5"
             }
           ),
           /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "flex items-center gap-3 text-xs", children: [
@@ -7070,23 +7134,34 @@ function SetlistPage() {
             ),
             showSaved && /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "absolute right-0 top-full mt-1 w-72 bg-slate-800 border border-slate-700 rounded-2xl shadow-xl z-10 overflow-hidden", children: [
               /* @__PURE__ */ jsxRuntimeExports.jsx("div", { className: "p-3 border-b border-slate-700", children: /* @__PURE__ */ jsxRuntimeExports.jsx("p", { className: "text-xs font-semibold text-slate-400 uppercase tracking-wide", children: "Servicios guardados" }) }),
-              setlists.length === 0 ? /* @__PURE__ */ jsxRuntimeExports.jsx("p", { className: "text-sm text-slate-500 text-center py-6", children: "Sin servicios guardados" }) : /* @__PURE__ */ jsxRuntimeExports.jsx("div", { className: "max-h-64 overflow-y-auto", children: setlists.map((sl) => /* @__PURE__ */ jsxRuntimeExports.jsxs(
-                "button",
-                {
-                  onClick: () => loadSetlist(sl),
-                  className: "w-full text-left px-4 py-3 hover:bg-slate-700 transition-colors border-b border-slate-700/50 last:border-0",
-                  children: [
-                    /* @__PURE__ */ jsxRuntimeExports.jsx("p", { className: "text-sm font-medium text-white", children: sl.name }),
-                    sl.service_date && /* @__PURE__ */ jsxRuntimeExports.jsxs("p", { className: "text-xs text-slate-500", children: [
-                      sl.service_date,
-                      " · ",
-                      sl.songs?.length ?? 0,
-                      " canciones"
-                    ] })
-                  ]
-                },
-                sl.id
-              )) }),
+              setlists.length === 0 ? /* @__PURE__ */ jsxRuntimeExports.jsx("p", { className: "text-sm text-slate-500 text-center py-6", children: "Sin servicios guardados" }) : /* @__PURE__ */ jsxRuntimeExports.jsx("div", { className: "max-h-64 overflow-y-auto", children: setlists.map((sl) => /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "flex items-stretch border-b border-slate-700/50 last:border-0", children: [
+                /* @__PURE__ */ jsxRuntimeExports.jsxs(
+                  "button",
+                  {
+                    onClick: () => loadSetlist(sl),
+                    className: "flex-1 min-w-0 text-left px-4 py-3 hover:bg-slate-700 transition-colors",
+                    children: [
+                      /* @__PURE__ */ jsxRuntimeExports.jsx("p", { className: "text-sm font-medium text-white truncate", children: sl.name }),
+                      sl.notes && /* @__PURE__ */ jsxRuntimeExports.jsx("p", { className: "text-xs text-slate-300 truncate", children: sl.notes }),
+                      /* @__PURE__ */ jsxRuntimeExports.jsxs("p", { className: "text-xs text-slate-400", children: [
+                        sl.service_date ? `${formatServiceDate(sl.service_date)} · ` : "",
+                        sl.songs?.length ?? 0,
+                        " canciones"
+                      ] })
+                    ]
+                  }
+                ),
+                /* @__PURE__ */ jsxRuntimeExports.jsx(
+                  "button",
+                  {
+                    onClick: () => handleDeleteSaved(sl),
+                    title: "Borrar este servicio guardado",
+                    "aria-label": `Borrar ${sl.name}`,
+                    className: "px-3 text-slate-500 hover:text-red-400 hover:bg-slate-700 transition-colors",
+                    children: "🗑"
+                  }
+                )
+              ] }, sl.id)) }),
               /* @__PURE__ */ jsxRuntimeExports.jsxs(
                 "button",
                 {
