@@ -12,6 +12,7 @@ contextBridge.exposeInMainWorld('api', {
   saveSetlist: (setlist: unknown) => ipcRenderer.invoke('db:save-setlist', setlist),
   deleteSetlist: (id: number) => ipcRenderer.invoke('db:delete-setlist', id),
   setlistExport: (payload: unknown) => ipcRenderer.invoke('setlist:export', payload),
+  setlistSavePptx: (payload: unknown) => ipcRenderer.invoke('setlist:save-pptx', payload),
   setlistImportInspect: () => ipcRenderer.invoke('setlist:import-inspect'),
   setlistImportApply: (payload: unknown) => ipcRenderer.invoke('setlist:import-apply', payload),
 

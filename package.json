@@ -39,6 +39,7 @@
     "better-sqlite3": "^12.6.2",
     "cheerio": "^1.2.0",
     "fflate": "^0.8.3",
+    "pptxgenjs": "^4.0.1",
     "react": "^18.3.1",
     "react-dom": "^18.3.1",
     "tar": "^7.5.22",

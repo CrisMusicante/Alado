@@ -16,6 +16,7 @@ import { useServiceDraftStore } from '../../store/serviceDraft.store'
 import { confirmDialog, alertDialog, ask } from '../../store/dialog.store'
 import { ipcErrorMessage } from '../../utils/ipcError'
 import { importSummaryText } from '../../utils/importSummary'
+import { exportServicePptx } from '../../setlist/pptxExport'
 import { showToast } from '../../store/toast.store'
 import { groupSongs, FolderFilter } from '../../utils/songGroups'
 import LyricsHoverCard from './LyricsHoverCard'
@@ -106,6 +107,13 @@ export default function SetlistPage() {
 
   async function handleExportPptx() {
     setShowExport(false)
+    showToast('Generando PowerPoint…')
+    try {
+      const res = await exportServicePptx(setlistName, setlistSongs.map(s => s.song))
+      if (res) showToast('PowerPoint exportado')
+    } catch (e) {
+      await alertDialog(ipcErrorMessage(e), 'No se pudo exportar el PowerPoint')
+    }
   }
 
   async function handleImport() {

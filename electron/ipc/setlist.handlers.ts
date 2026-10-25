@@ -47,6 +47,16 @@ export function registerSetlistHandlers(): void {
     return { path: filePath }
   })
 
+  ipcMain.handle('setlist:save-pptx', async (_e, p: { bytes: Uint8Array; defaultName: string }) => {
+    const { canceled, filePath } = await dialog.showSaveDialog({
+      defaultPath: `${safeFileName(p.defaultName, 'servicio')}.pptx`,
+      filters: [{ name: 'Presentación de PowerPoint', extensions: ['pptx'] }]
+    })
+    if (canceled || !filePath) return null
+    fs.writeFileSync(filePath, Buffer.from(p.bytes))
+    return { path: filePath }
+  })
+
   ipcMain.handle('setlist:import-inspect', async () => {
     const { canceled, filePaths } = await dialog.showOpenDialog({
       properties: ['openFile'],
