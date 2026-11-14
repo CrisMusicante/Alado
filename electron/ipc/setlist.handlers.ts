@@ -1,9 +1,10 @@
-import { ipcMain, dialog, app } from 'electron'
+import { ipcMain, dialog, app, BrowserWindow } from 'electron'
 import fs from 'fs'
 import path from 'path'
 import { getDb } from '../db/database'
 import { deserializeSong } from './db.handlers'
 import { buildAladoFile, parseAladoFile, planImport, LocalSong } from '../setlist/aladoFile'
+import { buildLyricsSheetHtml } from '../setlist/lyricsSheet'
 
 export interface ImportSummary {
   setlistId: number
@@ -59,6 +60,29 @@ export function registerSetlistHandlers(): void {
     return { path: filePath }
   })
 
+  ipcMain.handle('setlist:export-pdf', async (_e, p: { name: string; service_date: string; songIds: number[] }) => {
+    const { canceled, filePath } = await dialog.showSaveDialog({
+      defaultPath: `${safeFileName(p.name, 'servicio')} - letras.pdf`,
+      filters: [{ name: 'PDF', extensions: ['pdf'] }]
+    })
+    if (canceled || !filePath) return null
+
+    const byId = getDb().prepare('SELECT * FROM songs WHERE id = ?')
+    const songs = p.songIds.map(id => byId.get(id)).filter(Boolean).map(deserializeSong)
+    const html = buildLyricsSheetHtml({ name: p.name, service_date: p.service_date || '' }, songs)
+
+    // Offscreen window that only ever shows our escaped HTML; no scripts needed to print it.
+    const win = new BrowserWindow({ show: false, webPreferences: { javascript: false, sandbox: true } })
+    try {
+      await win.loadURL(`data:text/html;charset=utf-8,${encodeURIComponent(html)}`)
+      const pdf = await win.webContents.printToPDF({ pageSize: 'Letter', printBackground: true, preferCSSPageSize: true })
+      fs.writeFileSync(filePath, pdf)
+    } finally {
+      win.destroy()
+    }
+    return { path: filePath }
+  })
+
   ipcMain.handle('setlist:import-inspect', async () => {
     const { canceled, filePaths } = await dialog.showOpenDialog({
       properties: ['openFile'],
@@ -78,7 +102,7 @@ export function registerSetlistHandlers(): void {
   ipcMain.handle('setlist:import-apply', (_e, p: { path: string; mode: 'new' | 'replace'; replaceId?: number }): ImportSummary => {
     const file = parseAladoFile(fs.readFileSync(p.path, 'utf-8'))
     const db = getDb()
-    const local: LocalSong[] = (db.prepare('SELECT id, title, artist, sections, updated_at FROM songs').all() as any[])
+    const local: LocalSong[] = (db.prepare('SELECT id, title, artist, song_key, sections, updated_at FROM songs').all() as any[])
       .map(r => ({ ...r, sections: JSON.parse(r.sections || '[]') }))
     const dir = videosDir()
     const names = videoNames(dir)
@@ -86,7 +110,8 @@ export function registerSetlistHandlers(): void {
 
     const summary: Omit<ImportSummary, 'setlistId' | 'missingAudio'> = { reused: 0, created: [], differing: [], missingVideo: [] }
     const insertSong = db.prepare(
-      'INSERT INTO songs (title, artist, sections, video_path, text_style, folder_id) VALUES (?,?,?,?,?,NULL)')
+      'INSERT INTO songs (title, artist, song_key, sections, video_path, text_style, folder_id) VALUES (?,?,?,?,?,?,NULL)')
+    const fillKey = db.prepare('UPDATE songs SET song_key = ? WHERE id = ? AND song_key IS NULL')
     const insertItem = db.prepare(
       'INSERT INTO setlist_items (setlist_id, song_id, position, custom_video) VALUES (?,?,?,?)')
 
@@ -95,12 +120,13 @@ export function registerSetlistHandlers(): void {
         if (step.kind === 'existing') {
           summary.reused++
           if (step.differs) summary.differing.push(step.title)
+          if (step.fillKey) fillKey.run(step.fillKey, step.songId)
           return step.songId
         }
         const { song } = step
         summary.created.push(song.title)
         if (!step.videoPath) summary.missingVideo.push(song.title)
-        const r = insertSong.run(song.title, song.artist ?? null, JSON.stringify(song.sections),
+        const r = insertSong.run(song.title, song.artist ?? null, song.song_key ?? null, JSON.stringify(song.sections),
           step.videoPath, JSON.stringify(song.text_style ?? {}))
         return Number(r.lastInsertRowid)
       })

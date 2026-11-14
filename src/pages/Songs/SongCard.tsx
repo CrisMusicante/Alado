@@ -1,5 +1,6 @@
 import { useDraggable } from '@dnd-kit/core'
 import { Song } from '../../store/songs.store'
+import KeyBadge from '../../components/KeyBadge'
 
 interface Props {
   song: Song
@@ -31,7 +32,10 @@ export default function SongCard({ song, onEdit, onDelete, onRemoveFromFolder }:
     >
       <div className="flex items-start justify-between mb-2">
         <div className="flex-1 min-w-0">
-          <h3 className="font-semibold text-white truncate">{song.title}</h3>
+          <div className="flex items-center gap-2">
+            <h3 className="font-semibold text-white truncate">{song.title}</h3>
+            <KeyBadge songKey={song.song_key} />
+          </div>
           {song.artist && <p className="text-sm text-slate-400 truncate">{song.artist}</p>}
         </div>
         <div

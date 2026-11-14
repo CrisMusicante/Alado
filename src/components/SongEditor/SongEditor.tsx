@@ -3,6 +3,7 @@ import { Song, Section, TextStyle, useSongsStore } from '../../store/songs.store
 import LyricsImportModal from './LyricsImportModal'
 import AudioPanel from './AudioPanel'
 import SongPreview from './SongPreview'
+import { MAJOR_KEYS, MINOR_KEYS } from '../../utils/songKeys'
 import {
   DndContext, closestCenter, KeyboardSensor, PointerSensor,
   useSensor, useSensors, DragEndEvent
@@ -111,6 +112,7 @@ export default function SongEditor({ song, onClose }: Props) {
   const { saveSong } = useSongsStore()
   const [title, setTitle] = useState(song.title)
   const [artist, setArtist] = useState(song.artist ?? '')
+  const [songKey, setSongKey] = useState(song.song_key ?? '')
   const [sections, setSections] = useState<Section[]>(song.sections)
   const [videoPath, setVideoPath] = useState(song.video_path ?? '')
   const [textStyle, setTextStyle] = useState<Partial<TextStyle>>(song.text_style ?? {})
@@ -129,6 +131,7 @@ export default function SongEditor({ song, onClose }: Props) {
       ...song,
       title: title.trim(),
       artist: artist.trim() || undefined,
+      song_key: songKey || null,
       sections,
       video_path: videoPath || undefined,
       text_style: textStyle
@@ -202,7 +205,7 @@ export default function SongEditor({ song, onClose }: Props) {
       </div>
 
       {/* Basic fields */}
-      <div className="grid grid-cols-2 gap-4 mb-5">
+      <div className="grid grid-cols-[1fr_1fr_8rem] gap-4 mb-5">
         <div>
           <label className="block text-sm text-slate-400 mb-1.5">Título *</label>
           <input
@@ -220,6 +223,26 @@ export default function SongEditor({ song, onClose }: Props) {
             className="w-full bg-slate-800 text-white rounded-xl px-4 py-2.5 outline-none focus:ring-2 focus:ring-indigo-500 border border-slate-700"
             placeholder="Opcional"
           />
+        </div>
+        <div>
+          <label className="block text-sm text-slate-400 mb-1.5">Tono</label>
+          <select
+            value={songKey}
+            onChange={e => setSongKey(e.target.value)}
+            className="w-full bg-slate-800 text-white rounded-xl px-3 py-2.5 outline-none focus:ring-2 focus:ring-indigo-500 border border-slate-700"
+          >
+            <option value="">—</option>
+            {/* A key saved before this list existed (e.g. from a pack) stays selectable. */}
+            {songKey && !(MAJOR_KEYS as readonly string[]).includes(songKey) && !(MINOR_KEYS as readonly string[]).includes(songKey) && (
+              <option value={songKey}>{songKey}</option>
+            )}
+            <optgroup label="Mayor">
+              {MAJOR_KEYS.map(k => <option key={k} value={k}>{k}</option>)}
+            </optgroup>
+            <optgroup label="Menor">
+              {MINOR_KEYS.map(k => <option key={k} value={k}>{k}</option>)}
+            </optgroup>
+          </select>
         </div>
       </div>
 

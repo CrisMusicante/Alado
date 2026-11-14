@@ -147,6 +147,17 @@ function runMigrations(database: Database.Database): void {
       database.pragma('user_version = 3')
     })()
   }
+
+  if (version < 4) {
+    database.transaction(() => {
+      try {
+        database.exec('ALTER TABLE songs ADD COLUMN song_key TEXT')
+      } catch (e: any) {
+        if (!String(e?.message).includes('duplicate column name')) throw e
+      }
+      database.pragma('user_version = 4')
+    })()
+  }
 }
 
 function scheduleBackup(userDataPath: string, dbPath: string): void {

@@ -42,7 +42,7 @@ All renderer↔main communication goes through `electron/preload.ts`, which expo
 
 ### Data Layer
 
-SQLite via `better-sqlite3`. The singleton `getDb()` in `electron/db/database.ts` initializes from `electron/db/schema.sql` and stores the DB in Electron's `userData` path. Schema: `songs`, `setlists`, `setlist_items`, `app_settings`. The `sections` and `text_style` columns are stored as JSON strings and deserialized on read in `deserializeSong()`.
+SQLite via `better-sqlite3`. The singleton `getDb()` in `electron/db/database.ts` initializes from `electron/db/schema.sql` and stores the DB in Electron's `userData` path. Schema: `songs`, `setlists`, `setlist_items`, `app_settings`. The `sections` and `text_style` columns are stored as JSON strings and deserialized on read in `deserializeSong()`. `songs.song_key` (migration `user_version = 4`) holds the musical key from the fixed list in `src/utils/songKeys.ts`; it travels in `.alado` (fills only local songs without a key) and `.wfpack`.
 
 Automatic weekly backup: up to 5 backups kept in `userData/backups/`.
 

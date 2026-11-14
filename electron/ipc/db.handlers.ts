@@ -23,6 +23,7 @@ export interface Song {
   id?: number
   title: string
   artist?: string
+  song_key?: string | null
   sections: Section[]
   video_path?: string
   text_style: Partial<TextStyle>
@@ -66,13 +67,13 @@ export function registerDbHandlers(): void {
 
     if (song.id) {
       db.prepare(
-        `UPDATE songs SET title=?, artist=?, sections=?, video_path=?, text_style=? WHERE id=?`
-      ).run(song.title, song.artist ?? null, sections, song.video_path ?? null, textStyle, song.id)
+        `UPDATE songs SET title=?, artist=?, song_key=?, sections=?, video_path=?, text_style=? WHERE id=?`
+      ).run(song.title, song.artist ?? null, song.song_key || null, sections, song.video_path ?? null, textStyle, song.id)
       return song.id
     } else {
       const result = db.prepare(
-        `INSERT INTO songs (title, artist, sections, video_path, text_style) VALUES (?,?,?,?,?)`
-      ).run(song.title, song.artist ?? null, sections, song.video_path ?? null, textStyle)
+        `INSERT INTO songs (title, artist, song_key, sections, video_path, text_style) VALUES (?,?,?,?,?,?)`
+      ).run(song.title, song.artist ?? null, song.song_key || null, sections, song.video_path ?? null, textStyle)
       return result.lastInsertRowid
     }
   })
@@ -91,7 +92,7 @@ export function registerDbHandlers(): void {
     return setlists.map(sl => ({
       ...sl,
       songs: db.prepare(
-        `SELECT si.*, s.title, s.artist, s.sections, s.video_path, s.text_style
+        `SELECT si.*, s.title, s.artist, s.song_key, s.sections, s.video_path, s.text_style
          FROM setlist_items si JOIN songs s ON s.id = si.song_id
          WHERE si.setlist_id = ? ORDER BY si.position`
       ).all(sl.id).map(toSetlistItem)
