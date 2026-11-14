@@ -10,6 +10,7 @@ export function toSetlistItem(row: any): { position: number; custom_video: strin
       id: row.song_id,
       title: row.title,
       artist: row.artist,
+      song_key: row.song_key ?? null,
       video_path: row.video_path,
       sections: JSON.parse(row.sections || '[]'),
       text_style: JSON.parse(row.text_style || '{}')

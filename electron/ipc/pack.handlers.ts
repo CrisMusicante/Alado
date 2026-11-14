@@ -11,6 +11,8 @@ import { getSongAudio, upsertSongAudio } from '../audio/repo'
 import { stemsDir, findStem } from '../audio/paths'
 import { assertSongId } from '../audio/validate'
 import { purgeSongAudio } from './audio.handlers'
+import { serializeSheetStyle } from './db.handlers'
+import { parseSheetStyle } from '../setlist/sheetStyle'
 
 function toFlac(wav: string): Promise<Uint8Array> {
   const ffmpeg = getFfmpegPath()
@@ -36,6 +38,9 @@ async function stemEntry(songId: number, stem: 'instrumental' | 'vocals'): Promi
   const isFlac = getFfmpegPath() !== null
   return [`audio/${stem}.${isFlac ? 'flac' : 'wav'}`, data]
 }
+
+/** A pack's key, if it is a short string (older packs have none). */
+const packKey = (k: unknown): string | null => (typeof k === 'string' && k.trim() && k.length <= 8 ? k.trim() : null)
 
 const findDuplicate = (title: string, artist?: string) => getDb().prepare(
   `SELECT id FROM songs WHERE title = ? COLLATE NOCASE AND IFNULL(artist, '') = IFNULL(?, '') COLLATE NOCASE LIMIT 1`
@@ -67,6 +72,8 @@ export function registerPackHandlers(): void {
     const packSong: PackSong = {
       title: song.title,
       artist: song.artist ?? undefined,
+      song_key: song.song_key ?? null,
+      sheet_style: song.sheet_style ? parseSheetStyle(song.sheet_style) : null,
       sections: JSON.parse(song.sections),
       text_style: JSON.parse(song.text_style),
       cues: audio.cues,
@@ -107,12 +114,12 @@ export function registerPackHandlers(): void {
     if (mode === 'replace' && dup) {
       songId = dup.id
       await purgeSongAudio(songId)
-      db.prepare('UPDATE songs SET sections = ?, text_style = ? WHERE id = ?')
-        .run(JSON.stringify(song.sections), JSON.stringify(song.text_style), songId)
+      db.prepare('UPDATE songs SET sections = ?, text_style = ?, song_key = COALESCE(?, song_key), sheet_style = COALESCE(?, sheet_style) WHERE id = ?')
+        .run(JSON.stringify(song.sections), JSON.stringify(song.text_style), packKey(song.song_key), serializeSheetStyle(song.sheet_style), songId)
     } else {
       const title = dup ? `${song.title} (importada)` : song.title
-      songId = Number(db.prepare('INSERT INTO songs (title, artist, sections, text_style) VALUES (?,?,?,?)')
-        .run(title, song.artist ?? null, JSON.stringify(song.sections), JSON.stringify(song.text_style)).lastInsertRowid)
+      songId = Number(db.prepare('INSERT INTO songs (title, artist, song_key, sheet_style, sections, text_style) VALUES (?,?,?,?,?,?)')
+        .run(title, song.artist ?? null, packKey(song.song_key), serializeSheetStyle(song.sheet_style), JSON.stringify(song.sections), JSON.stringify(song.text_style)).lastInsertRowid)
     }
 
     // Every name in `files` already passed isAllowedEntry; path.basename is a second guard.

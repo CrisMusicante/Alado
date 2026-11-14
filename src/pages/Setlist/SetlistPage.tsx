@@ -21,6 +21,8 @@ import { showToast } from '../../store/toast.store'
 import { groupSongs, FolderFilter } from '../../utils/songGroups'
 import LyricsHoverCard from './LyricsHoverCard'
 import SectionList from './SectionList'
+import KeyBadge from '../../components/KeyBadge'
+import { loadSheetStyle } from '../../utils/sheetStyle'
 
 const HOVER_DELAY_MS = 400
 
@@ -116,6 +118,19 @@ export default function SetlistPage() {
       if (res) showToast('PowerPoint exportado')
     } catch (e) {
       await alertDialog(ipcErrorMessage(e), 'No se pudo exportar el PowerPoint')
+    }
+  }
+
+  async function handleExportPdf() {
+    setShowExport(false)
+    try {
+      const res = await window.api.setlistExportPdf({
+        name: setlistName.trim() || defaultServiceName(serviceDate), service_date: serviceDate,
+        songIds: setlistSongs.map(s => s.song.id!), sheetStyle: loadSheetStyle()
+      })
+      if (res) showToast('PDF de letras exportado')
+    } catch (e) {
+      await alertDialog(ipcErrorMessage(e), 'No se pudo exportar el PDF')
     }
   }
 
@@ -230,10 +245,13 @@ export default function SetlistPage() {
                   onMouseLeave={hideHover}
                   className="text-left px-3 py-2.5 rounded-xl hover:bg-slate-800 transition-all duration-150 group border border-transparent hover:border-slate-700"
                 >
-                  <p className={`text-sm font-medium truncate ${inSetlist.has(song.id) ? 'text-slate-500' : 'text-white'}`}>
-                    {inSetlist.has(song.id) && <span className="text-emerald-500 mr-1">✓</span>}
-                    {song.title}
-                  </p>
+                  <div className="flex items-center gap-2">
+                    <p className={`text-sm font-medium truncate ${inSetlist.has(song.id) ? 'text-slate-500' : 'text-white'}`}>
+                      {inSetlist.has(song.id) && <span className="text-emerald-500 mr-1">✓</span>}
+                      {song.title}
+                    </p>
+                    <KeyBadge songKey={song.song_key} className="ml-auto" />
+                  </div>
                   {song.artist && <p className="text-xs text-slate-500 truncate">{song.artist}</p>}
                 </button>
               ))}
@@ -366,9 +384,13 @@ export default function SetlistPage() {
                     <p className="text-sm font-medium text-white">Archivo .alado</p>
                     <p className="text-xs text-slate-400">Para abrirlo en otra compu con ALADO</p>
                   </button>
-                  <button onClick={handleExportPptx} className="block w-full text-left px-4 py-3 hover:bg-slate-700 transition-colors">
+                  <button onClick={handleExportPptx} className="block w-full text-left px-4 py-3 hover:bg-slate-700 transition-colors border-b border-slate-700/50">
                     <p className="text-sm font-medium text-white">PowerPoint</p>
                     <p className="text-xs text-slate-400">Respaldo para presentar sin ALADO</p>
+                  </button>
+                  <button onClick={handleExportPdf} className="block w-full text-left px-4 py-3 hover:bg-slate-700 transition-colors">
+                    <p className="text-sm font-medium text-white">PDF de letras</p>
+                    <p className="text-xs text-slate-400">Para músicos y coristas, con el tono de cada canción</p>
                   </button>
                 </div>
               )}
@@ -481,9 +503,12 @@ function SortableSetlistItem({ id, song, index, isLive, isCurrentSong, onRemove,
           {isCurrentSong ? '▶' : index + 1}
         </span>
         <div className="flex-1 min-w-0">
-          <p className={`font-medium truncate ${isCurrentSong ? 'text-indigo-100' : 'text-white'}`}>
-            {song.title}
-          </p>
+          <div className="flex items-center gap-2">
+            <p className={`font-medium truncate ${isCurrentSong ? 'text-indigo-100' : 'text-white'}`}>
+              {song.title}
+            </p>
+            <KeyBadge songKey={song.song_key} />
+          </div>
           {song.artist && (
             <p className="text-xs text-slate-500 truncate">{song.artist}</p>
           )}

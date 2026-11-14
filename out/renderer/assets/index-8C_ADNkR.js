@@ -1,4 +1,4 @@
-const __vite__mapDeps=(i,m=__vite__mapDeps,d=(m.f||(m.f=["./pptxgen.es-Bpua9stQ.js","./SlideView-CqN0asXU.js"])))=>i.map(i=>d[i]);
+const __vite__mapDeps=(i,m=__vite__mapDeps,d=(m.f||(m.f=["./pptxgen.es-Gcul_YeZ.js","./SlideView-CqN0asXU.js"])))=>i.map(i=>d[i]);
 import { r as requireReactDom, a as reactExports, R as React, b as requireReact, g as getDefaultExportFromCjs, j as jsxRuntimeExports, S as SlideView, c as ReactDOM } from "./SlideView-CqN0asXU.js";
 var reactDomExports = requireReactDom();
 function useCombinedRefs() {
@@ -4743,6 +4743,188 @@ function SongPreview({ sections, selected, onSelect, textStyle, videoPath }) {
     section && /* @__PURE__ */ jsxRuntimeExports.jsx("p", { className: "text-xs text-slate-400 mt-2 truncate", children: section.label })
   ] });
 }
+const MAJOR_KEYS = ["C", "C#", "Db", "D", "Eb", "E", "F", "F#", "Gb", "G", "Ab", "A", "Bb", "B"];
+const MINOR_KEYS = ["Cm", "C#m", "Dm", "D#m", "Ebm", "Em", "Fm", "F#m", "Gm", "G#m", "Am", "Bbm", "Bm"];
+const DEFAULT_SHEET_STYLE = { size: "auto", columns: "auto" };
+const SIZE_OPTIONS = [
+  { value: "auto", label: "Automático", hint: "Lo más grande que quepa en una hoja" },
+  { value: "lg", label: "Grande", hint: "20 pt" },
+  { value: "md", label: "Mediano", hint: "16 pt" },
+  { value: "sm", label: "Compacto", hint: "12 pt" }
+];
+const COLUMN_OPTIONS = [
+  { value: "auto", label: "Automático" },
+  { value: 1, label: "Una" },
+  { value: 2, label: "Dos" }
+];
+const STORAGE_KEY = "sheetStyle";
+const SIZES = SIZE_OPTIONS.map((o) => o.value);
+const COLUMNS = COLUMN_OPTIONS.map((o) => o.value);
+function loadSheetStyle() {
+  try {
+    const v = JSON.parse(localStorage.getItem(STORAGE_KEY) ?? "{}");
+    return {
+      size: SIZES.includes(v?.size) ? v.size : DEFAULT_SHEET_STYLE.size,
+      columns: COLUMNS.includes(v?.columns) ? v.columns : DEFAULT_SHEET_STYLE.columns
+    };
+  } catch {
+    return DEFAULT_SHEET_STYLE;
+  }
+}
+function saveSheetStyle(style) {
+  localStorage.setItem(STORAGE_KEY, JSON.stringify(style));
+}
+const sizeLabel = (v) => SIZE_OPTIONS.find((o) => o.value === v)?.label ?? v;
+const columnsLabel = (v) => COLUMN_OPTIONS.find((o) => o.value === v)?.label ?? String(v);
+const optionClass = (active) => `rounded-xl text-sm font-medium border transition-all duration-150 ${active ? "bg-indigo-950 border-indigo-500 text-indigo-200" : "bg-slate-800 border-slate-700 text-slate-300 hover:border-slate-600"}`;
+function SheetStyleSettings({ onChange }) {
+  const [style, setStyle] = reactExports.useState(loadSheetStyle);
+  function update(patch) {
+    const next = { ...style, ...patch };
+    setStyle(next);
+    saveSheetStyle(next);
+    onChange?.(next);
+  }
+  return /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "flex flex-col gap-4", children: [
+    /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { children: [
+      /* @__PURE__ */ jsxRuntimeExports.jsx("p", { className: "text-sm text-slate-300 mb-2", children: "Tamaño de letra" }),
+      /* @__PURE__ */ jsxRuntimeExports.jsx("div", { className: "grid grid-cols-2 gap-2", children: SIZE_OPTIONS.map((o) => /* @__PURE__ */ jsxRuntimeExports.jsxs("button", { onClick: () => update({ size: o.value }), className: `${optionClass(style.size === o.value)} px-4 py-2.5 text-left`, children: [
+        o.label,
+        o.value === "auto" && /* @__PURE__ */ jsxRuntimeExports.jsx("span", { className: "ml-1.5 text-[11px] text-emerald-400", children: "recomendado" }),
+        /* @__PURE__ */ jsxRuntimeExports.jsx("span", { className: "block text-xs font-normal text-slate-400", children: o.hint })
+      ] }, o.value)) })
+    ] }),
+    /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { children: [
+      /* @__PURE__ */ jsxRuntimeExports.jsx("p", { className: "text-sm text-slate-300 mb-2", children: "Columnas" }),
+      /* @__PURE__ */ jsxRuntimeExports.jsx("div", { className: "flex gap-2", children: COLUMN_OPTIONS.map((o) => /* @__PURE__ */ jsxRuntimeExports.jsx("button", { onClick: () => update({ columns: o.value }), className: `${optionClass(style.columns === o.value)} flex-1 py-2.5`, children: o.label }, String(o.value))) }),
+      /* @__PURE__ */ jsxRuntimeExports.jsx("p", { className: "text-xs text-slate-500 mt-2", children: "Automático usa una columna y pasa a dos solo si así la letra queda más grande." })
+    ] })
+  ] });
+}
+const PREVIEW_DELAY_MS = 700;
+const chipClass = (active) => `px-2.5 py-1.5 rounded-lg text-xs font-medium border transition-colors ${active ? "bg-indigo-600 border-indigo-500 text-white" : "bg-slate-700 border-slate-600 text-slate-300 hover:bg-slate-600"}`;
+function SheetStylePanel({ song, value, onChange }) {
+  const [general, setGeneral] = reactExports.useState(loadSheetStyle);
+  const [showGeneral, setShowGeneral] = reactExports.useState(false);
+  const [preview, setPreview] = reactExports.useState(null);
+  const [loading, setLoading] = reactExports.useState(false);
+  const [error, setError] = reactExports.useState(false);
+  const [enlarged, setEnlarged] = reactExports.useState(false);
+  const [pages, setPages] = reactExports.useState(1);
+  const seq2 = reactExports.useRef(0);
+  function set(patch) {
+    const next = { ...value ?? {}, ...patch };
+    for (const k of Object.keys(next)) if (next[k] === void 0) delete next[k];
+    onChange(Object.keys(next).length > 0 ? next : null);
+  }
+  const songKey = JSON.stringify([song.title, song.artist, song.song_key, song.sections, value, general]);
+  reactExports.useEffect(() => {
+    const id = ++seq2.current;
+    setLoading(true);
+    const timer = setTimeout(() => {
+      window.api.sheetPreview({ song: { ...song, sheet_style: value }, sheetStyle: general }).then((url) => {
+        if (id === seq2.current) {
+          setPreview(url);
+          setError(false);
+        }
+      }).catch((e) => {
+        console.error("No se pudo generar la vista previa del PDF", e);
+        if (id === seq2.current) setError(true);
+      }).finally(() => {
+        if (id === seq2.current) setLoading(false);
+      });
+    }, PREVIEW_DELAY_MS);
+    return () => clearTimeout(timer);
+  }, [songKey]);
+  reactExports.useEffect(() => {
+    if (!showGeneral && !enlarged) return;
+    const onKey = (e) => {
+      if (e.key === "Escape") {
+        setShowGeneral(false);
+        setEnlarged(false);
+      }
+    };
+    window.addEventListener("keydown", onKey);
+    return () => window.removeEventListener("keydown", onKey);
+  }, [showGeneral, enlarged]);
+  return /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "mb-6 bg-slate-800 rounded-2xl p-4 border border-slate-700", children: [
+    /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "flex items-center gap-3 mb-4", children: [
+      /* @__PURE__ */ jsxRuntimeExports.jsx("h2", { className: "text-xs font-semibold text-slate-400 uppercase tracking-widest flex-1", children: "Hoja para músicos (PDF)" }),
+      /* @__PURE__ */ jsxRuntimeExports.jsx(
+        "button",
+        {
+          onClick: () => setShowGeneral(true),
+          className: "text-xs text-indigo-300 hover:text-indigo-200 px-2.5 py-1.5 rounded-lg hover:bg-slate-700 transition-colors",
+          title: "Cambiar el ajuste que usan todas las canciones",
+          children: "⚙ Configuración general"
+        }
+      )
+    ] }),
+    /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "grid grid-cols-[minmax(0,1fr)_auto] gap-5 items-start", children: [
+      /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "flex flex-col gap-4", children: [
+        /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { children: [
+          /* @__PURE__ */ jsxRuntimeExports.jsx("label", { className: "block text-xs text-slate-400 mb-2", children: "Tamaño de letra" }),
+          /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "flex flex-wrap gap-1.5", children: [
+            /* @__PURE__ */ jsxRuntimeExports.jsxs("button", { onClick: () => set({ size: void 0 }), className: chipClass(value?.size === void 0), children: [
+              "General (",
+              sizeLabel(general.size),
+              ")"
+            ] }),
+            SIZE_OPTIONS.map((o) => /* @__PURE__ */ jsxRuntimeExports.jsx("button", { onClick: () => set({ size: o.value }), className: chipClass(value?.size === o.value), title: o.hint, children: o.label }, o.value))
+          ] })
+        ] }),
+        /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { children: [
+          /* @__PURE__ */ jsxRuntimeExports.jsx("label", { className: "block text-xs text-slate-400 mb-2", children: "Columnas" }),
+          /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "flex flex-wrap gap-1.5", children: [
+            /* @__PURE__ */ jsxRuntimeExports.jsxs("button", { onClick: () => set({ columns: void 0 }), className: chipClass(value?.columns === void 0), children: [
+              "General (",
+              columnsLabel(general.columns),
+              ")"
+            ] }),
+            COLUMN_OPTIONS.map((o) => /* @__PURE__ */ jsxRuntimeExports.jsx("button", { onClick: () => set({ columns: o.value }), className: chipClass(value?.columns === o.value), children: o.label }, String(o.value)))
+          ] })
+        ] }),
+        /* @__PURE__ */ jsxRuntimeExports.jsx("p", { className: "text-xs text-slate-500", children: 'Deja "General" para que esta canción siga la configuración general. Cámbialo solo si esta canción lo necesita.' })
+      ] }),
+      /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "w-72", children: [
+        /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "flex items-center justify-between mb-1.5", children: [
+          /* @__PURE__ */ jsxRuntimeExports.jsx("span", { className: "text-xs text-slate-400", children: "Vista previa" }),
+          loading ? /* @__PURE__ */ jsxRuntimeExports.jsx("span", { className: "text-[11px] text-slate-500", children: "Actualizando…" }) : pages > 1 && /* @__PURE__ */ jsxRuntimeExports.jsxs("span", { className: "text-[11px] text-amber-400", children: [
+            "Ocupa ",
+            pages,
+            " hojas"
+          ] })
+        ] }),
+        /* @__PURE__ */ jsxRuntimeExports.jsx(
+          "button",
+          {
+            onClick: () => preview && setEnlarged(true),
+            disabled: !preview,
+            className: "block w-full bg-white rounded-md overflow-hidden ring-1 ring-slate-600 hover:ring-indigo-400 transition-shadow disabled:cursor-default",
+            title: "Ver en grande",
+            style: { aspectRatio: "8.5 / 11" },
+            children: preview ? /* @__PURE__ */ jsxRuntimeExports.jsx(
+              "img",
+              {
+                src: preview,
+                alt: "Vista previa de la hoja",
+                className: "w-full h-full object-cover object-top",
+                onLoad: (e) => setPages(Math.max(1, Math.round(e.currentTarget.naturalHeight / e.currentTarget.naturalWidth / (11 / 8.5))))
+              }
+            ) : /* @__PURE__ */ jsxRuntimeExports.jsx("span", { className: "text-xs text-slate-400", children: error ? "No se pudo generar" : "Generando…" })
+          }
+        )
+      ] })
+    ] }),
+    showGeneral && /* @__PURE__ */ jsxRuntimeExports.jsx("div", { className: "fixed inset-0 z-50 bg-black/60 flex items-center justify-center p-6", onClick: () => setShowGeneral(false), children: /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "bg-slate-900 border border-slate-700 rounded-2xl p-6 w-full max-w-lg shadow-2xl", onClick: (e) => e.stopPropagation(), children: [
+      /* @__PURE__ */ jsxRuntimeExports.jsx("h3", { className: "text-base font-semibold text-white mb-1", children: "PDF de letras: configuración general" }),
+      /* @__PURE__ */ jsxRuntimeExports.jsx("p", { className: "text-sm text-slate-400 mb-4", children: 'Aplica a todas las canciones que estén en "General". También está en Configuración.' }),
+      /* @__PURE__ */ jsxRuntimeExports.jsx(SheetStyleSettings, { onChange: setGeneral }),
+      /* @__PURE__ */ jsxRuntimeExports.jsx("div", { className: "flex justify-end mt-6", children: /* @__PURE__ */ jsxRuntimeExports.jsx("button", { onClick: () => setShowGeneral(false), className: "px-5 py-2 rounded-xl bg-indigo-600 hover:bg-indigo-500 text-white text-sm font-medium transition-colors", children: "Listo" }) })
+    ] }) }),
+    enlarged && preview && /* @__PURE__ */ jsxRuntimeExports.jsx("div", { className: "fixed inset-0 z-50 bg-black/70 overflow-y-auto p-6 flex justify-center", onClick: () => setEnlarged(false), children: /* @__PURE__ */ jsxRuntimeExports.jsx("img", { src: preview, alt: "Vista previa de la hoja", className: "max-w-[816px] w-full h-auto self-start rounded-md shadow-2xl bg-white" }) })
+  ] });
+}
 function arrayMove(array, from, to) {
   const newArray = array.slice();
   newArray.splice(to < 0 ? newArray.length + to : to, 0, newArray.splice(from, 1)[0]);
@@ -5415,6 +5597,8 @@ function SongEditor({ song, onClose }) {
   const { saveSong } = useSongsStore();
   const [title, setTitle] = reactExports.useState(song.title);
   const [artist, setArtist] = reactExports.useState(song.artist ?? "");
+  const [songKey, setSongKey] = reactExports.useState(song.song_key ?? "");
+  const [sheetStyle, setSheetStyle] = reactExports.useState(song.sheet_style ?? null);
   const [sections, setSections] = reactExports.useState(song.sections);
   const [videoPath, setVideoPath] = reactExports.useState(song.video_path ?? "");
   const [textStyle, setTextStyle] = reactExports.useState(song.text_style ?? {});
@@ -5431,6 +5615,8 @@ function SongEditor({ song, onClose }) {
       ...song,
       title: title.trim(),
       artist: artist.trim() || void 0,
+      song_key: songKey || null,
+      sheet_style: sheetStyle,
       sections,
       video_path: videoPath || void 0,
       text_style: textStyle
@@ -5494,7 +5680,7 @@ function SongEditor({ song, onClose }) {
         }
       )
     ] }),
-    /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "grid grid-cols-2 gap-4 mb-5", children: [
+    /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "grid grid-cols-[1fr_1fr_8rem] gap-4 mb-5", children: [
       /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { children: [
         /* @__PURE__ */ jsxRuntimeExports.jsx("label", { className: "block text-sm text-slate-400 mb-1.5", children: "Título *" }),
         /* @__PURE__ */ jsxRuntimeExports.jsx(
@@ -5516,6 +5702,23 @@ function SongEditor({ song, onClose }) {
             onChange: (e) => setArtist(e.target.value),
             className: "w-full bg-slate-800 text-white rounded-xl px-4 py-2.5 outline-none focus:ring-2 focus:ring-indigo-500 border border-slate-700",
             placeholder: "Opcional"
+          }
+        )
+      ] }),
+      /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { children: [
+        /* @__PURE__ */ jsxRuntimeExports.jsx("label", { className: "block text-sm text-slate-400 mb-1.5", children: "Tono" }),
+        /* @__PURE__ */ jsxRuntimeExports.jsxs(
+          "select",
+          {
+            value: songKey,
+            onChange: (e) => setSongKey(e.target.value),
+            className: "w-full bg-slate-800 text-white rounded-xl px-3 py-2.5 outline-none focus:ring-2 focus:ring-indigo-500 border border-slate-700",
+            children: [
+              /* @__PURE__ */ jsxRuntimeExports.jsx("option", { value: "", children: "—" }),
+              songKey && !MAJOR_KEYS.includes(songKey) && !MINOR_KEYS.includes(songKey) && /* @__PURE__ */ jsxRuntimeExports.jsx("option", { value: songKey, children: songKey }),
+              /* @__PURE__ */ jsxRuntimeExports.jsx("optgroup", { label: "Mayor", children: MAJOR_KEYS.map((k) => /* @__PURE__ */ jsxRuntimeExports.jsx("option", { value: k, children: k }, k)) }),
+              /* @__PURE__ */ jsxRuntimeExports.jsx("optgroup", { label: "Menor", children: MINOR_KEYS.map((k) => /* @__PURE__ */ jsxRuntimeExports.jsx("option", { value: k, children: k }, k)) })
+            ]
           }
         )
       ] })
@@ -5620,6 +5823,14 @@ function SongEditor({ song, onClose }) {
         ] })
       ] })
     ] }),
+    /* @__PURE__ */ jsxRuntimeExports.jsx(
+      SheetStylePanel,
+      {
+        song: { ...song, title, artist: artist.trim() || void 0, song_key: songKey || null, sections, text_style: textStyle },
+        value: sheetStyle,
+        onChange: setSheetStyle
+      }
+    ),
     /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "flex items-center justify-between mb-3", children: [
       /* @__PURE__ */ jsxRuntimeExports.jsx("h2", { className: "text-lg font-semibold", children: "Secciones" }),
       /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "flex gap-2", children: [
@@ -5683,6 +5894,17 @@ function SongEditor({ song, onClose }) {
     ] })
   ] });
 }
+function KeyBadge({ songKey, className = "" }) {
+  if (!songKey) return null;
+  return /* @__PURE__ */ jsxRuntimeExports.jsx(
+    "span",
+    {
+      title: `Tono: ${songKey}`,
+      className: `shrink-0 inline-block px-1.5 py-0.5 rounded-md bg-amber-500/15 text-amber-300 text-xs font-semibold font-mono leading-none ${className}`,
+      children: songKey
+    }
+  );
+}
 function SongCard({ song, onEdit, onDelete, onRemoveFromFolder }) {
   const { attributes, listeners, setNodeRef, transform, isDragging } = useDraggable({
     id: `song-${song.id}`,
@@ -5702,7 +5924,10 @@ function SongCard({ song, onEdit, onDelete, onRemoveFromFolder }) {
       children: [
         /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "flex items-start justify-between mb-2", children: [
           /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "flex-1 min-w-0", children: [
-            /* @__PURE__ */ jsxRuntimeExports.jsx("h3", { className: "font-semibold text-white truncate", children: song.title }),
+            /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "flex items-center gap-2", children: [
+              /* @__PURE__ */ jsxRuntimeExports.jsx("h3", { className: "font-semibold text-white truncate", children: song.title }),
+              /* @__PURE__ */ jsxRuntimeExports.jsx(KeyBadge, { songKey: song.song_key })
+            ] }),
             song.artist && /* @__PURE__ */ jsxRuntimeExports.jsx("p", { className: "text-sm text-slate-400 truncate", children: song.artist })
           ] }),
           /* @__PURE__ */ jsxRuntimeExports.jsxs(
@@ -6740,7 +6965,7 @@ const PLAIN_BG = "0F172A";
 const SHADOW = { type: "outer", color: "000000", blur: 6, offset: 2, angle: 45, opacity: 0.8 };
 async function exportServicePptx(name, songs) {
   const { default: PptxGenJS } = await __vitePreload(async () => {
-    const { default: PptxGenJS2 } = await import("./pptxgen.es-Bpua9stQ.js");
+    const { default: PptxGenJS2 } = await import("./pptxgen.es-Gcul_YeZ.js");
     return { default: PptxGenJS2 };
   }, true ? __vite__mapDeps([0,1]) : void 0, import.meta.url);
   const pptx = new PptxGenJS();
@@ -6836,7 +7061,10 @@ function LyricsHoverCard({ song, anchorRect }) {
       className: "fixed z-50 pointer-events-none bg-slate-800 border border-indigo-500/70 rounded-2xl shadow-2xl p-4 overflow-hidden",
       style: { top, left, width: CARD_WIDTH, maxHeight: CARD_MAX_HEIGHT },
       children: [
-        /* @__PURE__ */ jsxRuntimeExports.jsx("p", { className: "font-semibold text-white truncate", children: song.title }),
+        /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "flex items-center gap-2", children: [
+          /* @__PURE__ */ jsxRuntimeExports.jsx("p", { className: "font-semibold text-white truncate", children: song.title }),
+          /* @__PURE__ */ jsxRuntimeExports.jsx(KeyBadge, { songKey: song.song_key })
+        ] }),
         song.artist && /* @__PURE__ */ jsxRuntimeExports.jsx("p", { className: "text-xs text-slate-400 truncate mb-2", children: song.artist }),
         preview.length === 0 ? /* @__PURE__ */ jsxRuntimeExports.jsx("p", { className: "text-sm text-slate-400 mt-2", children: "Sin letra" }) : /* @__PURE__ */ jsxRuntimeExports.jsx("div", { className: "flex flex-col gap-2 mt-2", children: preview.map((s, i) => /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { children: [
           /* @__PURE__ */ jsxRuntimeExports.jsx("p", { className: "text-[11px] font-bold uppercase tracking-wide text-indigo-300", children: s.label }),
@@ -6958,6 +7186,20 @@ function SetlistPage() {
       await alertDialog(ipcErrorMessage(e), "No se pudo exportar el PowerPoint");
     }
   }
+  async function handleExportPdf() {
+    setShowExport(false);
+    try {
+      const res = await window.api.setlistExportPdf({
+        name: setlistName.trim() || defaultServiceName(serviceDate),
+        service_date: serviceDate,
+        songIds: setlistSongs.map((s) => s.song.id),
+        sheetStyle: loadSheetStyle()
+      });
+      if (res) showToast("PDF de letras exportado");
+    } catch (e) {
+      await alertDialog(ipcErrorMessage(e), "No se pudo exportar el PDF");
+    }
+  }
   async function handleImport() {
     if (!await canDiscardDraft("Hay cambios sin guardar. ¿Importar otro servicio de todos modos?")) return;
     try {
@@ -7058,9 +7300,12 @@ function SetlistPage() {
               onMouseLeave: hideHover,
               className: "text-left px-3 py-2.5 rounded-xl hover:bg-slate-800 transition-all duration-150 group border border-transparent hover:border-slate-700",
               children: [
-                /* @__PURE__ */ jsxRuntimeExports.jsxs("p", { className: `text-sm font-medium truncate ${inSetlist.has(song.id) ? "text-slate-500" : "text-white"}`, children: [
-                  inSetlist.has(song.id) && /* @__PURE__ */ jsxRuntimeExports.jsx("span", { className: "text-emerald-500 mr-1", children: "✓" }),
-                  song.title
+                /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "flex items-center gap-2", children: [
+                  /* @__PURE__ */ jsxRuntimeExports.jsxs("p", { className: `text-sm font-medium truncate ${inSetlist.has(song.id) ? "text-slate-500" : "text-white"}`, children: [
+                    inSetlist.has(song.id) && /* @__PURE__ */ jsxRuntimeExports.jsx("span", { className: "text-emerald-500 mr-1", children: "✓" }),
+                    song.title
+                  ] }),
+                  /* @__PURE__ */ jsxRuntimeExports.jsx(KeyBadge, { songKey: song.song_key, className: "ml-auto" })
                 ] }),
                 song.artist && /* @__PURE__ */ jsxRuntimeExports.jsx("p", { className: "text-xs text-slate-500 truncate", children: song.artist })
               ]
@@ -7203,9 +7448,13 @@ function SetlistPage() {
                 /* @__PURE__ */ jsxRuntimeExports.jsx("p", { className: "text-sm font-medium text-white", children: "Archivo .alado" }),
                 /* @__PURE__ */ jsxRuntimeExports.jsx("p", { className: "text-xs text-slate-400", children: "Para abrirlo en otra compu con ALADO" })
               ] }),
-              /* @__PURE__ */ jsxRuntimeExports.jsxs("button", { onClick: handleExportPptx, className: "block w-full text-left px-4 py-3 hover:bg-slate-700 transition-colors", children: [
+              /* @__PURE__ */ jsxRuntimeExports.jsxs("button", { onClick: handleExportPptx, className: "block w-full text-left px-4 py-3 hover:bg-slate-700 transition-colors border-b border-slate-700/50", children: [
                 /* @__PURE__ */ jsxRuntimeExports.jsx("p", { className: "text-sm font-medium text-white", children: "PowerPoint" }),
                 /* @__PURE__ */ jsxRuntimeExports.jsx("p", { className: "text-xs text-slate-400", children: "Respaldo para presentar sin ALADO" })
+              ] }),
+              /* @__PURE__ */ jsxRuntimeExports.jsxs("button", { onClick: handleExportPdf, className: "block w-full text-left px-4 py-3 hover:bg-slate-700 transition-colors", children: [
+                /* @__PURE__ */ jsxRuntimeExports.jsx("p", { className: "text-sm font-medium text-white", children: "PDF de letras" }),
+                /* @__PURE__ */ jsxRuntimeExports.jsx("p", { className: "text-xs text-slate-400", children: "Para músicos y coristas, con el tono de cada canción" })
               ] })
             ] })
           ] }),
@@ -7284,7 +7533,10 @@ function SortableSetlistItem({ id, song, index, isLive, isCurrentSong, onRemove,
           /* @__PURE__ */ jsxRuntimeExports.jsx("span", { className: `text-sm w-6 text-center font-mono shrink-0
           ${isCurrentSong ? "text-indigo-400" : "text-slate-600"}`, children: isCurrentSong ? "▶" : index + 1 }),
           /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "flex-1 min-w-0", children: [
-            /* @__PURE__ */ jsxRuntimeExports.jsx("p", { className: `font-medium truncate ${isCurrentSong ? "text-indigo-100" : "text-white"}`, children: song.title }),
+            /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "flex items-center gap-2", children: [
+              /* @__PURE__ */ jsxRuntimeExports.jsx("p", { className: `font-medium truncate ${isCurrentSong ? "text-indigo-100" : "text-white"}`, children: song.title }),
+              /* @__PURE__ */ jsxRuntimeExports.jsx(KeyBadge, { songKey: song.song_key })
+            ] }),
             song.artist && /* @__PURE__ */ jsxRuntimeExports.jsx("p", { className: "text-xs text-slate-500 truncate", children: song.artist })
           ] }),
           /* @__PURE__ */ jsxRuntimeExports.jsxs(
@@ -7459,6 +7711,11 @@ function SettingsPage() {
           /* @__PURE__ */ jsxRuntimeExports.jsx("span", { children: "800ms (lento)" })
         ] })
       ] })
+    ] }),
+    /* @__PURE__ */ jsxRuntimeExports.jsxs("section", { id: "pdf-musicos", className: "mb-8 scroll-mt-6", children: [
+      /* @__PURE__ */ jsxRuntimeExports.jsx("h2", { className: "text-base font-semibold text-white mb-1", children: "PDF de letras para músicos" }),
+      /* @__PURE__ */ jsxRuntimeExports.jsx("p", { className: "text-sm text-slate-400 mb-4", children: "Cómo se acomoda la letra al exportar el PDF de un servicio. Cada canción puede tener su propio ajuste en su editor." }),
+      /* @__PURE__ */ jsxRuntimeExports.jsx(SheetStyleSettings, {})
     ] }),
     /* @__PURE__ */ jsxRuntimeExports.jsxs("section", { className: "mb-8", children: [
       /* @__PURE__ */ jsxRuntimeExports.jsx("h2", { className: "text-base font-semibold text-white mb-1", children: "Importar con IA (Claude API)" }),

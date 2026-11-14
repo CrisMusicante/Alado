@@ -1,4 +1,5 @@
 import path from 'path'
+import { parseSheetStyle, SongSheetStyle } from './sheetStyle'
 
 /**
  * `.alado` service files: a versioned JSON snapshot of a setlist with each song's full lyrics,
@@ -21,6 +22,10 @@ export interface Section {
 export interface AladoSong {
   title: string
   artist?: string | null
+  /** Musical key; absent in files from older versions. */
+  song_key?: string | null
+  /** Musicians' sheet override; absent in files from older versions. */
+  sheet_style?: SongSheetStyle | null
   sections: Section[]
   text_style: Record<string, unknown>
   video_file: string | null
@@ -38,12 +43,15 @@ export interface LocalSong {
   id: number
   title: string
   artist: string | null
+  song_key?: string | null
+  /** As stored in the DB (JSON text) or NULL. */
+  sheet_style?: string | null
   sections: Section[]
   updated_at: string | null
 }
 
 export type ImportStep =
-  | { kind: 'existing'; songId: number; title: string; differs: boolean }
+  | { kind: 'existing'; songId: number; title: string; differs: boolean; fillKey: string | null; fillSheetStyle: SongSheetStyle | null }
   | { kind: 'create'; song: AladoSong; videoPath: string | null }
 
 /** Last path segment for both Windows and POSIX separators (a file may come from either). */
@@ -51,7 +59,7 @@ const fileName = (p?: string | null): string | null => (p ? p.split(/[\\/]/).pop
 
 export function buildAladoFile(
   setlist: AladoFile['setlist'],
-  songs: Array<{ title: string; artist?: string | null; sections: Section[]; text_style: object; video_path?: string | null; custom_video?: string | null }>,
+  songs: Array<{ title: string; artist?: string | null; song_key?: string | null; sheet_style?: unknown; sections: Section[]; text_style: object; video_path?: string | null; custom_video?: string | null }>,
   now: Date
 ): AladoFile {
   return {
@@ -64,6 +72,8 @@ export function buildAladoFile(
       song: {
         title: s.title,
         artist: s.artist ?? null,
+        song_key: s.song_key || null,
+        sheet_style: sheetStyleOrNull(s.sheet_style),
         sections: s.sections,
         text_style: s.text_style as Record<string, unknown>,
         video_file: fileName(s.video_path)
@@ -82,6 +92,14 @@ function assertSections(v: unknown, title: string): asserts v is Section[] {
   if (!ok) throw new Error(`El archivo está dañado: la letra de "${title}" no es válida.`)
 }
 
+/** A key is optional metadata: anything that isn't a short string is dropped, not an error. */
+const cleanKey = (k: unknown): string | null => (typeof k === 'string' && k.trim() && k.length <= 8 ? k.trim() : null)
+
+const sheetStyleOrNull = (v: unknown): SongSheetStyle | null => {
+  const style = parseSheetStyle(v)
+  return Object.keys(style).length > 0 ? style : null
+}
+
 /** Validates a `.alado` file's text. Throws an Error with a user-facing Spanish message. */
 export function parseAladoFile(text: string): AladoFile {
   let data: unknown
@@ -98,6 +116,8 @@ export function parseAladoFile(text: string): AladoFile {
       throw new Error(`El archivo está dañado: la canción ${i + 1} no tiene título.`)
     }
     assertSections(item.song.sections, item.song.title)
+    item.song.song_key = cleanKey(item.song.song_key)
+    item.song.sheet_style = sheetStyleOrNull(item.song.sheet_style)
   })
   return data as AladoFile
 }
@@ -127,11 +147,20 @@ export function sectionsDiffer(a: Section[], b: Section[]): boolean {
   })
 }
 
-/** Decides, per item, whether to reuse a local song (never modified) or create it. */
+/**
+ * Decides, per item, whether to reuse a local song or create it. A reused song is never modified,
+ * except that the file's key and sheet style fill a local song that has none (`fillKey`, `fillSheetStyle`).
+ */
 export function planImport(file: AladoFile, local: LocalSong[], videosDir: string, videoNames: Set<string>): ImportStep[] {
   return file.items.map(({ song }) => {
     const match = pickMatch(song, local)
-    if (match) return { kind: 'existing', songId: match.id, title: match.title, differs: sectionsDiffer(match.sections, song.sections) }
+    if (match) {
+      return {
+        kind: 'existing', songId: match.id, title: match.title, differs: sectionsDiffer(match.sections, song.sections),
+        fillKey: !match.song_key && song.song_key ? song.song_key : null,
+        fillSheetStyle: !sheetStyleOrNull(match.sheet_style) && song.sheet_style ? song.sheet_style : null
+      }
+    }
     const videoPath = song.video_file && videoNames.has(song.video_file) ? path.join(videosDir, song.video_file) : null
     return { kind: 'create', song, videoPath }
   })

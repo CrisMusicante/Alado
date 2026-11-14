@@ -1,5 +1,6 @@
 import { create } from 'zustand'
 import type { SongAudio, EngineStatus, QueueItem, Stem, SongAudioPatch } from '../audio/types'
+import type { SheetStyle, SongSheetStyle } from '../utils/sheetStyle'
 
 export interface Section {
   type: 'verse' | 'chorus' | 'estribillo' | 'pre-chorus' | 'bridge' | 'outro' | 'intro' | 'custom'
@@ -21,6 +22,10 @@ export interface Song {
   id?: number
   title: string
   artist?: string
+  /** Musical key, e.g. "G" or "Em" (see utils/songKeys.ts). */
+  song_key?: string | null
+  /** Musicians' PDF override (see utils/sheetStyle.ts); null = use the general setting. */
+  sheet_style?: SongSheetStyle | null
   sections: Section[]
   video_path?: string
   text_style: Partial<TextStyle>
@@ -66,6 +71,9 @@ declare global {
       deleteSetlist: (id: number) => Promise<void>
       setlistExport: (p: { name: string; service_date: string; notes?: string | null; songIds: number[]; customVideos?: Array<string | null> }) => Promise<{ path: string } | null>
       setlistSavePptx: (p: { bytes: Uint8Array; defaultName: string }) => Promise<{ path: string } | null>
+      setlistExportPdf: (p: { name: string; service_date: string; songIds: number[]; sheetStyle: SheetStyle }) => Promise<{ path: string } | null>
+      /** PNG data URL of the song's page in the musicians' PDF. */
+      sheetPreview: (p: { song: Song; sheetStyle: SheetStyle }) => Promise<string>
       setlistImportInspect: () => Promise<{ path: string; name: string; service_date: string | null; songCount: number; duplicateOf: number | null } | null>
       setlistImportApply: (p: { path: string; mode: 'new' | 'replace'; replaceId?: number }) => Promise<ImportSummary>
       openLive: () => Promise<void>

@@ -1,5 +1,6 @@
 import type { Song } from '../../store/songs.store'
 import { previewSections } from '../../utils/sectionPreview'
+import KeyBadge from '../../components/KeyBadge'
 
 const CARD_WIDTH = 288
 const CARD_MAX_HEIGHT = 260
@@ -19,7 +20,10 @@ export default function LyricsHoverCard({ song, anchorRect }: { song: Song; anch
       className="fixed z-50 pointer-events-none bg-slate-800 border border-indigo-500/70 rounded-2xl shadow-2xl p-4 overflow-hidden"
       style={{ top, left, width: CARD_WIDTH, maxHeight: CARD_MAX_HEIGHT }}
     >
-      <p className="font-semibold text-white truncate">{song.title}</p>
+      <div className="flex items-center gap-2">
+        <p className="font-semibold text-white truncate">{song.title}</p>
+        <KeyBadge songKey={song.song_key} />
+      </div>
       {song.artist && <p className="text-xs text-slate-400 truncate mb-2">{song.artist}</p>}
       {preview.length === 0 ? (
         <p className="text-sm text-slate-400 mt-2">Sin letra</p>

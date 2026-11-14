@@ -90,8 +90,58 @@ describe('planImport', () => {
       { title: 'Nueva sin video', sections: [], text_style: {}, video_path: 'X:\\v\\falta.mp4' }
     ])
     const steps = planImport(file, [local(5, 'existe')], videosDir, new Set(['fondo.mp4']))
-    expect(steps[0]).toEqual({ kind: 'existing', songId: 5, title: 'existe', differs: true })
+    expect(steps[0]).toEqual({ kind: 'existing', songId: 5, title: 'existe', differs: true, fillKey: null, fillSheetStyle: null })
     expect(steps[1]).toMatchObject({ kind: 'create', videoPath: path.join(videosDir, 'fondo.mp4') })
     expect(steps[2]).toMatchObject({ kind: 'create', videoPath: null })
+  })
+
+  it('el tono del archivo solo llena canciones locales sin tono (nunca reemplaza)', () => {
+    const file = exported([
+      { title: 'Sin tono', song_key: 'G', sections: [sec('Coro', ['a'])], text_style: {} },
+      { title: 'Con tono', song_key: 'G', sections: [sec('Coro', ['a'])], text_style: {} }
+    ])
+    const steps = planImport(file, [local(1, 'Sin tono'), local(2, 'Con tono', { song_key: 'A' })], videosDir, new Set())
+    expect(steps[0]).toMatchObject({ kind: 'existing', fillKey: 'G' })
+    expect(steps[1]).toMatchObject({ kind: 'existing', fillKey: null })
+  })
+})
+
+describe('tono (song_key)', () => {
+  it('se exporta y sobrevive la ida y vuelta; sin tono queda null', () => {
+    const f = exported([{ title: 'Uno', song_key: 'Em', sections: [], text_style: {} }, { title: 'Dos', sections: [], text_style: {} }])
+    expect(f.items[0].song.song_key).toBe('Em')
+    expect(f.items[1].song.song_key).toBeNull()
+    expect(parseAladoFile(JSON.stringify(f)).items[0].song.song_key).toBe('Em')
+  })
+
+  it('un tono inválido en el archivo se ignora en vez de rechazar el servicio', () => {
+    const f = exported([{ title: 'Uno', sections: [], text_style: {} }])
+    ;(f.items[0].song as any).song_key = 42
+    expect(parseAladoFile(JSON.stringify(f)).items[0].song.song_key).toBeNull()
+  })
+})
+
+describe('hoja de músicos (sheet_style)', () => {
+  it('viaja en el archivo, limpia valores desconocidos y vacío queda null', () => {
+    const f = exported([
+      { title: 'Uno', sheet_style: { size: 'lg' }, sections: [], text_style: {} },
+      { title: 'Dos', sections: [], text_style: {} }
+    ])
+    expect(f.items[0].song.sheet_style).toEqual({ size: 'lg' })
+    expect(f.items[1].song.sheet_style).toBeNull()
+    ;(f.items[1].song as any).sheet_style = { size: 'gigante' }
+    const parsed = parseAladoFile(JSON.stringify(f))
+    expect(parsed.items[0].song.sheet_style).toEqual({ size: 'lg' })
+    expect(parsed.items[1].song.sheet_style).toBeNull()
+  })
+
+  it('solo llena canciones locales sin ajuste propio', () => {
+    const file = exported([
+      { title: 'Sin ajuste', sheet_style: { columns: 2 }, sections: [sec('Coro', ['a'])], text_style: {} },
+      { title: 'Con ajuste', sheet_style: { columns: 2 }, sections: [sec('Coro', ['a'])], text_style: {} }
+    ])
+    const steps = planImport(file, [local(1, 'Sin ajuste'), local(2, 'Con ajuste', { sheet_style: '{"size":"sm"}' })], 'C:\v', new Set())
+    expect(steps[0]).toMatchObject({ fillSheetStyle: { columns: 2 } })
+    expect(steps[1]).toMatchObject({ fillSheetStyle: null })
   })
 })

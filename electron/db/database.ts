@@ -147,6 +147,29 @@ function runMigrations(database: Database.Database): void {
       database.pragma('user_version = 3')
     })()
   }
+
+  if (version < 4) {
+    database.transaction(() => {
+      try {
+        database.exec('ALTER TABLE songs ADD COLUMN song_key TEXT')
+      } catch (e: any) {
+        if (!String(e?.message).includes('duplicate column name')) throw e
+      }
+      database.pragma('user_version = 4')
+    })()
+  }
+
+  if (version < 5) {
+    database.transaction(() => {
+      try {
+        // JSON SongSheetStyle (electron/setlist/sheetStyle.ts); NULL = use the general setting.
+        database.exec('ALTER TABLE songs ADD COLUMN sheet_style TEXT')
+      } catch (e: any) {
+        if (!String(e?.message).includes('duplicate column name')) throw e
+      }
+      database.pragma('user_version = 5')
+    })()
+  }
 }
 
 function scheduleBackup(userDataPath: string, dbPath: string): void {

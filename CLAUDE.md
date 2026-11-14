@@ -15,6 +15,8 @@ npm run dist:win     # Package for Windows (electron-builder)
 npm run dist:mac     # Package for macOS
 ```
 
+`dist:win`/`dist:mac` only package `out/`: they do **not** compile. Run `npm run build` first or the installer ships stale code.
+
 `dist:win` embeds the ALADO icon in the `.exe` via rcedit (from electron-builder's `winCodeSign` cache). On Windows without Developer Mode/admin, extracting that cache fails on macOS-only symlinks ("A required privilege is not held by the client"). Workaround: extract the downloaded archive yourself, ignoring those two errors: `node_modules/7zip-bin/win/x64/7za.exe x -y %LOCALAPPDATA%/electron-builder/Cache/winCodeSign/<n>.7z -o%LOCALAPPDATA%/electron-builder/Cache/winCodeSign/winCodeSign-2.6.0`. Don't reintroduce `signAndEditExecutable: false`: it drops the icon.
 
 ## Architecture
@@ -42,7 +44,7 @@ All renderer↔main communication goes through `electron/preload.ts`, which expo
 
 ### Data Layer
 
-SQLite via `better-sqlite3`. The singleton `getDb()` in `electron/db/database.ts` initializes from `electron/db/schema.sql` and stores the DB in Electron's `userData` path. Schema: `songs`, `setlists`, `setlist_items`, `app_settings`. The `sections` and `text_style` columns are stored as JSON strings and deserialized on read in `deserializeSong()`.
+SQLite via `better-sqlite3`. The singleton `getDb()` in `electron/db/database.ts` initializes from `electron/db/schema.sql` and stores the DB in Electron's `userData` path. Schema: `songs`, `setlists`, `setlist_items`, `app_settings`. The `sections` and `text_style` columns are stored as JSON strings and deserialized on read in `deserializeSong()`. `songs.song_key` (migration `user_version = 4`) holds the musical key from the fixed list in `src/utils/songKeys.ts`; it travels in `.alado` (fills only local songs without a key) and `.wfpack`. `songs.sheet_style` (migration `user_version = 5`) is the song's override for the musicians' lyrics PDF (`electron/setlist/sheetStyle.ts`); the general setting is `localStorage.sheetStyle` (Configuración), sent with each export. The PDF/preview HTML (`lyricsSheet.ts`) runs a self-contained inline fit script (`chooseLayout.toString()`) in a hidden window (`renderSheet.ts`), so `chooseLayout` must not reference anything outside its body.
 
 Automatic weekly backup: up to 5 backups kept in `userData/backups/`.
 

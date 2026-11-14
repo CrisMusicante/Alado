@@ -13,6 +13,8 @@ export interface PackManifest {
 export interface PackSong {
   title: string
   artist?: string
+  song_key?: string | null
+  sheet_style?: unknown
   sections: unknown[]
   text_style: Record<string, unknown>
   cues: Cue[]

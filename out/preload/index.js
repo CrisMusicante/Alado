@@ -11,6 +11,8 @@ electron.contextBridge.exposeInMainWorld("api", {
   deleteSetlist: (id) => electron.ipcRenderer.invoke("db:delete-setlist", id),
   setlistExport: (payload) => electron.ipcRenderer.invoke("setlist:export", payload),
   setlistSavePptx: (payload) => electron.ipcRenderer.invoke("setlist:save-pptx", payload),
+  setlistExportPdf: (payload) => electron.ipcRenderer.invoke("setlist:export-pdf", payload),
+  sheetPreview: (payload) => electron.ipcRenderer.invoke("setlist:sheet-preview", payload),
   setlistImportInspect: () => electron.ipcRenderer.invoke("setlist:import-inspect"),
   setlistImportApply: (payload) => electron.ipcRenderer.invoke("setlist:import-apply", payload),
   // Live window
