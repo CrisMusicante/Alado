@@ -15,6 +15,8 @@ npm run dist:win     # Package for Windows (electron-builder)
 npm run dist:mac     # Package for macOS
 ```
 
+`dist:win`/`dist:mac` only package `out/`: they do **not** compile. Run `npm run build` first or the installer ships stale code.
+
 `dist:win` embeds the ALADO icon in the `.exe` via rcedit (from electron-builder's `winCodeSign` cache). On Windows without Developer Mode/admin, extracting that cache fails on macOS-only symlinks ("A required privilege is not held by the client"). Workaround: extract the downloaded archive yourself, ignoring those two errors: `node_modules/7zip-bin/win/x64/7za.exe x -y %LOCALAPPDATA%/electron-builder/Cache/winCodeSign/<n>.7z -o%LOCALAPPDATA%/electron-builder/Cache/winCodeSign/winCodeSign-2.6.0`. Don't reintroduce `signAndEditExecutable: false`: it drops the icon.
 
 ## Architecture
