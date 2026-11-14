@@ -222,6 +222,16 @@ function runMigrations(database) {
       database.pragma("user_version = 3");
     })();
   }
+  if (version2 < 4) {
+    database.transaction(() => {
+      try {
+        database.exec("ALTER TABLE songs ADD COLUMN song_key TEXT");
+      } catch (e) {
+        if (!String(e?.message).includes("duplicate column name")) throw e;
+      }
+      database.pragma("user_version = 4");
+    })();
+  }
 }
 function scheduleBackup(userDataPath, dbPath) {
   const backupDir = path.join(userDataPath, "backups");
@@ -652,6 +662,7 @@ function toSetlistItem(row) {
       id: row.song_id,
       title: row.title,
       artist: row.artist,
+      song_key: row.song_key ?? null,
       video_path: row.video_path,
       sections: JSON.parse(row.sections || "[]"),
       text_style: JSON.parse(row.text_style || "{}")
@@ -674,13 +685,13 @@ function registerDbHandlers() {
     const textStyle = JSON.stringify(song.text_style);
     if (song.id) {
       db2.prepare(
-        `UPDATE songs SET title=?, artist=?, sections=?, video_path=?, text_style=? WHERE id=?`
-      ).run(song.title, song.artist ?? null, sections, song.video_path ?? null, textStyle, song.id);
+        `UPDATE songs SET title=?, artist=?, song_key=?, sections=?, video_path=?, text_style=? WHERE id=?`
+      ).run(song.title, song.artist ?? null, song.song_key || null, sections, song.video_path ?? null, textStyle, song.id);
       return song.id;
     } else {
       const result = db2.prepare(
-        `INSERT INTO songs (title, artist, sections, video_path, text_style) VALUES (?,?,?,?,?)`
-      ).run(song.title, song.artist ?? null, sections, song.video_path ?? null, textStyle);
+        `INSERT INTO songs (title, artist, song_key, sections, video_path, text_style) VALUES (?,?,?,?,?,?)`
+      ).run(song.title, song.artist ?? null, song.song_key || null, sections, song.video_path ?? null, textStyle);
       return result.lastInsertRowid;
     }
   });
@@ -694,7 +705,7 @@ function registerDbHandlers() {
     return setlists.map((sl) => ({
       ...sl,
       songs: db2.prepare(
-        `SELECT si.*, s.title, s.artist, s.sections, s.video_path, s.text_style
+        `SELECT si.*, s.title, s.artist, s.song_key, s.sections, s.video_path, s.text_style
          FROM setlist_items si JOIN songs s ON s.id = si.song_id
          WHERE si.setlist_id = ? ORDER BY si.position`
       ).all(sl.id).map(toSetlistItem)
@@ -1002,6 +1013,7 @@ async function stemEntry(songId, stem) {
   const isFlac = getFfmpegPath() !== null;
   return [`audio/${stem}.${isFlac ? "flac" : "wav"}`, data];
 }
+const packKey = (k) => typeof k === "string" && k.trim() && k.length <= 8 ? k.trim() : null;
 const findDuplicate = (title, artist) => getDb().prepare(
   `SELECT id FROM songs WHERE title = ? COLLATE NOCASE AND IFNULL(artist, '') = IFNULL(?, '') COLLATE NOCASE LIMIT 1`
 ).get(title, artist ?? null);
@@ -1028,6 +1040,7 @@ function registerPackHandlers() {
     const packSong = {
       title: song.title,
       artist: song.artist ?? void 0,
+      song_key: song.song_key ?? null,
       sections: JSON.parse(song.sections),
       text_style: JSON.parse(song.text_style),
       cues: audio.cues,
@@ -1064,10 +1077,10 @@ function registerPackHandlers() {
     if (mode === "replace" && dup) {
       songId = dup.id;
       await purgeSongAudio(songId);
-      db2.prepare("UPDATE songs SET sections = ?, text_style = ? WHERE id = ?").run(JSON.stringify(song.sections), JSON.stringify(song.text_style), songId);
+      db2.prepare("UPDATE songs SET sections = ?, text_style = ?, song_key = COALESCE(?, song_key) WHERE id = ?").run(JSON.stringify(song.sections), JSON.stringify(song.text_style), packKey(song.song_key), songId);
     } else {
       const title = dup ? `${song.title} (importada)` : song.title;
-      songId = Number(db2.prepare("INSERT INTO songs (title, artist, sections, text_style) VALUES (?,?,?,?)").run(title, song.artist ?? null, JSON.stringify(song.sections), JSON.stringify(song.text_style)).lastInsertRowid);
+      songId = Number(db2.prepare("INSERT INTO songs (title, artist, song_key, sections, text_style) VALUES (?,?,?,?,?)").run(title, song.artist ?? null, packKey(song.song_key), JSON.stringify(song.sections), JSON.stringify(song.text_style)).lastInsertRowid);
     }
     const dir = stemsDir(songId);
     fs.mkdirSync(dir, { recursive: true });
@@ -1107,6 +1120,7 @@ function buildAladoFile(setlist, songs, now) {
       song: {
         title: s.title,
         artist: s.artist ?? null,
+        song_key: s.song_key || null,
         sections: s.sections,
         text_style: s.text_style,
         video_file: fileName(s.video_path)
@@ -1121,6 +1135,7 @@ function assertSections(v, title) {
   const ok = Array.isArray(v) && v.every((s) => isObj(s) && typeof s.label === "string" && Array.isArray(s.lines) && s.lines.every((l) => typeof l === "string"));
   if (!ok) throw new Error(`El archivo está dañado: la letra de "${title}" no es válida.`);
 }
+const cleanKey = (k) => typeof k === "string" && k.trim() && k.length <= 8 ? k.trim() : null;
 function parseAladoFile(text) {
   let data;
   try {
@@ -1140,6 +1155,7 @@ function parseAladoFile(text) {
       throw new Error(`El archivo está dañado: la canción ${i + 1} no tiene título.`);
     }
     assertSections(item.song.sections, item.song.title);
+    item.song.song_key = cleanKey(item.song.song_key);
   });
   return data;
 }
@@ -1165,10 +1181,88 @@ function sectionsDiffer(a, b) {
 function planImport(file, local, videosDir2, videoNames2) {
   return file.items.map(({ song }) => {
     const match = pickMatch(song, local);
-    if (match) return { kind: "existing", songId: match.id, title: match.title, differs: sectionsDiffer(match.sections, song.sections) };
+    if (match) {
+      return {
+        kind: "existing",
+        songId: match.id,
+        title: match.title,
+        differs: sectionsDiffer(match.sections, song.sections),
+        fillKey: !match.song_key && song.song_key ? song.song_key : null
+      };
+    }
     const videoPath = song.video_file && videoNames2.has(song.video_file) ? path.join(videosDir2, song.video_file) : null;
     return { kind: "create", song, videoPath };
   });
+}
+const esc = (s) => s.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;").replace(/"/g, "&quot;");
+function longDate(iso) {
+  const m = /^(\d{4})-(\d{2})-(\d{2})$/.exec(iso);
+  if (!m) return "";
+  const date = new Date(Number(m[1]), Number(m[2]) - 1, Number(m[3]));
+  return date.toLocaleDateString("es-MX", { weekday: "long", day: "numeric", month: "long", year: "numeric" });
+}
+const STYLE = `
+  @page { size: letter; margin: 14mm 16mm; }
+  * { box-sizing: border-box; }
+  body { font-family: "Segoe UI", system-ui, sans-serif; color: #111; margin: 0; font-size: 12pt; line-height: 1.35; }
+  h1 { font-size: 22pt; margin: 0 0 2pt; }
+  .date { color: #555; margin: 0 0 14pt; }
+  .date::first-letter { text-transform: uppercase; }
+  table { width: 100%; border-collapse: collapse; font-size: 12pt; }
+  th { text-align: left; font-size: 9pt; text-transform: uppercase; letter-spacing: .06em; color: #666; border-bottom: 1.5pt solid #111; padding: 4pt 6pt; }
+  td { padding: 6pt; border-bottom: .5pt solid #ccc; vertical-align: top; }
+  td.n { width: 22pt; color: #666; }
+  td.k, th.k { width: 60pt; text-align: center; font-weight: 700; }
+  .artist { color: #666; font-size: 10pt; }
+  .song { break-before: page; }
+  .head { display: flex; justify-content: space-between; align-items: flex-start; gap: 12pt; border-bottom: 1.5pt solid #111; padding-bottom: 6pt; margin-bottom: 10pt; }
+  .head h2 { font-size: 18pt; margin: 0; }
+  .key { border: 1.5pt solid #111; border-radius: 6pt; padding: 3pt 9pt; font-weight: 700; font-size: 14pt; white-space: nowrap; }
+  .sections { columns: 2; column-gap: 18pt; }
+  .section { break-inside: avoid; margin: 0 0 10pt; }
+  .label { font-size: 9pt; font-weight: 700; text-transform: uppercase; letter-spacing: .06em; color: #444; margin-bottom: 2pt; }
+  .repeat { font-weight: 400; color: #666; }
+  .lines { margin: 0; }
+`;
+function songPage(song, n) {
+  const sections = song.sections.filter((s) => s.lines.some((l) => l.trim())).map((s) => `
+      <div class="section">
+        <div class="label">${esc(s.label)}${(s.repeat ?? 1) > 1 ? ` <span class="repeat">×${s.repeat}</span>` : ""}</div>
+        <p class="lines">${s.lines.map(esc).join("<br>")}</p>
+      </div>`).join("");
+  return `
+    <section class="song">
+      <div class="head">
+        <div>
+          <h2>${n}. ${esc(song.title)}</h2>
+          ${song.artist ? `<div class="artist">${esc(song.artist)}</div>` : ""}
+        </div>
+        ${song.song_key ? `<div class="key">Tono: ${esc(song.song_key)}</div>` : ""}
+      </div>
+      <div class="sections">${sections}</div>
+    </section>`;
+}
+function buildLyricsSheetHtml(service, songs) {
+  const date = longDate(service.service_date);
+  const rows = songs.map((s, i) => `
+      <tr>
+        <td class="n">${i + 1}</td>
+        <td>${esc(s.title)}${s.artist ? `<div class="artist">${esc(s.artist)}</div>` : ""}</td>
+        <td class="k">${s.song_key ? esc(s.song_key) : "—"}</td>
+      </tr>`).join("");
+  return `<!doctype html>
+<html lang="es">
+<head><meta charset="utf-8"><title>${esc(service.name)}</title><style>${STYLE}</style></head>
+<body>
+  <h1>${esc(service.name)}</h1>
+  ${date ? `<p class="date">${esc(date)}</p>` : ""}
+  <table>
+    <thead><tr><th></th><th>Canción</th><th class="k">Tono</th></tr></thead>
+    <tbody>${rows}</tbody>
+  </table>
+  ${songs.map((s, i) => songPage(s, i + 1)).join("")}
+</body>
+</html>`;
 }
 const safeFileName = (name, fallback) => name.replace(/[<>:"/\\|?*]/g, "").trim() || fallback;
 const videosDir = () => path.join(electron.app.getPath("userData"), "videos");
@@ -1211,6 +1305,25 @@ function registerSetlistHandlers() {
     fs.writeFileSync(filePath, Buffer.from(p.bytes));
     return { path: filePath };
   });
+  electron.ipcMain.handle("setlist:export-pdf", async (_e, p) => {
+    const { canceled, filePath } = await electron.dialog.showSaveDialog({
+      defaultPath: `${safeFileName(p.name, "servicio")} - letras.pdf`,
+      filters: [{ name: "PDF", extensions: ["pdf"] }]
+    });
+    if (canceled || !filePath) return null;
+    const byId = getDb().prepare("SELECT * FROM songs WHERE id = ?");
+    const songs = p.songIds.map((id) => byId.get(id)).filter(Boolean).map(deserializeSong);
+    const html = buildLyricsSheetHtml({ name: p.name, service_date: p.service_date || "" }, songs);
+    const win = new electron.BrowserWindow({ show: false, webPreferences: { javascript: false, sandbox: true } });
+    try {
+      await win.loadURL(`data:text/html;charset=utf-8,${encodeURIComponent(html)}`);
+      const pdf = await win.webContents.printToPDF({ pageSize: "Letter", printBackground: true, preferCSSPageSize: true });
+      fs.writeFileSync(filePath, pdf);
+    } finally {
+      win.destroy();
+    }
+    return { path: filePath };
+  });
   electron.ipcMain.handle("setlist:import-inspect", async () => {
     const { canceled, filePaths } = await electron.dialog.showOpenDialog({
       properties: ["openFile"],
@@ -1229,14 +1342,15 @@ function registerSetlistHandlers() {
   electron.ipcMain.handle("setlist:import-apply", (_e, p) => {
     const file = parseAladoFile(fs.readFileSync(p.path, "utf-8"));
     const db2 = getDb();
-    const local = db2.prepare("SELECT id, title, artist, sections, updated_at FROM songs").all().map((r) => ({ ...r, sections: JSON.parse(r.sections || "[]") }));
+    const local = db2.prepare("SELECT id, title, artist, song_key, sections, updated_at FROM songs").all().map((r) => ({ ...r, sections: JSON.parse(r.sections || "[]") }));
     const dir = videosDir();
     const names = videoNames(dir);
     const steps = planImport(file, local, dir, names);
     const summary = { reused: 0, created: [], differing: [], missingVideo: [] };
     const insertSong = db2.prepare(
-      "INSERT INTO songs (title, artist, sections, video_path, text_style, folder_id) VALUES (?,?,?,?,?,NULL)"
+      "INSERT INTO songs (title, artist, song_key, sections, video_path, text_style, folder_id) VALUES (?,?,?,?,?,?,NULL)"
     );
+    const fillKey = db2.prepare("UPDATE songs SET song_key = ? WHERE id = ? AND song_key IS NULL");
     const insertItem = db2.prepare(
       "INSERT INTO setlist_items (setlist_id, song_id, position, custom_video) VALUES (?,?,?,?)"
     );
@@ -1245,6 +1359,7 @@ function registerSetlistHandlers() {
         if (step.kind === "existing") {
           summary.reused++;
           if (step.differs) summary.differing.push(step.title);
+          if (step.fillKey) fillKey.run(step.fillKey, step.songId);
           return step.songId;
         }
         const { song } = step;
@@ -1253,6 +1368,7 @@ function registerSetlistHandlers() {
         const r = insertSong.run(
           song.title,
           song.artist ?? null,
+          song.song_key ?? null,
           JSON.stringify(song.sections),
           step.videoPath,
           JSON.stringify(song.text_style ?? {})
