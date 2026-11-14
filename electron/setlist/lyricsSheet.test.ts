@@ -41,3 +41,22 @@ describe('buildLyricsSheetHtml', () => {
     expect(html).not.toContain('Vacía')
   })
 })
+
+describe('estilo de la hoja', () => {
+  it('cada canción lleva su estilo resuelto (canción > general) para el script de ajuste', () => {
+    const html = buildLyricsSheetHtml({ name: 'S', service_date: '' }, [
+      song('A'), song('B', { sheet_style: '{"size":"lg"}' })
+    ], { general: { size: 'md', columns: 1 } })
+    const styles = [...html.matchAll(/data-style="([^"]+)"/g)].map(m => JSON.parse(m[1].replace(/&quot;/g, '"')))
+    expect(styles).toEqual([{ size: 'md', columns: 1 }, { size: 'lg', columns: 1 }])
+    expect(html).toContain('<script>')
+    expect(html).toContain("default-src 'none'")
+  })
+
+  it('la vista previa muestra solo la canción, sin orden del servicio ni número', () => {
+    const html = buildLyricsSheetHtml({ name: 'S', service_date: '' }, [song('Única', { song_key: 'D' })], { preview: true })
+    expect(html).not.toContain('<table>')
+    expect(html).toContain('<h2>Única</h2>')
+    expect(html).toContain('page-break')
+  })
+})

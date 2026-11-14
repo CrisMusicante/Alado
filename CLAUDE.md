@@ -44,7 +44,7 @@ All renderer↔main communication goes through `electron/preload.ts`, which expo
 
 ### Data Layer
 
-SQLite via `better-sqlite3`. The singleton `getDb()` in `electron/db/database.ts` initializes from `electron/db/schema.sql` and stores the DB in Electron's `userData` path. Schema: `songs`, `setlists`, `setlist_items`, `app_settings`. The `sections` and `text_style` columns are stored as JSON strings and deserialized on read in `deserializeSong()`. `songs.song_key` (migration `user_version = 4`) holds the musical key from the fixed list in `src/utils/songKeys.ts`; it travels in `.alado` (fills only local songs without a key) and `.wfpack`.
+SQLite via `better-sqlite3`. The singleton `getDb()` in `electron/db/database.ts` initializes from `electron/db/schema.sql` and stores the DB in Electron's `userData` path. Schema: `songs`, `setlists`, `setlist_items`, `app_settings`. The `sections` and `text_style` columns are stored as JSON strings and deserialized on read in `deserializeSong()`. `songs.song_key` (migration `user_version = 4`) holds the musical key from the fixed list in `src/utils/songKeys.ts`; it travels in `.alado` (fills only local songs without a key) and `.wfpack`. `songs.sheet_style` (migration `user_version = 5`) is the song's override for the musicians' lyrics PDF (`electron/setlist/sheetStyle.ts`); the general setting is `localStorage.sheetStyle` (Configuración), sent with each export. The PDF/preview HTML (`lyricsSheet.ts`) runs a self-contained inline fit script (`chooseLayout.toString()`) in a hidden window (`renderSheet.ts`), so `chooseLayout` must not reference anything outside its body.
 
 Automatic weekly backup: up to 5 backups kept in `userData/backups/`.
 

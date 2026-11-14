@@ -1,4 +1,5 @@
 import { useEffect, useRef, useState } from 'react'
+import SheetStyleSettings from '../../components/SheetStyle/SheetStyleSettings'
 
 interface DisplayInfo {
   id: number
@@ -164,6 +165,16 @@ export default function SettingsPage() {
           </div>
         )}
       </section>
+
+      {/* Musicians' lyrics PDF */}
+      <section id="pdf-musicos" className="mb-8 scroll-mt-6">
+        <h2 className="text-base font-semibold text-white mb-1">PDF de letras para músicos</h2>
+        <p className="text-sm text-slate-400 mb-4">
+          Cómo se acomoda la letra al exportar el PDF de un servicio. Cada canción puede tener su propio ajuste en su editor.
+        </p>
+        <SheetStyleSettings />
+      </section>
+
       {/* Claude AI Import */}
       <section className="mb-8">
         <h2 className="text-base font-semibold text-white mb-1">Importar con IA (Claude API)</h2>

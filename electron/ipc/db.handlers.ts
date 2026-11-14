@@ -2,6 +2,7 @@ import { ipcMain } from 'electron'
 import { getDb } from '../db/database'
 import { purgeSongAudio } from './audio.handlers'
 import { toSetlistItem } from '../setlist/setlistRows'
+import { parseSheetStyle, SongSheetStyle } from '../setlist/sheetStyle'
 
 export interface Section {
   type: 'verse' | 'chorus' | 'estribillo' | 'pre-chorus' | 'bridge' | 'outro' | 'intro' | 'custom'
@@ -24,6 +25,7 @@ export interface Song {
   title: string
   artist?: string
   song_key?: string | null
+  sheet_style?: SongSheetStyle | null
   sections: Section[]
   video_path?: string
   text_style: Partial<TextStyle>
@@ -64,16 +66,17 @@ export function registerDbHandlers(): void {
     const db = getDb()
     const sections = JSON.stringify(song.sections)
     const textStyle = JSON.stringify(song.text_style)
+    const sheetStyle = serializeSheetStyle(song.sheet_style)
 
     if (song.id) {
       db.prepare(
-        `UPDATE songs SET title=?, artist=?, song_key=?, sections=?, video_path=?, text_style=? WHERE id=?`
-      ).run(song.title, song.artist ?? null, song.song_key || null, sections, song.video_path ?? null, textStyle, song.id)
+        `UPDATE songs SET title=?, artist=?, song_key=?, sheet_style=?, sections=?, video_path=?, text_style=? WHERE id=?`
+      ).run(song.title, song.artist ?? null, song.song_key || null, sheetStyle, sections, song.video_path ?? null, textStyle, song.id)
       return song.id
     } else {
       const result = db.prepare(
-        `INSERT INTO songs (title, artist, song_key, sections, video_path, text_style) VALUES (?,?,?,?,?,?)`
-      ).run(song.title, song.artist ?? null, song.song_key || null, sections, song.video_path ?? null, textStyle)
+        `INSERT INTO songs (title, artist, song_key, sheet_style, sections, video_path, text_style) VALUES (?,?,?,?,?,?,?)`
+      ).run(song.title, song.artist ?? null, song.song_key || null, sheetStyle, sections, song.video_path ?? null, textStyle)
       return result.lastInsertRowid
     }
   })
@@ -169,6 +172,13 @@ export function deserializeSong(row: any): Song {
   return {
     ...row,
     sections: JSON.parse(row.sections || '[]'),
-    text_style: JSON.parse(row.text_style || '{}')
+    text_style: JSON.parse(row.text_style || '{}'),
+    sheet_style: row.sheet_style ? parseSheetStyle(row.sheet_style) : null
   }
+}
+
+/** Only known fields are stored; an override with none left means "use the general setting" (NULL). */
+export function serializeSheetStyle(v: unknown): string | null {
+  const style = parseSheetStyle(v)
+  return Object.keys(style).length > 0 ? JSON.stringify(style) : null
 }

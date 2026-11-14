@@ -11,6 +11,8 @@ import { getSongAudio, upsertSongAudio } from '../audio/repo'
 import { stemsDir, findStem } from '../audio/paths'
 import { assertSongId } from '../audio/validate'
 import { purgeSongAudio } from './audio.handlers'
+import { serializeSheetStyle } from './db.handlers'
+import { parseSheetStyle } from '../setlist/sheetStyle'
 
 function toFlac(wav: string): Promise<Uint8Array> {
   const ffmpeg = getFfmpegPath()
@@ -71,6 +73,7 @@ export function registerPackHandlers(): void {
       title: song.title,
       artist: song.artist ?? undefined,
       song_key: song.song_key ?? null,
+      sheet_style: song.sheet_style ? parseSheetStyle(song.sheet_style) : null,
       sections: JSON.parse(song.sections),
       text_style: JSON.parse(song.text_style),
       cues: audio.cues,
@@ -111,12 +114,12 @@ export function registerPackHandlers(): void {
     if (mode === 'replace' && dup) {
       songId = dup.id
       await purgeSongAudio(songId)
-      db.prepare('UPDATE songs SET sections = ?, text_style = ?, song_key = COALESCE(?, song_key) WHERE id = ?')
-        .run(JSON.stringify(song.sections), JSON.stringify(song.text_style), packKey(song.song_key), songId)
+      db.prepare('UPDATE songs SET sections = ?, text_style = ?, song_key = COALESCE(?, song_key), sheet_style = COALESCE(?, sheet_style) WHERE id = ?')
+        .run(JSON.stringify(song.sections), JSON.stringify(song.text_style), packKey(song.song_key), serializeSheetStyle(song.sheet_style), songId)
     } else {
       const title = dup ? `${song.title} (importada)` : song.title
-      songId = Number(db.prepare('INSERT INTO songs (title, artist, song_key, sections, text_style) VALUES (?,?,?,?,?)')
-        .run(title, song.artist ?? null, packKey(song.song_key), JSON.stringify(song.sections), JSON.stringify(song.text_style)).lastInsertRowid)
+      songId = Number(db.prepare('INSERT INTO songs (title, artist, song_key, sheet_style, sections, text_style) VALUES (?,?,?,?,?,?)')
+        .run(title, song.artist ?? null, packKey(song.song_key), serializeSheetStyle(song.sheet_style), JSON.stringify(song.sections), JSON.stringify(song.text_style)).lastInsertRowid)
     }
 
     // Every name in `files` already passed isAllowedEntry; path.basename is a second guard.

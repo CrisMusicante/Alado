@@ -22,6 +22,7 @@ import { groupSongs, FolderFilter } from '../../utils/songGroups'
 import LyricsHoverCard from './LyricsHoverCard'
 import SectionList from './SectionList'
 import KeyBadge from '../../components/KeyBadge'
+import { loadSheetStyle } from '../../utils/sheetStyle'
 
 const HOVER_DELAY_MS = 400
 
@@ -125,7 +126,7 @@ export default function SetlistPage() {
     try {
       const res = await window.api.setlistExportPdf({
         name: setlistName.trim() || defaultServiceName(serviceDate), service_date: serviceDate,
-        songIds: setlistSongs.map(s => s.song.id!)
+        songIds: setlistSongs.map(s => s.song.id!), sheetStyle: loadSheetStyle()
       })
       if (res) showToast('PDF de letras exportado')
     } catch (e) {
