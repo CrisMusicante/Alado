@@ -1,4 +1,4 @@
-const __vite__mapDeps=(i,m=__vite__mapDeps,d=(m.f||(m.f=["./pptxgen.es-Gcul_YeZ.js","./SlideView-CqN0asXU.js"])))=>i.map(i=>d[i]);
+const __vite__mapDeps=(i,m=__vite__mapDeps,d=(m.f||(m.f=["./pptxgen.es-Cn5dElUu.js","./SlideView-CqN0asXU.js"])))=>i.map(i=>d[i]);
 import { r as requireReactDom, a as reactExports, R as React, b as requireReact, g as getDefaultExportFromCjs, j as jsxRuntimeExports, S as SlideView, c as ReactDOM } from "./SlideView-CqN0asXU.js";
 var reactDomExports = requireReactDom();
 function useCombinedRefs() {
@@ -4279,6 +4279,41 @@ const usePlaybackStore = create((set, get) => ({
   },
   setRecording: (recording) => set({ recording })
 }));
+const useDialogStore = create((set, get) => ({
+  current: null,
+  queue: [],
+  answer: (value) => {
+    const { current, queue } = get();
+    if (!current) return;
+    const [next = null, ...rest] = queue;
+    set({ current: next, queue: rest });
+    current.resolve(value);
+  }
+}));
+function ask(request) {
+  return new Promise((resolve) => {
+    const pending = { ...request, resolve };
+    const { current, queue } = useDialogStore.getState();
+    if (current) useDialogStore.setState({ queue: [...queue, pending] });
+    else useDialogStore.setState({ current: pending });
+  });
+}
+async function confirmDialog(message, opts = {}) {
+  const value = await ask({
+    title: opts.title ?? "Confirmar",
+    message,
+    actions: [
+      { label: "Cancelar", value: "cancel", variant: "neutral" },
+      { label: opts.confirmLabel ?? "Aceptar", value: "confirm", variant: opts.danger ? "danger" : "primary" }
+    ]
+  });
+  return value === "confirm";
+}
+async function alertDialog(message, title = "Aviso") {
+  await ask({ title, message, actions: [{ label: "Entendido", value: "ok", variant: "primary" }] });
+}
+let starting = false;
+const NO_SECOND_DISPLAY = "No hay segunda pantalla. La proyección se abrió en una ventana: en Windows usa Win+P → Extender.";
 const useLiveStore = create((set, get) => ({
   isLive: false,
   currentSong: null,
@@ -4287,13 +4322,22 @@ const useLiveStore = create((set, get) => ({
   whiteout: false,
   setlist: [],
   startLive: async (setlist) => {
-    await window.api.openLive();
+    if (starting) return;
+    starting = true;
+    let windowed = false;
+    try {
+      ;
+      ({ windowed } = await window.api.openLive());
+    } finally {
+      starting = false;
+    }
     const song = setlist[0];
     if (song) {
       await window.api.setVideo({ videoPath: song.video_path ?? null });
       await sendSection(song, 0);
     }
     set({ isLive: true, setlist, currentSong: song ?? null, currentSectionIndex: 0 });
+    if (windowed) void alertDialog(NO_SECOND_DISPLAY, "Proyección en ventana");
   },
   stopLive: async () => {
     await window.api.closeLive();
@@ -4350,6 +4394,9 @@ async function sendSection(song, index) {
     textStyle: song.text_style
   });
 }
+window.api.on("live:closed", () => {
+  useLiveStore.setState({ isLive: false, currentSong: null, blackout: false, whiteout: false });
+});
 const fmt$1 = (t) => `${Math.floor(t / 60)}:${String(Math.floor(t % 60)).padStart(2, "0")}`;
 function AudioTransport() {
   const { status, playing, time, duration, volumes, manual, toggle, seek, setVolume, resumeAuto } = usePlaybackStore();
@@ -4542,39 +4589,6 @@ function SmallBtn({ onClick, children }) {
     }
   );
 }
-const useDialogStore = create((set, get) => ({
-  current: null,
-  queue: [],
-  answer: (value) => {
-    const { current, queue } = get();
-    if (!current) return;
-    const [next = null, ...rest] = queue;
-    set({ current: next, queue: rest });
-    current.resolve(value);
-  }
-}));
-function ask(request) {
-  return new Promise((resolve) => {
-    const pending = { ...request, resolve };
-    const { current, queue } = useDialogStore.getState();
-    if (current) useDialogStore.setState({ queue: [...queue, pending] });
-    else useDialogStore.setState({ current: pending });
-  });
-}
-async function confirmDialog(message, opts = {}) {
-  const value = await ask({
-    title: opts.title ?? "Confirmar",
-    message,
-    actions: [
-      { label: "Cancelar", value: "cancel", variant: "neutral" },
-      { label: opts.confirmLabel ?? "Aceptar", value: "confirm", variant: opts.danger ? "danger" : "primary" }
-    ]
-  });
-  return value === "confirm";
-}
-async function alertDialog(message, title = "Aviso") {
-  await ask({ title, message, actions: [{ label: "Entendido", value: "ok", variant: "primary" }] });
-}
 const STEP_LABEL = { download: "Descargando", extract: "Extrayendo", pip: "Instalando librerías", ffmpeg: "Preparando ffmpeg", selftest: "Probando el motor" };
 const gb = (b) => (b / 1024 ** 3).toFixed(1);
 function AudioPanel({ songId, sections }) {
@@ -4742,6 +4756,308 @@ function SongPreview({ sections, selected, onSelect, textStyle, videoPath }) {
     ] }),
     section && /* @__PURE__ */ jsxRuntimeExports.jsx("p", { className: "text-xs text-slate-400 mt-2 truncate", children: section.label })
   ] });
+}
+const FIELDS = ["title", "artist", "song_key", "sheet_style", "sections", "video_path", "text_style"];
+const same = (a, b) => JSON.stringify(a ?? null) === JSON.stringify(b ?? null);
+function mergeEdits(opened, edited, latest) {
+  if (!latest) return edited;
+  const out = { ...latest };
+  for (const f of FIELDS) {
+    if (!same(edited[f], opened[f])) {
+      out[f] = edited[f];
+    }
+  }
+  return out;
+}
+const scriptRel = /* @__PURE__ */ (function detectScriptRel() {
+  const relList = typeof document !== "undefined" && document.createElement("link").relList;
+  return relList && relList.supports && relList.supports("modulepreload") ? "modulepreload" : "preload";
+})();
+const assetsURL = function(dep, importerUrl) {
+  return new URL(dep, importerUrl).href;
+};
+const seen = {};
+const __vitePreload = function preload(baseModule, deps, importerUrl) {
+  let promise = Promise.resolve();
+  if (deps && deps.length > 0) {
+    let allSettled = function(promises$2) {
+      return Promise.all(promises$2.map((p) => Promise.resolve(p).then((value$1) => ({
+        status: "fulfilled",
+        value: value$1
+      }), (reason) => ({
+        status: "rejected",
+        reason
+      }))));
+    };
+    const links = document.getElementsByTagName("link");
+    const cspNonceMeta = document.querySelector("meta[property=csp-nonce]");
+    const cspNonce = cspNonceMeta?.nonce || cspNonceMeta?.getAttribute("nonce");
+    promise = allSettled(deps.map((dep) => {
+      dep = assetsURL(dep, importerUrl);
+      if (dep in seen) return;
+      seen[dep] = true;
+      const isCss = dep.endsWith(".css");
+      const cssSelector = isCss ? '[rel="stylesheet"]' : "";
+      if (!!importerUrl) for (let i$1 = links.length - 1; i$1 >= 0; i$1--) {
+        const link$1 = links[i$1];
+        if (link$1.href === dep && (!isCss || link$1.rel === "stylesheet")) return;
+      }
+      else if (document.querySelector(`link[href="${dep}"]${cssSelector}`)) return;
+      const link = document.createElement("link");
+      link.rel = isCss ? "stylesheet" : scriptRel;
+      if (!isCss) link.as = "script";
+      link.crossOrigin = "";
+      link.href = dep;
+      if (cspNonce) link.setAttribute("nonce", cspNonce);
+      document.head.appendChild(link);
+      if (isCss) return new Promise((res, rej) => {
+        link.addEventListener("load", res);
+        link.addEventListener("error", () => rej(/* @__PURE__ */ new Error(`Unable to preload CSS for ${dep}`)));
+      });
+    }));
+  }
+  function handlePreloadError(err$2) {
+    const e$1 = new Event("vite:preloadError", { cancelable: true });
+    e$1.payload = err$2;
+    window.dispatchEvent(e$1);
+    if (!e$1.defaultPrevented) throw err$2;
+  }
+  return promise.then((res) => {
+    for (const item of res || []) {
+      if (item.status !== "rejected") continue;
+      handlePreloadError(item.reason);
+    }
+    return baseModule().catch(handlePreloadError);
+  });
+};
+function buildDeckPlan(songs) {
+  return songs.flatMap((song, songIndex) => [
+    { kind: "title", songIndex, title: song.title, ...song.artist ? { artist: song.artist } : {} },
+    ...song.sections.map((s) => ({ kind: "section", songIndex, text: s.lines.join("\n"), repeat: s.repeat ?? 1 }))
+  ]);
+}
+const MAX_PT = 40;
+const MIN_PT = 20;
+const BOX_W_PT = 12.3 * 72;
+const BOX_H_PT = 6.3 * 72;
+const CHAR_W = 0.55;
+const LINE_H = 1.25;
+function fitFontSize(text) {
+  const lines = text.split("\n");
+  const longest = Math.max(1, ...lines.map((l) => l.length));
+  const byHeight = BOX_H_PT / (LINE_H * lines.length);
+  const byWidth = BOX_W_PT / (CHAR_W * longest);
+  return Math.round(Math.max(MIN_PT, Math.min(MAX_PT, byHeight, byWidth)));
+}
+const FRAME_MAX_W = 1280;
+const FRAME_MAX_H = 720;
+const FRAME_TIMEOUT_MS = 8e3;
+const DARKEN = "rgba(0,0,0,0.35)";
+function grabVideoFrame(videoPath, opts = {}) {
+  const { darken = true, maxWidth = FRAME_MAX_W, maxHeight = FRAME_MAX_H } = opts;
+  return new Promise((resolve) => {
+    const video = document.createElement("video");
+    let done = false;
+    const finish = (value) => {
+      if (done) return;
+      done = true;
+      clearTimeout(timer);
+      video.removeAttribute("src");
+      video.load();
+      resolve(value);
+    };
+    const timer = setTimeout(() => finish(null), FRAME_TIMEOUT_MS);
+    video.crossOrigin = "anonymous";
+    video.muted = true;
+    video.preload = "auto";
+    video.onerror = () => finish(null);
+    video.onloadedmetadata = () => {
+      const d = Number.isFinite(video.duration) ? video.duration : 0;
+      video.currentTime = Math.min(1, d * 0.1);
+    };
+    video.onseeked = () => {
+      try {
+        const scale = Math.min(1, maxWidth / video.videoWidth, maxHeight / video.videoHeight);
+        const canvas = document.createElement("canvas");
+        canvas.width = Math.round(video.videoWidth * scale);
+        canvas.height = Math.round(video.videoHeight * scale);
+        const ctx = canvas.getContext("2d");
+        ctx.drawImage(video, 0, 0, canvas.width, canvas.height);
+        if (darken) {
+          ctx.fillStyle = DARKEN;
+          ctx.fillRect(0, 0, canvas.width, canvas.height);
+        }
+        finish(canvas.toDataURL("image/jpeg", 0.7));
+      } catch (e) {
+        console.warn("No se pudo leer un cuadro del video", videoPath, e);
+        finish(null);
+      }
+    };
+    video.src = mediaUrl(videoPath);
+  });
+}
+const PLAIN_BG = "0F172A";
+const SHADOW = { type: "outer", color: "000000", blur: 6, offset: 2, angle: 45, opacity: 0.8 };
+async function exportServicePptx(name, songs) {
+  const { default: PptxGenJS } = await __vitePreload(async () => {
+    const { default: PptxGenJS2 } = await import("./pptxgen.es-Cn5dElUu.js");
+    return { default: PptxGenJS2 };
+  }, true ? __vite__mapDeps([0,1]) : void 0, import.meta.url);
+  const pptx = new PptxGenJS();
+  pptx.layout = "LAYOUT_16x9";
+  pptx.title = name;
+  const frames = await Promise.all(songs.map((s) => s.video_path ? grabVideoFrame(s.video_path) : Promise.resolve(null)));
+  for (const spec of buildDeckPlan(songs)) {
+    const slide = pptx.addSlide();
+    const frame = frames[spec.songIndex];
+    slide.background = frame ? { data: frame.replace(/^data:/, ""), path: "frame.jpg" } : { color: PLAIN_BG };
+    if (spec.kind === "title") {
+      slide.addText(spec.title, {
+        x: 0.5,
+        y: spec.artist ? 2.4 : 2.9,
+        w: 12.33,
+        h: 1.6,
+        align: "center",
+        valign: "middle",
+        fontSize: 48,
+        bold: true,
+        color: "FFFFFF",
+        shadow: SHADOW,
+        fit: "shrink"
+      });
+      if (spec.artist) {
+        slide.addText(spec.artist, { x: 0.5, y: 4, w: 12.33, h: 0.8, align: "center", fontSize: 24, color: "CBD5E1", shadow: SHADOW });
+      }
+    } else {
+      slide.addText(spec.text, {
+        x: 0.5,
+        y: 0.6,
+        w: 12.33,
+        h: 6.3,
+        align: "center",
+        valign: "middle",
+        fontSize: fitFontSize(spec.text),
+        bold: true,
+        color: "FFFFFF",
+        shadow: SHADOW,
+        fit: "shrink"
+      });
+      if (spec.repeat > 1) {
+        slide.addText(`×${spec.repeat}`, { x: 11.3, y: 6.8, w: 1.8, h: 0.5, align: "right", fontSize: 18, color: "CBD5E1" });
+      }
+    }
+  }
+  const bytes = await pptx.write({ outputType: "uint8array" });
+  return window.api.setlistSavePptx({ bytes, defaultName: name });
+}
+const fold$1 = (s) => s.normalize("NFD").replace(/[\u0300-\u036f]/g, "").toLowerCase().trim();
+function filterVideos(list, query) {
+  const q = fold$1(query);
+  return q ? list.filter((v) => fold$1(v.name).includes(q)) : list;
+}
+const TOAST_MS = 2500;
+let seq = 0;
+const useToastStore = create(() => ({ toasts: [] }));
+function showToast(message, kind = "success") {
+  const id = ++seq;
+  useToastStore.setState((s) => ({ toasts: [...s.toasts, { id, message, kind }] }));
+  setTimeout(() => useToastStore.setState((s) => ({ toasts: s.toasts.filter((t) => t.id !== id) })), TOAST_MS);
+}
+const thumbs = /* @__PURE__ */ new Map();
+const THUMB = { darken: false, maxWidth: 320, maxHeight: 180 };
+async function loadThumbs(list, onEach, cancelled) {
+  for (const v of list) {
+    if (cancelled()) return;
+    if (thumbs.has(v.path)) continue;
+    thumbs.set(v.path, await grabVideoFrame(v.path, THUMB));
+    onEach();
+  }
+}
+function Thumb({ src, className }) {
+  return src ? /* @__PURE__ */ jsxRuntimeExports.jsx("img", { src, alt: "", className: `object-cover bg-slate-800 ${className}` }) : /* @__PURE__ */ jsxRuntimeExports.jsx("div", { className: `flex items-center justify-center bg-slate-800 text-2xl ${className}`, children: "🎬" });
+}
+function VideoThumb({ path, className = "" }) {
+  const [src, setSrc] = reactExports.useState(thumbs.get(path));
+  reactExports.useEffect(() => {
+    let alive = true;
+    if (thumbs.has(path)) setSrc(thumbs.get(path));
+    else grabVideoFrame(path, THUMB).then((t) => {
+      thumbs.set(path, t);
+      if (alive) setSrc(t);
+    });
+    return () => {
+      alive = false;
+    };
+  }, [path]);
+  return /* @__PURE__ */ jsxRuntimeExports.jsx(Thumb, { src, className });
+}
+function VideoPicker({ open, current, onPick, onClose }) {
+  const [videos, setVideos] = reactExports.useState(null);
+  const [query, setQuery] = reactExports.useState("");
+  const [, setTick] = reactExports.useState(0);
+  const [importing, setImporting] = reactExports.useState(false);
+  reactExports.useEffect(() => {
+    if (!open) return;
+    let cancelled = false;
+    window.api.listVideos().then((list) => {
+      if (cancelled) return;
+      setVideos(list);
+      loadThumbs(list, () => setTick((t) => t + 1), () => cancelled);
+    });
+    return () => {
+      cancelled = true;
+    };
+  }, [open]);
+  if (!open) return null;
+  function pick(path) {
+    onPick(path);
+    onClose();
+  }
+  async function browse() {
+    setImporting(true);
+    try {
+      const entry = await window.api.importVideo();
+      if (entry) pick(entry.path);
+    } catch {
+      showToast("No se pudo copiar el video.", "error");
+    } finally {
+      setImporting(false);
+    }
+  }
+  const shown = filterVideos(videos ?? [], query);
+  return /* @__PURE__ */ jsxRuntimeExports.jsx("div", { className: "fixed inset-0 z-50 flex items-center justify-center bg-black/70 backdrop-blur-sm", onClick: onClose, children: /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "bg-slate-900 border border-slate-700 rounded-2xl shadow-2xl w-full max-w-4xl mx-4 max-h-[90vh] flex flex-col", onClick: (e) => e.stopPropagation(), children: [
+    /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "flex items-center gap-3 px-6 pt-5 pb-4 border-b border-slate-700 shrink-0", children: [
+      /* @__PURE__ */ jsxRuntimeExports.jsx("h2", { className: "text-lg font-bold mr-auto", children: "Elegir video de fondo" }),
+      /* @__PURE__ */ jsxRuntimeExports.jsx(
+        "input",
+        {
+          autoFocus: true,
+          value: query,
+          onChange: (e) => setQuery(e.target.value),
+          placeholder: "Buscar por nombre...",
+          className: "bg-slate-800 text-white rounded-xl px-4 py-2 outline-none focus:ring-2 focus:ring-indigo-500 border border-slate-700 text-sm w-64"
+        }
+      ),
+      /* @__PURE__ */ jsxRuntimeExports.jsx("button", { onClick: browse, disabled: importing, className: "bg-slate-700 hover:bg-slate-600 disabled:opacity-60 text-white px-4 py-2 rounded-xl text-sm transition-colors border border-slate-600", children: importing ? "Copiando video…" : "Explorar..." }),
+      /* @__PURE__ */ jsxRuntimeExports.jsx("button", { onClick: onClose, className: "text-slate-400 hover:text-white text-xl px-2", "aria-label": "Cerrar", children: "✕" })
+    ] }),
+    /* @__PURE__ */ jsxRuntimeExports.jsx("div", { className: "overflow-y-auto p-6", children: videos === null ? /* @__PURE__ */ jsxRuntimeExports.jsx("p", { className: "text-slate-400 text-sm", children: "Cargando videos..." }) : videos.length === 0 ? /* @__PURE__ */ jsxRuntimeExports.jsx("p", { className: "text-slate-400 text-sm", children: 'No hay videos todavía. Usa "Explorar..." para agregar uno.' }) : shown.length === 0 ? /* @__PURE__ */ jsxRuntimeExports.jsxs("p", { className: "text-slate-400 text-sm", children: [
+      'Ningún video coincide con "',
+      query.trim(),
+      '".'
+    ] }) : /* @__PURE__ */ jsxRuntimeExports.jsx("div", { className: "grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 gap-4", children: shown.map((v) => /* @__PURE__ */ jsxRuntimeExports.jsxs(
+      "button",
+      {
+        onClick: () => pick(v.path),
+        className: `text-left rounded-xl overflow-hidden border transition-colors ${v.path === current ? "border-indigo-500 ring-2 ring-indigo-500" : "border-slate-700 hover:border-slate-500"}`,
+        children: [
+          /* @__PURE__ */ jsxRuntimeExports.jsx(Thumb, { src: thumbs.get(v.path), className: "w-full aspect-video" }),
+          /* @__PURE__ */ jsxRuntimeExports.jsx("div", { className: "px-3 py-2 text-xs text-slate-300 truncate", title: v.name, children: v.name })
+        ]
+      },
+      v.path
+    )) }) })
+  ] }) });
 }
 const MAJOR_KEYS = ["C", "C#", "Db", "D", "Eb", "E", "F", "F#", "Gb", "G", "Ab", "A", "Bb", "B"];
 const MINOR_KEYS = ["Cm", "C#m", "Dm", "D#m", "Ebm", "Em", "Fm", "F#m", "Gm", "G#m", "Am", "Bbm", "Bm"];
@@ -5601,6 +5917,7 @@ function SongEditor({ song, onClose }) {
   const [sheetStyle, setSheetStyle] = reactExports.useState(song.sheet_style ?? null);
   const [sections, setSections] = reactExports.useState(song.sections);
   const [videoPath, setVideoPath] = reactExports.useState(song.video_path ?? "");
+  const [pickingVideo, setPickingVideo] = reactExports.useState(false);
   const [textStyle, setTextStyle] = reactExports.useState(song.text_style ?? {});
   const [saving, setSaving] = reactExports.useState(false);
   const [showImport, setShowImport] = reactExports.useState(false);
@@ -5611,7 +5928,7 @@ function SongEditor({ song, onClose }) {
   async function handleSave() {
     if (!title.trim()) return;
     setSaving(true);
-    await saveSong({
+    const edited = {
       ...song,
       title: title.trim(),
       artist: artist.trim() || void 0,
@@ -5620,15 +5937,11 @@ function SongEditor({ song, onClose }) {
       sections,
       video_path: videoPath || void 0,
       text_style: textStyle
-    });
+    };
+    const latest = song.id ? useSongsStore.getState().songs.find((s) => s.id === song.id) : void 0;
+    await saveSong(mergeEdits(song, edited, latest));
     setSaving(false);
     onClose();
-  }
-  async function pickVideo() {
-    const path = await window.api.openFileDialog([
-      { name: "Video", extensions: ["mp4", "webm", "mov"] }
-    ]);
-    if (path) setVideoPath(path);
   }
   function addSection() {
     setPreviewIndex(sections.length);
@@ -5725,25 +6038,27 @@ function SongEditor({ song, onClose }) {
     ] }),
     /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "mb-5", children: [
       /* @__PURE__ */ jsxRuntimeExports.jsx("label", { className: "block text-sm text-slate-400 mb-1.5", children: "Video de fondo" }),
-      /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "flex gap-2", children: [
-        /* @__PURE__ */ jsxRuntimeExports.jsx(
-          "input",
-          {
-            value: videoPath,
-            onChange: (e) => setVideoPath(e.target.value),
-            className: "flex-1 bg-slate-800 text-white rounded-xl px-4 py-2.5 outline-none focus:ring-2 focus:ring-indigo-500 border border-slate-700 text-sm",
-            placeholder: "Ruta del video (MP4, WebM, MOV)"
-          }
-        ),
+      /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "flex items-center gap-3", children: [
+        videoPath ? /* @__PURE__ */ jsxRuntimeExports.jsx(VideoThumb, { path: videoPath, className: "w-24 aspect-video rounded-lg border border-slate-700" }) : /* @__PURE__ */ jsxRuntimeExports.jsx("div", { className: "w-24 aspect-video rounded-lg border border-dashed border-slate-700 bg-slate-900" }),
+        /* @__PURE__ */ jsxRuntimeExports.jsx("span", { className: "flex-1 min-w-0 truncate text-sm text-slate-300", title: videoPath, children: videoPath ? videoPath.split(/[\\/]/).pop() : "Sin video (fondo por defecto)" }),
         /* @__PURE__ */ jsxRuntimeExports.jsx(
           "button",
           {
-            onClick: pickVideo,
+            onClick: () => setPickingVideo(true),
             className: "bg-slate-700 hover:bg-slate-600 text-white px-4 py-2.5 rounded-xl text-sm transition-colors border border-slate-600",
-            children: "Explorar..."
+            children: "Elegir video"
+          }
+        ),
+        videoPath && /* @__PURE__ */ jsxRuntimeExports.jsx(
+          "button",
+          {
+            onClick: () => setVideoPath(""),
+            className: "text-slate-400 hover:text-white px-3 py-2.5 rounded-xl text-sm transition-colors",
+            children: "Quitar"
           }
         )
-      ] })
+      ] }),
+      /* @__PURE__ */ jsxRuntimeExports.jsx(VideoPicker, { open: pickingVideo, current: videoPath, onPick: setVideoPath, onClose: () => setPickingVideo(false) })
     ] }),
     /* @__PURE__ */ jsxRuntimeExports.jsx(AudioPanel, { songId: song.id, sections }),
     /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "mb-6 bg-slate-800 rounded-2xl p-4 border border-slate-700", children: [
@@ -6434,9 +6749,9 @@ function createJSONStorage(getStorage, options) {
   };
   return persistStorage;
 }
-const toThenable = (fn) => (input) => {
+const toThenable = (fn) => (input2) => {
   try {
-    const result = fn(input);
+    const result = fn(input2);
     if (result instanceof Promise) {
       return result;
     }
@@ -6837,192 +7152,6 @@ function importSummaryText(s) {
   if (s.missingAudio.length) lines.push(`Sin audio en esta compu: ${s.missingAudio.join(", ")}`);
   return lines.join("\n");
 }
-const scriptRel = /* @__PURE__ */ (function detectScriptRel() {
-  const relList = typeof document !== "undefined" && document.createElement("link").relList;
-  return relList && relList.supports && relList.supports("modulepreload") ? "modulepreload" : "preload";
-})();
-const assetsURL = function(dep, importerUrl) {
-  return new URL(dep, importerUrl).href;
-};
-const seen = {};
-const __vitePreload = function preload(baseModule, deps, importerUrl) {
-  let promise = Promise.resolve();
-  if (deps && deps.length > 0) {
-    let allSettled = function(promises$2) {
-      return Promise.all(promises$2.map((p) => Promise.resolve(p).then((value$1) => ({
-        status: "fulfilled",
-        value: value$1
-      }), (reason) => ({
-        status: "rejected",
-        reason
-      }))));
-    };
-    const links = document.getElementsByTagName("link");
-    const cspNonceMeta = document.querySelector("meta[property=csp-nonce]");
-    const cspNonce = cspNonceMeta?.nonce || cspNonceMeta?.getAttribute("nonce");
-    promise = allSettled(deps.map((dep) => {
-      dep = assetsURL(dep, importerUrl);
-      if (dep in seen) return;
-      seen[dep] = true;
-      const isCss = dep.endsWith(".css");
-      const cssSelector = isCss ? '[rel="stylesheet"]' : "";
-      if (!!importerUrl) for (let i$1 = links.length - 1; i$1 >= 0; i$1--) {
-        const link$1 = links[i$1];
-        if (link$1.href === dep && (!isCss || link$1.rel === "stylesheet")) return;
-      }
-      else if (document.querySelector(`link[href="${dep}"]${cssSelector}`)) return;
-      const link = document.createElement("link");
-      link.rel = isCss ? "stylesheet" : scriptRel;
-      if (!isCss) link.as = "script";
-      link.crossOrigin = "";
-      link.href = dep;
-      if (cspNonce) link.setAttribute("nonce", cspNonce);
-      document.head.appendChild(link);
-      if (isCss) return new Promise((res, rej) => {
-        link.addEventListener("load", res);
-        link.addEventListener("error", () => rej(/* @__PURE__ */ new Error(`Unable to preload CSS for ${dep}`)));
-      });
-    }));
-  }
-  function handlePreloadError(err$2) {
-    const e$1 = new Event("vite:preloadError", { cancelable: true });
-    e$1.payload = err$2;
-    window.dispatchEvent(e$1);
-    if (!e$1.defaultPrevented) throw err$2;
-  }
-  return promise.then((res) => {
-    for (const item of res || []) {
-      if (item.status !== "rejected") continue;
-      handlePreloadError(item.reason);
-    }
-    return baseModule().catch(handlePreloadError);
-  });
-};
-function buildDeckPlan(songs) {
-  return songs.flatMap((song, songIndex) => [
-    { kind: "title", songIndex, title: song.title, ...song.artist ? { artist: song.artist } : {} },
-    ...song.sections.map((s) => ({ kind: "section", songIndex, text: s.lines.join("\n"), repeat: s.repeat ?? 1 }))
-  ]);
-}
-const MAX_PT = 40;
-const MIN_PT = 20;
-const BOX_W_PT = 12.3 * 72;
-const BOX_H_PT = 6.3 * 72;
-const CHAR_W = 0.55;
-const LINE_H = 1.25;
-function fitFontSize(text) {
-  const lines = text.split("\n");
-  const longest = Math.max(1, ...lines.map((l) => l.length));
-  const byHeight = BOX_H_PT / (LINE_H * lines.length);
-  const byWidth = BOX_W_PT / (CHAR_W * longest);
-  return Math.round(Math.max(MIN_PT, Math.min(MAX_PT, byHeight, byWidth)));
-}
-const FRAME_MAX_W = 1280;
-const FRAME_MAX_H = 720;
-const FRAME_TIMEOUT_MS = 8e3;
-const DARKEN = "rgba(0,0,0,0.35)";
-function grabVideoFrame(videoPath) {
-  return new Promise((resolve) => {
-    const video = document.createElement("video");
-    let done = false;
-    const finish = (value) => {
-      if (done) return;
-      done = true;
-      clearTimeout(timer);
-      video.removeAttribute("src");
-      video.load();
-      resolve(value);
-    };
-    const timer = setTimeout(() => finish(null), FRAME_TIMEOUT_MS);
-    video.crossOrigin = "anonymous";
-    video.muted = true;
-    video.preload = "auto";
-    video.onerror = () => finish(null);
-    video.onloadedmetadata = () => {
-      const d = Number.isFinite(video.duration) ? video.duration : 0;
-      video.currentTime = Math.min(1, d * 0.1);
-    };
-    video.onseeked = () => {
-      try {
-        const scale = Math.min(1, FRAME_MAX_W / video.videoWidth, FRAME_MAX_H / video.videoHeight);
-        const canvas = document.createElement("canvas");
-        canvas.width = Math.round(video.videoWidth * scale);
-        canvas.height = Math.round(video.videoHeight * scale);
-        const ctx = canvas.getContext("2d");
-        ctx.drawImage(video, 0, 0, canvas.width, canvas.height);
-        ctx.fillStyle = DARKEN;
-        ctx.fillRect(0, 0, canvas.width, canvas.height);
-        finish(canvas.toDataURL("image/jpeg", 0.7));
-      } catch (e) {
-        console.warn("No se pudo leer un cuadro del video", videoPath, e);
-        finish(null);
-      }
-    };
-    video.src = mediaUrl(videoPath);
-  });
-}
-const PLAIN_BG = "0F172A";
-const SHADOW = { type: "outer", color: "000000", blur: 6, offset: 2, angle: 45, opacity: 0.8 };
-async function exportServicePptx(name, songs) {
-  const { default: PptxGenJS } = await __vitePreload(async () => {
-    const { default: PptxGenJS2 } = await import("./pptxgen.es-Gcul_YeZ.js");
-    return { default: PptxGenJS2 };
-  }, true ? __vite__mapDeps([0,1]) : void 0, import.meta.url);
-  const pptx = new PptxGenJS();
-  pptx.layout = "LAYOUT_16x9";
-  pptx.title = name;
-  const frames = await Promise.all(songs.map((s) => s.video_path ? grabVideoFrame(s.video_path) : Promise.resolve(null)));
-  for (const spec of buildDeckPlan(songs)) {
-    const slide = pptx.addSlide();
-    const frame = frames[spec.songIndex];
-    slide.background = frame ? { data: frame.replace(/^data:/, ""), path: "frame.jpg" } : { color: PLAIN_BG };
-    if (spec.kind === "title") {
-      slide.addText(spec.title, {
-        x: 0.5,
-        y: spec.artist ? 2.4 : 2.9,
-        w: 12.33,
-        h: 1.6,
-        align: "center",
-        valign: "middle",
-        fontSize: 48,
-        bold: true,
-        color: "FFFFFF",
-        shadow: SHADOW,
-        fit: "shrink"
-      });
-      if (spec.artist) {
-        slide.addText(spec.artist, { x: 0.5, y: 4, w: 12.33, h: 0.8, align: "center", fontSize: 24, color: "CBD5E1", shadow: SHADOW });
-      }
-    } else {
-      slide.addText(spec.text, {
-        x: 0.5,
-        y: 0.6,
-        w: 12.33,
-        h: 6.3,
-        align: "center",
-        valign: "middle",
-        fontSize: fitFontSize(spec.text),
-        bold: true,
-        color: "FFFFFF",
-        shadow: SHADOW,
-        fit: "shrink"
-      });
-      if (spec.repeat > 1) {
-        slide.addText(`×${spec.repeat}`, { x: 11.3, y: 6.8, w: 1.8, h: 0.5, align: "right", fontSize: 18, color: "CBD5E1" });
-      }
-    }
-  }
-  const bytes = await pptx.write({ outputType: "uint8array" });
-  return window.api.setlistSavePptx({ bytes, defaultName: name });
-}
-const TOAST_MS = 2500;
-let seq = 0;
-const useToastStore = create(() => ({ toasts: [] }));
-function showToast(message, kind = "success") {
-  const id = ++seq;
-  useToastStore.setState((s) => ({ toasts: [...s.toasts, { id, message, kind }] }));
-  setTimeout(() => useToastStore.setState((s) => ({ toasts: s.toasts.filter((t) => t.id !== id) })), TOAST_MS);
-}
 const fold = (s) => s.normalize("NFD").replace(/[̀-ͯ]/g, "").toLowerCase();
 function matchesQuery(song, query) {
   const q = fold(query.trim());
@@ -7136,6 +7265,7 @@ function SetlistPage() {
   }
   async function handlePresent() {
     if (setlistSongs.length === 0) return;
+    document.activeElement?.blur();
     await startLive(setlistSongs.map((s) => s.song));
   }
   async function canDiscardDraft(message) {
@@ -7574,6 +7704,244 @@ function SortableSetlistItem({ id, song, index, isLive, isCurrentSong, onRemove,
     }
   );
 }
+const OFF = { state: "off", lastOk: null, error: null, unauthorized: false, notices: [], applied: false };
+const useSyncStore = create(() => ({ status: OFF }));
+async function reloadAll() {
+  await useSongsStore.getState().fetchSongs();
+  useServiceDraftStore.getState().syncWithCatalog(useSongsStore.getState().songs);
+  await Promise.all([
+    useSetlistsStore.getState().fetchSetlists(),
+    useFoldersStore.getState().fetchFolders(),
+    useFoldersStore.getState().refreshSongsInView()
+  ]);
+  reconcileDraft();
+}
+const draftKey = (name, date, notes, ids2) => JSON.stringify([name, date ?? "", notes ?? "", ids2]);
+function reconcileDraft() {
+  const draft = useServiceDraftStore.getState();
+  if (!draft.setlistId) return;
+  const saved = useSetlistsStore.getState().setlists.find((s) => s.id === draft.setlistId);
+  if (!saved) {
+    draft.forgetSavedSetlist(draft.setlistId);
+    showToast("El servicio abierto se borró en la nube; si lo guardas se crea de nuevo.", "error");
+    return;
+  }
+  const cloud = draftKey(saved.name, saved.service_date, saved.notes, (saved.songs ?? []).map((s) => s.song.id));
+  const here = draftKey(draft.name, draft.serviceDate, draft.notes, draft.items.map((i) => i.song.id));
+  if (cloud === here) return;
+  if (draft.dirty) showToast(`El servicio «${saved.name}» cambió en la nube; tienes cambios sin guardar aquí.`, "error");
+  else draft.loadSaved(saved);
+}
+let started = false;
+function initSync() {
+  if (started) return;
+  started = true;
+  window.api.on("sync:status", (s) => {
+    const status = s;
+    useSyncStore.setState({ status });
+    for (const n of status.notices ?? []) showToast(n, "error");
+  });
+  window.api.on("sync:applied", () => {
+    void reloadAll();
+  });
+  window.api.syncGetStatus().then((status) => useSyncStore.setState({ status })).catch(() => {
+  });
+}
+const DAYS = ["dom", "lun", "mar", "mié", "jue", "vie", "sáb"];
+function whenText(iso, now = /* @__PURE__ */ new Date()) {
+  if (!iso) return "nunca";
+  const d = new Date(iso);
+  const min = Math.round((now.getTime() - d.getTime()) / 6e4);
+  if (min < 1) return "hace un momento";
+  if (min < 60) return `hace ${min} min`;
+  const h = d.getHours();
+  const time = `${h % 12 || 12}:${String(d.getMinutes()).padStart(2, "0")} ${h < 12 ? "a.m." : "p.m."}`;
+  return `${DAYS[d.getDay()]} ${time}`;
+}
+function SyncIndicator() {
+  const status = useSyncStore((s) => s.status);
+  const [, tick] = reactExports.useState(0);
+  reactExports.useEffect(() => {
+    const t = setInterval(() => tick((n) => n + 1), 3e4);
+    return () => clearInterval(t);
+  }, []);
+  if (status.state === "off") return null;
+  const run = () => {
+    void window.api.syncRun();
+  };
+  const view = {
+    syncing: { icon: "🔄", text: "Sincronizando…", tone: "text-slate-400", action: null },
+    ok: { icon: "✅", text: `Sincronizado ${whenText(status.lastOk)}`, tone: "text-emerald-400", action: null },
+    held: { icon: "⏸", text: "Cambios nuevos en espera", tone: "text-amber-300", action: { label: "Actualizar", onClick: run } },
+    error: {
+      icon: "⚠️",
+      text: status.unauthorized ? "Compu desvinculada" : `Sin sincronizar · último: ${whenText(status.lastOk)}`,
+      tone: "text-amber-400",
+      action: status.unauthorized ? null : { label: "Reintentar", onClick: run }
+    }
+  }[status.state];
+  return /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "w-16 flex flex-col items-center gap-1 px-1 text-center", title: status.error ?? view.text, children: [
+    /* @__PURE__ */ jsxRuntimeExports.jsx("span", { className: "text-base leading-none", children: view.icon }),
+    /* @__PURE__ */ jsxRuntimeExports.jsx("span", { className: `text-[9px] leading-tight ${view.tone}`, children: view.text }),
+    view.action && /* @__PURE__ */ jsxRuntimeExports.jsx(
+      "button",
+      {
+        onClick: view.action.onClick,
+        className: "mt-0.5 text-[10px] font-medium px-2 py-0.5 rounded-md bg-slate-800 hover:bg-slate-700 text-white border border-slate-700",
+        children: view.action.label
+      }
+    )
+  ] });
+}
+const input = "w-full bg-slate-800 text-white rounded-xl px-4 py-2.5 outline-none focus:ring-2 focus:ring-indigo-500 border border-slate-700 text-sm";
+const primary = "px-5 py-2.5 rounded-xl bg-indigo-600 hover:bg-indigo-500 disabled:opacity-50 text-white text-sm font-medium transition-colors";
+const secondary = "px-4 py-2.5 rounded-xl bg-slate-700 hover:bg-slate-600 text-white text-sm transition-colors border border-slate-600";
+function CloudSection() {
+  const [info, setInfo] = reactExports.useState(null);
+  const [mode, setMode] = reactExports.useState("choose");
+  const [busy, setBusy] = reactExports.useState(false);
+  const [error, setError] = reactExports.useState(null);
+  const [codes, setCodes] = reactExports.useState(null);
+  const [linkResult, setLinkResult] = reactExports.useState(null);
+  const status = useSyncStore((s) => s.status);
+  const refresh = () => window.api.syncInfo().then(setInfo);
+  reactExports.useEffect(() => {
+    void refresh();
+  }, [status.state, status.lastOk]);
+  const [churchName, setChurchName] = reactExports.useState("");
+  const [leaderName, setLeaderName] = reactExports.useState("");
+  const [pin, setPin] = reactExports.useState("");
+  const [setupKey, setSetupKey] = reactExports.useState("");
+  const [code, setCode] = reactExports.useState("");
+  async function doSetup() {
+    setBusy(true);
+    setError(null);
+    try {
+      const r = await window.api.syncSetup({ churchName, leaderName, pin, setupKey });
+      if (!r.ok) {
+        setError(r.error);
+        return;
+      }
+      setCodes({ churchCode: r.churchCode, recoveryCode: r.recoveryCode });
+      setPin("");
+      setSetupKey("");
+      await refresh();
+    } finally {
+      setBusy(false);
+    }
+  }
+  async function doLink() {
+    setBusy(true);
+    setError(null);
+    try {
+      const r = await window.api.syncLink({ code });
+      if (!r.ok) {
+        setError(r.error);
+        return;
+      }
+      const s = r.summary;
+      setLinkResult([
+        `Vinculada a «${r.churchName}».`,
+        `${s.adopted} canciones empatadas con la nube, ${s.uploaded} se subieron desde esta compu.`,
+        s.replaced.length ? `La nube reemplazó la letra o el tono de: ${s.replaced.map((x) => `«${x.title}»`).join(", ")}.` : "",
+        s.backupFile ? `La versión anterior quedó respaldada en ${s.backupFile}.` : ""
+      ].filter(Boolean).join(" "));
+      setCode("");
+      await refresh();
+    } finally {
+      setBusy(false);
+    }
+  }
+  async function doUnlink() {
+    const ok = await confirmDialog(
+      "Esta compu dejará de sincronizarse. Las canciones y servicios se quedan aquí y en la nube.",
+      { title: "Desvincular de ALADO conectado", confirmLabel: "Desvincular", danger: true }
+    );
+    if (!ok) return;
+    await window.api.syncUnlink();
+    setCodes(null);
+    setLinkResult(null);
+    setMode("choose");
+    await refresh();
+  }
+  return /* @__PURE__ */ jsxRuntimeExports.jsxs("section", { className: "mb-8", children: [
+    /* @__PURE__ */ jsxRuntimeExports.jsx("h2", { className: "text-base font-semibold text-white mb-1", children: "ALADO conectado" }),
+    /* @__PURE__ */ jsxRuntimeExports.jsx("p", { className: "text-sm text-slate-400 mb-4", children: "Sincroniza canciones y servicios con la nube para prepararlos desde el celular." }),
+    codes && /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "mb-4 rounded-2xl border border-amber-500/40 bg-amber-500/10 p-4", children: [
+      /* @__PURE__ */ jsxRuntimeExports.jsx("p", { className: "text-sm font-semibold text-amber-200 mb-2", children: "Imprime o anota estos códigos y guárdalos." }),
+      /* @__PURE__ */ jsxRuntimeExports.jsxs("p", { className: "text-sm text-slate-200", children: [
+        "Código de la iglesia (para entrar desde el celular): ",
+        /* @__PURE__ */ jsxRuntimeExports.jsx("span", { className: "font-mono text-lg tracking-wider text-white", children: codes.churchCode })
+      ] }),
+      /* @__PURE__ */ jsxRuntimeExports.jsxs("p", { className: "text-sm text-slate-200 mt-1", children: [
+        "Código de recuperación (si olvidas tu PIN): ",
+        /* @__PURE__ */ jsxRuntimeExports.jsx("span", { className: "font-mono text-white tracking-wider", children: codes.recoveryCode })
+      ] })
+    ] }),
+    linkResult && /* @__PURE__ */ jsxRuntimeExports.jsx("p", { className: "mb-4 text-sm text-emerald-300", children: linkResult }),
+    error && /* @__PURE__ */ jsxRuntimeExports.jsx("p", { className: "mb-4 text-sm text-red-400", children: error }),
+    info?.linked ? /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "rounded-2xl border border-slate-700 bg-slate-800 p-4 flex items-center gap-4", children: [
+      /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "flex-1 min-w-0", children: [
+        /* @__PURE__ */ jsxRuntimeExports.jsxs("p", { className: "text-sm text-white", children: [
+          "Vinculada a ",
+          /* @__PURE__ */ jsxRuntimeExports.jsx("span", { className: "font-semibold", children: info.churchName ?? "tu iglesia" })
+        ] }),
+        /* @__PURE__ */ jsxRuntimeExports.jsxs("p", { className: "text-xs text-slate-400 mt-0.5", children: [
+          "Última sincronización: ",
+          whenText(info.lastOk),
+          status.state === "error" && status.error ? ` · ${status.error}` : ""
+        ] })
+      ] }),
+      /* @__PURE__ */ jsxRuntimeExports.jsx("button", { className: secondary, onClick: () => void window.api.syncRun(), disabled: status.state === "syncing", children: status.state === "syncing" ? "Sincronizando…" : "Sincronizar ahora" }),
+      /* @__PURE__ */ jsxRuntimeExports.jsx("button", { className: "text-sm text-slate-400 hover:text-red-400 px-2", onClick: doUnlink, children: "Desvincular" })
+    ] }) : mode === "choose" ? /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "flex gap-3", children: [
+      /* @__PURE__ */ jsxRuntimeExports.jsx("button", { className: primary, onClick: () => {
+        setMode("setup");
+        setError(null);
+      }, children: "Crear la iglesia" }),
+      /* @__PURE__ */ jsxRuntimeExports.jsx("button", { className: secondary, onClick: () => {
+        setMode("link");
+        setError(null);
+      }, children: "Vincular con código" })
+    ] }) : mode === "setup" ? /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "rounded-2xl border border-slate-700 bg-slate-800 p-4 grid gap-3", children: [
+      /* @__PURE__ */ jsxRuntimeExports.jsx("p", { className: "text-sm text-slate-300", children: "Hazlo una sola vez, desde la compu que proyecta. Esta compu subirá sus canciones y servicios." }),
+      /* @__PURE__ */ jsxRuntimeExports.jsx("input", { className: input, placeholder: "Nombre de la iglesia", value: churchName, onChange: (e) => setChurchName(e.target.value) }),
+      /* @__PURE__ */ jsxRuntimeExports.jsx("input", { className: input, placeholder: "Tu nombre (líder)", value: leaderName, onChange: (e) => setLeaderName(e.target.value) }),
+      /* @__PURE__ */ jsxRuntimeExports.jsx(
+        "input",
+        {
+          className: input,
+          placeholder: "Tu PIN (4 a 8 números)",
+          inputMode: "numeric",
+          type: "password",
+          value: pin,
+          onChange: (e) => setPin(e.target.value.replace(/\D/g, "").slice(0, 8))
+        }
+      ),
+      /* @__PURE__ */ jsxRuntimeExports.jsx("input", { className: input, placeholder: "Clave de instalación", value: setupKey, onChange: (e) => setSetupKey(e.target.value) }),
+      /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "flex gap-3", children: [
+        /* @__PURE__ */ jsxRuntimeExports.jsx("button", { className: primary, disabled: busy || !churchName.trim() || !leaderName.trim() || pin.length < 4 || !setupKey.trim(), onClick: doSetup, children: busy ? "Creando…" : "Crear y subir catálogo" }),
+        /* @__PURE__ */ jsxRuntimeExports.jsx("button", { className: secondary, onClick: () => setMode("choose"), children: "Cancelar" })
+      ] })
+    ] }) : /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "rounded-2xl border border-slate-700 bg-slate-800 p-4 grid gap-3", children: [
+      /* @__PURE__ */ jsxRuntimeExports.jsx("p", { className: "text-sm text-slate-300", children: 'En el celular del líder: Ajustes → Compus → "Vincular una compu". Escribe aquí el código de 8 números.' }),
+      /* @__PURE__ */ jsxRuntimeExports.jsx(
+        "input",
+        {
+          className: `${input} font-mono tracking-widest`,
+          placeholder: "00000000",
+          inputMode: "numeric",
+          value: code,
+          onChange: (e) => setCode(e.target.value.replace(/\D/g, "").slice(0, 8))
+        }
+      ),
+      /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "flex gap-3", children: [
+        /* @__PURE__ */ jsxRuntimeExports.jsx("button", { className: primary, disabled: busy || code.length !== 8, onClick: doLink, children: busy ? "Vinculando…" : "Vincular" }),
+        /* @__PURE__ */ jsxRuntimeExports.jsx("button", { className: secondary, onClick: () => setMode("choose"), children: "Cancelar" })
+      ] })
+    ] })
+  ] });
+}
 function SettingsPage() {
   const [displays, setDisplays] = reactExports.useState([]);
   const [selectedDisplayId, setSelectedDisplayId] = reactExports.useState(
@@ -7623,6 +7991,7 @@ function SettingsPage() {
   }
   return /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "p-6 max-w-2xl", children: [
     /* @__PURE__ */ jsxRuntimeExports.jsx("h1", { className: "text-2xl font-bold mb-8", children: "Configuración" }),
+    /* @__PURE__ */ jsxRuntimeExports.jsx(CloudSection, {}),
     /* @__PURE__ */ jsxRuntimeExports.jsxs("section", { className: "mb-8", children: [
       /* @__PURE__ */ jsxRuntimeExports.jsx("h2", { className: "text-base font-semibold text-white mb-1", children: "Pantalla de presentación" }),
       /* @__PURE__ */ jsxRuntimeExports.jsx("p", { className: "text-sm text-slate-400 mb-4", children: "Selecciona en qué monitor se mostrará la ventana de presentación al público." }),
@@ -8010,6 +8379,7 @@ function ToastHost() {
     t.id
   )) });
 }
+initSync();
 function App() {
   const [page, setPage] = reactExports.useState("songs");
   const isLive = useLiveStore((s) => s.isLive);
@@ -8021,7 +8391,9 @@ function App() {
       /* @__PURE__ */ jsxRuntimeExports.jsx(NavBtn, { icon: "🎵", label: "Canciones", active: page === "songs", onClick: () => setPage("songs") }),
       /* @__PURE__ */ jsxRuntimeExports.jsx(NavBtn, { icon: "📋", label: "Servicio", active: page === "setlist", onClick: () => setPage("setlist") }),
       /* @__PURE__ */ jsxRuntimeExports.jsx(NavBtn, { icon: "⚙️", label: "Ajustes", active: page === "settings", onClick: () => setPage("settings") }),
-      isLive && /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "mt-auto mb-2 flex flex-col items-center gap-1", children: [
+      /* @__PURE__ */ jsxRuntimeExports.jsx("div", { className: "mt-auto" }),
+      /* @__PURE__ */ jsxRuntimeExports.jsx(SyncIndicator, {}),
+      isLive && /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "mt-3 mb-2 flex flex-col items-center gap-1", children: [
         /* @__PURE__ */ jsxRuntimeExports.jsx("div", { className: "w-2.5 h-2.5 rounded-full bg-red-500 animate-pulse" }),
         /* @__PURE__ */ jsxRuntimeExports.jsx("span", { className: "text-[9px] font-bold text-red-400 tracking-widest uppercase", children: "Live" })
       ] })

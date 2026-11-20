@@ -58,20 +58,44 @@ function createMainWindow() {
   }
   return win;
 }
+function planLiveWindow(displays, primaryId) {
+  const external = displays.find((d) => d.id !== primaryId);
+  if (external) return { windowed: false, bounds: external.bounds };
+  const area = (displays.find((d) => d.id === primaryId) ?? displays[0]).workArea;
+  let width = Math.round(area.width / 2);
+  let height = Math.round(width * 9 / 16);
+  if (height > area.height) {
+    height = area.height;
+    width = Math.round(height * 16 / 9);
+  }
+  return {
+    windowed: true,
+    bounds: {
+      x: area.x + Math.round((area.width - width) / 2),
+      y: area.y + Math.round((area.height - height) / 2),
+      width,
+      height
+    }
+  };
+}
 function createLiveWindow() {
-  const displays = electron.screen.getAllDisplays();
-  const externalDisplay = displays.find((d) => d.id !== electron.screen.getPrimaryDisplay().id);
-  const targetDisplay = externalDisplay ?? electron.screen.getPrimaryDisplay();
-  const { x, y, width, height } = targetDisplay.bounds;
+  const primaryId = electron.screen.getPrimaryDisplay().id;
+  const plan = planLiveWindow(
+    electron.screen.getAllDisplays().map((d) => ({ id: d.id, bounds: d.bounds, workArea: d.workArea })),
+    primaryId
+  );
+  const { windowed } = plan;
   const win = new electron.BrowserWindow({
-    x,
-    y,
-    width,
-    height,
-    fullscreen: !!externalDisplay,
-    frame: false,
-    alwaysOnTop: true,
-    skipTaskbar: true,
+    ...plan.bounds,
+    fullscreen: !windowed,
+    frame: windowed,
+    alwaysOnTop: !windowed,
+    skipTaskbar: !windowed,
+    resizable: windowed,
+    title: "ALADO — Proyección",
+    // Windowed: open without stealing focus, so the operator keeps the keyboard
+    // and sees the "no second display" warning (shown with showInactive in main).
+    show: !windowed,
     backgroundColor: "#000000",
     webPreferences: {
       preload: path.join(__dirname, "../preload/index.js"),
@@ -89,9 +113,8 @@ function createLiveWindow() {
   } else {
     win.loadFile(path.join(__dirname, "../renderer/src/live/live.html"));
   }
-  return win;
+  return { win, windowed };
 }
-let db;
 const SCHEMA = `
 CREATE TABLE IF NOT EXISTS folders (
   id         INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -143,6 +166,51 @@ CREATE TRIGGER IF NOT EXISTS songs_updated_at
     UPDATE songs SET updated_at = CURRENT_TIMESTAMP WHERE id = NEW.id;
   END;
 `;
+const SONG_AUDIO_SQL = `
+  CREATE TABLE IF NOT EXISTS song_audio (
+    song_id           INTEGER PRIMARY KEY REFERENCES songs(id) ON DELETE CASCADE,
+    status            TEXT NOT NULL DEFAULT 'pending',
+    error             TEXT,
+    original_hash     TEXT,
+    duration_sec      REAL,
+    vol_instrumental  REAL NOT NULL DEFAULT 1,
+    vol_vocals        REAL NOT NULL DEFAULT 0,
+    cues              TEXT NOT NULL DEFAULT '[]',
+    cues_sections_sig TEXT,
+    created_at        DATETIME DEFAULT CURRENT_TIMESTAMP,
+    updated_at        DATETIME DEFAULT CURRENT_TIMESTAMP
+  );
+`;
+const SYNCED_TABLES = ["songs", "setlists", "folders"];
+const NEW_UID = "lower(hex(randomblob(16)))";
+function hasColumn(db2, table, column) {
+  return db2.prepare(`SELECT name FROM pragma_table_info('${table}')`).all().some((c) => c.name === column);
+}
+function migrateV6(db2) {
+  for (const table of SYNCED_TABLES) {
+    if (!hasColumn(db2, table, "uid")) db2.exec(`ALTER TABLE ${table} ADD COLUMN uid TEXT`);
+    db2.exec(`UPDATE ${table} SET uid = ${NEW_UID} WHERE uid IS NULL`);
+    db2.exec(`CREATE UNIQUE INDEX IF NOT EXISTS idx_${table}_uid ON ${table}(uid)`);
+    db2.exec(`
+      CREATE TRIGGER IF NOT EXISTS ${table}_uid AFTER INSERT ON ${table}
+      WHEN NEW.uid IS NULL
+      BEGIN
+        UPDATE ${table} SET uid = ${NEW_UID} WHERE id = NEW.id;
+      END;
+    `);
+  }
+  db2.exec(`
+    CREATE TABLE IF NOT EXISTS sync_snapshot (
+      kind     TEXT NOT NULL,   -- 'song' | 'setlist' | 'folder'
+      uid      TEXT NOT NULL,
+      data     TEXT NOT NULL,   -- JSON, same shape as the local view
+      versions TEXT NOT NULL DEFAULT '{}',
+      seq      INTEGER NOT NULL DEFAULT 0,
+      PRIMARY KEY (kind, uid)
+    );
+  `);
+}
+let db;
 function getDb() {
   if (!db) {
     const userDataPath = electron.app.getPath("userData");
@@ -204,21 +272,7 @@ function runMigrations(database) {
   }
   if (version2 < 3) {
     database.transaction(() => {
-      database.exec(`
-        CREATE TABLE IF NOT EXISTS song_audio (
-          song_id           INTEGER PRIMARY KEY REFERENCES songs(id) ON DELETE CASCADE,
-          status            TEXT NOT NULL DEFAULT 'pending',
-          error             TEXT,
-          original_hash     TEXT,
-          duration_sec      REAL,
-          vol_instrumental  REAL NOT NULL DEFAULT 1,
-          vol_vocals        REAL NOT NULL DEFAULT 0,
-          cues              TEXT NOT NULL DEFAULT '[]',
-          cues_sections_sig TEXT,
-          created_at        DATETIME DEFAULT CURRENT_TIMESTAMP,
-          updated_at        DATETIME DEFAULT CURRENT_TIMESTAMP
-        );
-      `);
+      database.exec(SONG_AUDIO_SQL);
       database.pragma("user_version = 3");
     })();
   }
@@ -240,6 +294,12 @@ function runMigrations(database) {
         if (!String(e?.message).includes("duplicate column name")) throw e;
       }
       database.pragma("user_version = 5");
+    })();
+  }
+  if (version2 < 6) {
+    database.transaction(() => {
+      migrateV6(database);
+      database.pragma("user_version = 6");
     })();
   }
 }
@@ -749,9 +809,9 @@ function registerDbHandlers() {
       return result.lastInsertRowid;
     }
   });
-  electron.ipcMain.handle("db:delete-song", async (_e, id) => {
-    getDb().prepare("DELETE FROM songs WHERE id = ?").run(id);
-    await purgeSongAudio(id).catch((e) => console.error("No se pudieron borrar los stems de la canción", id, e));
+  electron.ipcMain.handle("db:delete-song", async (_e, id2) => {
+    getDb().prepare("DELETE FROM songs WHERE id = ?").run(id2);
+    await purgeSongAudio(id2).catch((e) => console.error("No se pudieron borrar los stems de la canción", id2, e));
   });
   electron.ipcMain.handle("db:get-setlists", () => {
     const db2 = getDb();
@@ -787,8 +847,8 @@ function registerDbHandlers() {
       return setlistId;
     })();
   });
-  electron.ipcMain.handle("db:delete-setlist", (_e, id) => {
-    getDb().prepare("DELETE FROM setlists WHERE id = ?").run(id);
+  electron.ipcMain.handle("db:delete-setlist", (_e, id2) => {
+    getDb().prepare("DELETE FROM setlists WHERE id = ?").run(id2);
   });
   electron.ipcMain.handle("db:get-folders", () => {
     return getDb().prepare("SELECT * FROM folders ORDER BY name COLLATE NOCASE").all();
@@ -797,11 +857,11 @@ function registerDbHandlers() {
     const result = getDb().prepare("INSERT INTO folders (name) VALUES (?)").run(name);
     return result.lastInsertRowid;
   });
-  electron.ipcMain.handle("db:rename-folder", (_e, { id, name }) => {
-    getDb().prepare("UPDATE folders SET name = ? WHERE id = ?").run(name, id);
+  electron.ipcMain.handle("db:rename-folder", (_e, { id: id2, name }) => {
+    getDb().prepare("UPDATE folders SET name = ? WHERE id = ?").run(name, id2);
   });
-  electron.ipcMain.handle("db:delete-folder", (_e, id) => {
-    getDb().prepare("DELETE FROM folders WHERE id = ?").run(id);
+  electron.ipcMain.handle("db:delete-folder", (_e, id2) => {
+    getDb().prepare("DELETE FROM folders WHERE id = ?").run(id2);
   });
   electron.ipcMain.handle("db:get-songs-in-folder", (_e, folderId) => {
     const db2 = getDb();
@@ -824,25 +884,102 @@ function serializeSheetStyle(v) {
   const style = parseSheetStyle(v);
   return Object.keys(style).length > 0 ? JSON.stringify(style) : null;
 }
+const VIDEO_EXT$1 = /* @__PURE__ */ new Set([".mp4", ".webm", ".mov"]);
+function listVideos(dir) {
+  if (!fs.existsSync(dir)) return [];
+  return fs.readdirSync(dir, { withFileTypes: true }).filter((e) => e.isFile() && VIDEO_EXT$1.has(path.extname(e.name).toLowerCase())).map((e) => {
+    const p = path.join(dir, e.name);
+    return { name: e.name, path: p, size: fs.statSync(p).size };
+  }).sort((a, b) => a.name.localeCompare(b.name, "es"));
+}
+function sha256(file) {
+  return new Promise((resolve, reject) => {
+    const hash = crypto.createHash("sha256");
+    fs.createReadStream(file).on("data", (chunk) => hash.update(chunk)).on("end", () => resolve(hash.digest("hex"))).on("error", reject);
+  });
+}
+async function sameContent(a, b) {
+  if (fs.statSync(a).size !== fs.statSync(b).size) return false;
+  const [ha, hb] = await Promise.all([sha256(a), sha256(b)]);
+  return ha === hb;
+}
+async function importVideo(srcPath, dir) {
+  fs.mkdirSync(dir, { recursive: true });
+  const ext = path.extname(srcPath);
+  const base = path.basename(srcPath, ext);
+  const entry = (p) => ({ name: path.basename(p), path: p, size: fs.statSync(p).size });
+  if (path.resolve(path.dirname(srcPath)) === path.resolve(dir)) return entry(srcPath);
+  for (let n = 1; ; n++) {
+    const candidate = path.join(dir, n === 1 ? `${base}${ext}` : `${base} (${n})${ext}`);
+    if (!fs.existsSync(candidate)) {
+      try {
+        await fs.promises.copyFile(srcPath, candidate);
+      } catch (e) {
+        fs.rmSync(candidate, { force: true });
+        throw e;
+      }
+      return entry(candidate);
+    }
+    if (await sameContent(srcPath, candidate)) return entry(candidate);
+  }
+}
+const videosDir$1 = () => path.join(electron.app.getPath("userData"), "videos");
+function registerVideosHandlers() {
+  electron.ipcMain.handle("videos:list", () => listVideos(videosDir$1()));
+  electron.ipcMain.handle("videos:import", async () => {
+    const result = await electron.dialog.showOpenDialog({
+      properties: ["openFile"],
+      filters: [{ name: "Video", extensions: ["mp4", "webm", "mov"] }]
+    });
+    if (result.canceled || !result.filePaths[0]) return null;
+    return importVideo(result.filePaths[0], videosDir$1());
+  });
+}
+const REPLAY_ORDER = ["live:set-video", "live:transition", "live:blackout", "live:whiteout", "live:show-section"];
+class LiveStateCache {
+  latest = /* @__PURE__ */ new Map();
+  record(channel, payload) {
+    this.latest.set(channel, payload);
+  }
+  replay(send) {
+    for (const channel of REPLAY_ORDER) {
+      if (this.latest.has(channel)) send(channel, this.latest.get(channel));
+    }
+  }
+  clear() {
+    this.latest.clear();
+  }
+}
 let liveWindow$1 = null;
+const cache = new LiveStateCache();
 function setLiveWindow(win) {
   liveWindow$1 = win;
 }
+function replayLiveState() {
+  cache.replay((channel, payload) => liveWindow$1?.webContents.send(channel, payload));
+}
+function clearLiveState() {
+  cache.clear();
+}
+function forward(channel, payload) {
+  cache.record(channel, payload);
+  liveWindow$1?.webContents.send(channel, payload);
+}
 function registerLiveHandlers() {
   electron.ipcMain.handle("live:show-section", (_e, payload) => {
-    liveWindow$1?.webContents.send("live:show-section", payload);
+    forward("live:show-section", payload);
   });
   electron.ipcMain.handle("live:set-video", (_e, payload) => {
-    liveWindow$1?.webContents.send("live:set-video", payload);
+    forward("live:set-video", payload);
   });
   electron.ipcMain.handle("live:blackout", (_e, payload) => {
-    liveWindow$1?.webContents.send("live:blackout", payload);
+    forward("live:blackout", payload);
   });
   electron.ipcMain.handle("live:whiteout", (_e, payload) => {
-    liveWindow$1?.webContents.send("live:whiteout", payload);
+    forward("live:whiteout", payload);
   });
   electron.ipcMain.handle("live:transition", (_e, payload) => {
-    liveWindow$1?.webContents.send("live:transition", payload);
+    forward("live:transition", payload);
   });
 }
 function registerSystemHandlers() {
@@ -1150,9 +1287,9 @@ function registerPackHandlers() {
     if (song.video && files[`video/${song.video}`]) {
       const mediaDir = path.join(electron.app.getPath("userData"), "media", String(songId));
       fs.mkdirSync(mediaDir, { recursive: true });
-      const videoPath = path.join(mediaDir, path.basename(song.video));
-      fs.writeFileSync(videoPath, files[`video/${song.video}`]);
-      db2.prepare("UPDATE songs SET video_path = ? WHERE id = ?").run(videoPath, songId);
+      const videoPath2 = path.join(mediaDir, path.basename(song.video));
+      fs.writeFileSync(videoPath2, files[`video/${song.video}`]);
+      db2.prepare("UPDATE songs SET video_path = ? WHERE id = ?").run(videoPath2, songId);
     }
     upsertSongAudio(songId, {
       status: "ready",
@@ -1168,7 +1305,7 @@ function registerPackHandlers() {
 }
 const ALADO_FORMAT = "alado-setlist";
 const ALADO_VERSION = 1;
-const fileName = (p) => p ? p.split(/[\\/]/).pop() || null : null;
+const fileName$1 = (p) => p ? p.split(/[\\/]/).pop() || null : null;
 function buildAladoFile(setlist, songs, now) {
   return {
     format: ALADO_FORMAT,
@@ -1184,9 +1321,9 @@ function buildAladoFile(setlist, songs, now) {
         sheet_style: sheetStyleOrNull(s.sheet_style),
         sections: s.sections,
         text_style: s.text_style,
-        video_file: fileName(s.video_path)
+        video_file: fileName$1(s.video_path)
       },
-      custom_video_file: fileName(s.custom_video)
+      custom_video_file: fileName$1(s.custom_video)
     }))
   };
 }
@@ -1230,11 +1367,11 @@ function normalizeTitle(t) {
 }
 function pickMatch(song, local) {
   const key = normalizeTitle(song.title);
-  const same = local.filter((l) => normalizeTitle(l.title) === key);
-  if (same.length === 0) return null;
+  const same2 = local.filter((l) => normalizeTitle(l.title) === key);
+  if (same2.length === 0) return null;
   const artist = song.artist ? normalizeTitle(song.artist) : "";
-  const byArtist = artist ? same.filter((l) => l.artist && normalizeTitle(l.artist) === artist) : [];
-  const pool = byArtist.length > 0 ? byArtist : same;
+  const byArtist = artist ? same2.filter((l) => l.artist && normalizeTitle(l.artist) === artist) : [];
+  const pool = byArtist.length > 0 ? byArtist : same2;
   return pool.reduce((best, l) => (l.updated_at ?? "") > (best.updated_at ?? "") ? l : best);
 }
 function sectionsDiffer(a, b) {
@@ -1257,8 +1394,8 @@ function planImport(file, local, videosDir2, videoNames2) {
         fillSheetStyle: !sheetStyleOrNull(match.sheet_style) && song.sheet_style ? song.sheet_style : null
       };
     }
-    const videoPath = song.video_file && videoNames2.has(song.video_file) ? path.join(videosDir2, song.video_file) : null;
-    return { kind: "create", song, videoPath };
+    const videoPath2 = song.video_file && videoNames2.has(song.video_file) ? path.join(videosDir2, song.video_file) : null;
+    return { kind: "create", song, videoPath: videoPath2 };
   });
 }
 const PAGE_W = 816;
@@ -1365,18 +1502,18 @@ function page(title, body, preview) {
 </body>
 </html>`;
 }
-function buildLyricsSheetHtml(service, songs, opts = {}) {
+function buildLyricsSheetHtml(service2, songs, opts = {}) {
   const general = opts.general ?? DEFAULT_SHEET_STYLE;
   if (opts.preview) return page(songs[0]?.title ?? "", songs[0] ? songPage(songs[0], null, general) : "", true);
-  const date = longDate(service.service_date);
+  const date = longDate(service2.service_date);
   const rows = songs.map((s, i) => `
       <tr>
         <td class="n">${i + 1}</td>
         <td>${esc(s.title)}${s.artist ? `<div class="artist">${esc(s.artist)}</div>` : ""}</td>
         <td class="k">${s.song_key ? esc(s.song_key) : "—"}</td>
       </tr>`).join("");
-  return page(service.name, `
-  <h1>${esc(service.name)}</h1>
+  return page(service2.name, `
+  <h1>${esc(service2.name)}</h1>
   ${date ? `<p class="date">${esc(date)}</p>` : ""}
   <table>
     <thead><tr><th></th><th>Canción</th><th class="k">Tono</th></tr></thead>
@@ -1416,17 +1553,17 @@ function renderSheetPreview(html) {
 const safeFileName = (name, fallback) => name.replace(/[<>:"/\\|?*]/g, "").trim() || fallback;
 const generalSheetStyle = (v) => resolveSheetStyle(DEFAULT_SHEET_STYLE, parseSheetStyle(v));
 function previewSong(v) {
-  const str = (x) => typeof x === "string" ? x : "";
+  const str2 = (x) => typeof x === "string" ? x : "";
   const sections = Array.isArray(v?.sections) ? v.sections : [];
   return {
-    title: str(v?.title),
-    artist: str(v?.artist) || null,
-    song_key: str(v?.song_key) || null,
+    title: str2(v?.title),
+    artist: str2(v?.artist) || null,
+    song_key: str2(v?.song_key) || null,
     sheet_style: v?.sheet_style,
     sections: sections.map((s) => ({
-      label: str(s?.label),
+      label: str2(s?.label),
       repeat: Number(s?.repeat) || 1,
-      lines: Array.isArray(s?.lines) ? s.lines.map(str) : []
+      lines: Array.isArray(s?.lines) ? s.lines.map(str2) : []
     }))
   };
 }
@@ -1448,8 +1585,8 @@ function registerSetlistHandlers() {
   electron.ipcMain.handle("setlist:export", async (_e, p) => {
     const db2 = getDb();
     const byId = db2.prepare("SELECT * FROM songs WHERE id = ?");
-    const songs = p.songIds.map((id, i) => {
-      const row = byId.get(id);
+    const songs = p.songIds.map((id2, i) => {
+      const row = byId.get(id2);
       return row ? { ...deserializeSong(row), custom_video: p.customVideos?.[i] ?? null } : null;
     }).filter((s) => s !== null);
     const file = buildAladoFile({ name: p.name, service_date: p.service_date || null, notes: p.notes ?? null }, songs, /* @__PURE__ */ new Date());
@@ -1477,7 +1614,7 @@ function registerSetlistHandlers() {
     });
     if (canceled || !filePath) return null;
     const byId = getDb().prepare("SELECT * FROM songs WHERE id = ?");
-    const songs = p.songIds.map((id) => byId.get(id)).filter(Boolean).map(deserializeSong);
+    const songs = p.songIds.map((id2) => byId.get(id2)).filter(Boolean).map(deserializeSong);
     const html = buildLyricsSheetHtml({ name: p.name, service_date: p.service_date || "" }, songs, { general: generalSheetStyle(p.sheetStyle) });
     fs.writeFileSync(filePath, await renderSheetPdf(html));
     return { path: filePath };
@@ -1559,9 +1696,684 @@ function registerSetlistHandlers() {
     const { setlistId, songIds } = run2();
     const ready = db2.prepare(`SELECT 1 FROM song_audio WHERE song_id = ? AND status = 'ready'`);
     const titles = new Map(db2.prepare("SELECT id, title FROM songs").all().map((r) => [r.id, r.title]));
-    const missingAudio = [...new Set(songIds)].filter((id) => !ready.get(id)).map((id) => titles.get(id));
+    const missingAudio = [...new Set(songIds)].filter((id2) => !ready.get(id2)).map((id2) => titles.get(id2));
     return { setlistId, ...summary, missingAudio };
   });
+}
+const SONG_FIELDS = [
+  "title",
+  "artist",
+  "sections",
+  "song_key",
+  "video_file",
+  "text_style",
+  "sheet_style",
+  "folder_uid"
+];
+const EMPTY_SONG = {
+  title: "",
+  artist: null,
+  sections: [],
+  song_key: null,
+  video_file: null,
+  text_style: null,
+  sheet_style: null,
+  folder_uid: null
+};
+const fileName = (p) => {
+  const name = p ? p.split(/[\\/]/).pop().trim() : "";
+  return name || null;
+};
+const json = (text, fallback) => {
+  if (!text) return fallback;
+  try {
+    return JSON.parse(text);
+  } catch {
+    return fallback;
+  }
+};
+function songRowToFields(r) {
+  const style = json(r.text_style, null);
+  return {
+    ...EMPTY_SONG,
+    title: r.title,
+    artist: r.artist?.trim() ? r.artist : null,
+    sections: json(r.sections, []),
+    song_key: r.song_key || null,
+    video_file: fileName(r.video_path),
+    text_style: style && Object.keys(style).length ? style : null,
+    sheet_style: json(r.sheet_style, null),
+    folder_uid: r.folder_uid ?? null
+  };
+}
+function readLocal(db2) {
+  const songs = /* @__PURE__ */ new Map();
+  for (const r of db2.prepare(
+    `SELECT s.uid, s.title, s.artist, s.sections, s.video_path, s.text_style, s.sheet_style, s.song_key, f.uid AS folder_uid
+     FROM songs s LEFT JOIN folders f ON f.id = s.folder_id`
+  ).all()) {
+    songs.set(r.uid, songRowToFields(r));
+  }
+  const folders = /* @__PURE__ */ new Map();
+  for (const r of db2.prepare("SELECT uid, name FROM folders").all()) folders.set(r.uid, r.name);
+  const setlists = /* @__PURE__ */ new Map();
+  const items = db2.prepare(
+    `SELECT si.setlist_id, s.uid AS song_uid, si.custom_video FROM setlist_items si JOIN songs s ON s.id = si.song_id
+     ORDER BY si.setlist_id, si.position`
+  ).all();
+  for (const r of db2.prepare("SELECT id, uid, name, service_date, notes FROM setlists").all()) {
+    setlists.set(r.uid, {
+      name: r.name,
+      service_date: r.service_date || null,
+      notes: r.notes || null,
+      items: items.filter((i) => i.setlist_id === r.id).map((i) => ({ song_uid: i.song_uid, custom_video_file: fileName(i.custom_video) }))
+    });
+  }
+  return { songs, setlists, folders };
+}
+function inTransaction(db2, fn) {
+  db2.exec("BEGIN");
+  try {
+    const out = fn();
+    db2.exec("COMMIT");
+    return out;
+  } catch (e) {
+    db2.exec("ROLLBACK");
+    throw e;
+  }
+}
+const same$2 = (a, b) => JSON.stringify(a ?? null) === JSON.stringify(b ?? null);
+function readSnapshot(db2, kind, uid) {
+  const r = db2.prepare("SELECT data, versions, seq FROM sync_snapshot WHERE kind = ? AND uid = ?").get(kind, uid);
+  return r ? { data: JSON.parse(r.data), versions: JSON.parse(r.versions), seq: r.seq } : null;
+}
+function writeSnapshot(db2, kind, uid, data, versions, seq) {
+  db2.prepare("INSERT OR REPLACE INTO sync_snapshot (kind, uid, data, versions, seq) VALUES (?, ?, ?, ?, ?)").run(kind, uid, JSON.stringify(data), JSON.stringify(versions), seq);
+}
+const dropSnapshot = (db2, kind, uid) => db2.prepare("DELETE FROM sync_snapshot WHERE kind = ? AND uid = ?").run(kind, uid);
+function locallyEdited(local, snapshot, remote) {
+  const base = snapshot ?? remote;
+  return SONG_FIELDS.filter((f) => !same$2(local[f], base[f]));
+}
+const id = (db2, table, uid) => {
+  if (!uid) return null;
+  const r = db2.prepare(`SELECT id FROM ${table} WHERE uid = ?`).get(uid);
+  return r?.id ?? null;
+};
+function videoPath(name, currentPath, videosDir2) {
+  if (!name || name !== path.basename(name) || /[\\/:]/.test(name) || name.startsWith(".")) return null;
+  if (currentPath && fileName(currentPath) === name) return currentPath;
+  return path.join(videosDir2, name);
+}
+function writeSongRow(db2, uid, f, row, videosDir2) {
+  const values = [
+    f.title,
+    f.artist,
+    JSON.stringify(f.sections),
+    f.song_key,
+    videoPath(f.video_file, row?.video_path ?? null, videosDir2),
+    JSON.stringify(f.text_style ?? {}),
+    f.sheet_style ? JSON.stringify(f.sheet_style) : null,
+    id(db2, "folders", f.folder_uid)
+  ];
+  if (row) {
+    db2.prepare("UPDATE songs SET title = ?, artist = ?, sections = ?, song_key = ?, video_path = ?, text_style = ?, sheet_style = ?, folder_id = ? WHERE id = ?").run(...values, row.id);
+    return row.id;
+  }
+  return Number(db2.prepare("INSERT INTO songs (title, artist, sections, song_key, video_path, text_style, sheet_style, folder_id, uid) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)").run(...values, uid).lastInsertRowid);
+}
+function applyRemote(db2, pulled, opts) {
+  const result = { changedSongs: 0, changedSetlists: 0, restored: [], keptLocal: [] };
+  inTransaction(db2, () => {
+    const local = readLocal(db2);
+    for (const f of pulled.folders) {
+      const folderId = id(db2, "folders", f.uid);
+      if (f.deleted) {
+        if (folderId) {
+          db2.prepare("UPDATE songs SET folder_id = NULL WHERE folder_id = ?").run(folderId);
+          db2.prepare("DELETE FROM folders WHERE id = ?").run(folderId);
+        }
+        dropSnapshot(db2, "folder", f.uid);
+        continue;
+      }
+      const snap = readSnapshot(db2, "folder", f.uid);
+      if (!folderId && snap && snap.data === f.name) continue;
+      const localName = local.folders.get(f.uid);
+      const editedHere = localName !== void 0 && snap && localName !== snap.data;
+      if (folderId && !editedHere) db2.prepare("UPDATE folders SET name = ? WHERE id = ?").run(f.name, folderId);
+      else if (!folderId) db2.prepare("INSERT INTO folders (name, uid) VALUES (?, ?)").run(f.name, f.uid);
+      writeSnapshot(db2, "folder", f.uid, f.name, {}, f.seq);
+    }
+    for (const s of pulled.songs) {
+      const row = db2.prepare("SELECT id, video_path FROM songs WHERE uid = ?").get(s.uid);
+      if (s.deleted) {
+        if (row) {
+          const used = db2.prepare("SELECT 1 FROM setlist_items WHERE song_id = ? LIMIT 1").get(row.id);
+          const snap2 = readSnapshot(db2, "song", s.uid);
+          const localFields2 = local.songs.get(s.uid);
+          const editedHere = !snap2 || localFields2 && locallyEdited(localFields2, snap2.data, s.fields).length > 0;
+          if (!used && !editedHere) db2.prepare("DELETE FROM songs WHERE id = ?").run(row.id);
+        }
+        dropSnapshot(db2, "song", s.uid);
+        continue;
+      }
+      const localFields = local.songs.get(s.uid);
+      const snap = readSnapshot(db2, "song", s.uid);
+      if (!row && snap && same$2(s.fields, snap.data)) continue;
+      const edited = localFields ? locallyEdited(localFields, snap?.data ?? null, s.fields) : [];
+      const merged = { ...s.fields };
+      for (const f of edited) merged[f] = localFields[f];
+      if (edited.length && localFields) result.keptLocal.push(merged.title);
+      if (!row || !localFields || !same$2(merged, localFields)) {
+        writeSongRow(db2, s.uid, merged, row ?? null, opts.videosDir);
+        result.changedSongs++;
+      }
+      const versions = { ...s.versions };
+      for (const f of edited) versions[f] = snap?.versions[f] ?? 0;
+      writeSnapshot(db2, "song", s.uid, s.fields, versions, s.seq);
+    }
+    for (const l of pulled.setlists) {
+      const setlistId = id(db2, "setlists", l.uid);
+      if (l.deleted) {
+        if (setlistId) {
+          db2.prepare("DELETE FROM setlist_items WHERE setlist_id = ?").run(setlistId);
+          db2.prepare("DELETE FROM setlists WHERE id = ?").run(setlistId);
+          result.changedSetlists++;
+        }
+        dropSnapshot(db2, "setlist", l.uid);
+        continue;
+      }
+      const remoteData = { name: l.name, service_date: l.service_date, notes: l.notes, items: l.items };
+      const localData = local.setlists.get(l.uid);
+      const snap = readSnapshot(db2, "setlist", l.uid);
+      if (!setlistId && snap && same$2(remoteData, snap.data)) continue;
+      const editedHere = localData && !same$2(localData, snap ? snap.data : remoteData);
+      if (editedHere) {
+        result.keptLocal.push(localData.name);
+        writeSnapshot(db2, "setlist", l.uid, remoteData, {}, snap?.seq ?? 0);
+        continue;
+      }
+      if (!localData || !same$2(localData, remoteData)) {
+        let sid = setlistId;
+        if (sid) {
+          db2.prepare("UPDATE setlists SET name = ?, service_date = ?, notes = ? WHERE id = ?").run(l.name, l.service_date, l.notes, sid);
+          db2.prepare("DELETE FROM setlist_items WHERE setlist_id = ?").run(sid);
+        } else {
+          sid = Number(db2.prepare("INSERT INTO setlists (name, service_date, notes, uid) VALUES (?, ?, ?, ?)").run(l.name, l.service_date, l.notes, l.uid).lastInsertRowid);
+        }
+        const insert = db2.prepare("INSERT INTO setlist_items (setlist_id, song_id, position, custom_video) VALUES (?, ?, ?, ?)");
+        let position = 0;
+        for (const item of l.items) {
+          let songId = id(db2, "songs", item.song_uid);
+          if (!songId) {
+            const snapSong = readSnapshot(db2, "song", item.song_uid);
+            if (snapSong) {
+              songId = writeSongRow(db2, item.song_uid, snapSong.data, null, opts.videosDir);
+              result.restored.push(snapSong.data.title);
+            }
+          }
+          if (songId) insert.run(sid, songId, position++, videoPath(item.custom_video_file, null, opts.videosDir));
+        }
+        result.changedSetlists++;
+      }
+      writeSnapshot(db2, "setlist", l.uid, remoteData, {}, l.seq);
+    }
+  });
+  return result;
+}
+const same$1 = (a, b) => JSON.stringify(a ?? null) === JSON.stringify(b ?? null);
+function readSnapshots(db2) {
+  const out = { songs: /* @__PURE__ */ new Map(), setlists: /* @__PURE__ */ new Map(), folders: /* @__PURE__ */ new Map() };
+  for (const r of db2.prepare("SELECT kind, uid, data, versions, seq FROM sync_snapshot").all()) {
+    const data = JSON.parse(r.data);
+    if (r.kind === "song") out.songs.set(r.uid, { data, versions: JSON.parse(r.versions), seq: r.seq });
+    else if (r.kind === "setlist") out.setlists.set(r.uid, { data, seq: r.seq });
+    else if (r.kind === "folder") out.folders.set(r.uid, { data, seq: r.seq });
+  }
+  return out;
+}
+function localChanges(local, snap) {
+  const folders = [];
+  const songs = [];
+  const setlists = [];
+  const setlistDeletes = [];
+  const songDeletes = [];
+  const folderDeletes = [];
+  for (const [uid, name] of local.folders) {
+    const s = snap.folders.get(uid);
+    if (!s || s.data !== name) folders.push({ kind: "folder", uid, name });
+  }
+  for (const uid of snap.folders.keys()) if (!local.folders.has(uid)) folderDeletes.push({ kind: "folder-delete", uid });
+  for (const [uid, fields] of local.songs) {
+    const s = snap.songs.get(uid);
+    if (!s) {
+      songs.push({ kind: "song", uid, fields, seen: {} });
+      continue;
+    }
+    const changed = SONG_FIELDS.filter((f) => !same$1(fields[f], s.data[f]));
+    if (!changed.length) continue;
+    const partial = {};
+    const seen = {};
+    for (const f of changed) {
+      partial[f] = fields[f];
+      seen[f] = s.versions[f] ?? 0;
+    }
+    songs.push({ kind: "song", uid, fields: partial, seen });
+  }
+  for (const uid of snap.songs.keys()) if (!local.songs.has(uid)) songDeletes.push({ kind: "song-delete", uid });
+  for (const [uid, data] of local.setlists) {
+    const s = snap.setlists.get(uid);
+    if (!s || !same$1(s.data, data)) setlists.push({ kind: "setlist", uid, data, seenSeq: s?.seq ?? 0 });
+  }
+  for (const uid of snap.setlists.keys()) if (!local.setlists.has(uid)) setlistDeletes.push({ kind: "setlist-delete", uid });
+  return [...folders, ...songs, ...setlists, ...setlistDeletes, ...songDeletes, ...folderDeletes];
+}
+const PUSH_CHUNK = 30;
+const OFFLINE$1 = "No se pudo conectar con ALADO en la nube.";
+class ApiError extends Error {
+  constructor(message, status) {
+    super(message);
+    this.status = status;
+  }
+}
+function setting(db2, key) {
+  const r = db2.prepare("SELECT value FROM app_settings WHERE key = ?").get(key);
+  return r?.value ?? null;
+}
+function setSetting(db2, key, value) {
+  db2.prepare("INSERT OR REPLACE INTO app_settings (key, value) VALUES (?, ?)").run(key, value);
+}
+class SyncEngine {
+  constructor(deps) {
+    this.deps = deps;
+    this.status = {
+      state: "off",
+      lastOk: setting(deps.db, "sync_last_ok"),
+      error: null,
+      unauthorized: false,
+      notices: [],
+      applied: false
+    };
+  }
+  status;
+  /** Local changes not yet in the cloud. */
+  pending() {
+    return localChanges(readLocal(this.deps.db), readSnapshots(this.deps.db)).length;
+  }
+  get since() {
+    return Number(setting(this.deps.db, "sync_seq") ?? 0) || 0;
+  }
+  async call(method, path2, body) {
+    let res;
+    try {
+      res = await this.deps.api(method, path2, body);
+    } catch {
+      throw new ApiError(OFFLINE$1, 0);
+    }
+    if (res.status === 401) throw new ApiError("Esta compu ya no está vinculada a ALADO en la nube. Vuelve a vincularla.", 401);
+    if (res.status >= 400) throw new ApiError(res.body?.error ?? `Error ${res.status} de la nube.`, res.status);
+    return res.body;
+  }
+  async pullAndApply(notices) {
+    const pulled = await this.call("POST", "/api/sync/pull", { since: this.since });
+    notices.push(...pulled.notices.map((n) => n.message));
+    const r = applyRemote(this.deps.db, pulled, { videosDir: this.deps.videosDir });
+    notices.push(...r.restored.map((t) => `«${t}» no se borró: está en un servicio de la nube.`));
+    setSetting(this.deps.db, "sync_seq", String(pulled.seq));
+    return r.changedSongs + r.changedSetlists > 0 || pulled.folders.length > 0;
+  }
+  /** Uploads local changes; returns whether anything was sent. */
+  async push(notices) {
+    const changes = localChanges(readLocal(this.deps.db), readSnapshots(this.deps.db));
+    for (let i = 0; i < changes.length; i += PUSH_CHUNK) {
+      const chunk = changes.slice(i, i + PUSH_CHUNK);
+      const res = await this.call("POST", "/api/sync/push", { changes: chunk });
+      chunk.forEach((c, k) => this.afterPush(c, res.results[k], notices));
+    }
+    return changes.length > 0;
+  }
+  /** Records an accepted change in the snapshot so it isn't sent again; handles refusals. */
+  afterPush(c, r, notices) {
+    const db2 = this.deps.db;
+    const snaps = readSnapshots(db2);
+    if (r?.ok) {
+      if (c.kind === "song") {
+        const prev = snaps.songs.get(c.uid);
+        writeSnapshot(db2, "song", c.uid, { ...EMPTY_SONG, ...prev?.data, ...c.fields }, prev?.versions ?? {}, prev?.seq ?? 0);
+      } else if (c.kind === "setlist") {
+        writeSnapshot(db2, "setlist", c.uid, c.data, {}, snaps.setlists.get(c.uid)?.seq ?? 0);
+      } else if (c.kind === "folder") {
+        writeSnapshot(db2, "folder", c.uid, c.name, {}, 0);
+      } else {
+        const kind = c.kind === "song-delete" ? "song" : c.kind === "setlist-delete" ? "setlist" : "folder";
+        db2.prepare("DELETE FROM sync_snapshot WHERE kind = ? AND uid = ?").run(kind, c.uid);
+      }
+      return;
+    }
+    if (c.kind === "song-delete" && r?.error === "song-in-use") {
+      const snap = snaps.songs.get(c.uid);
+      if (snap) {
+        db2.prepare("DELETE FROM sync_snapshot WHERE kind = ? AND uid = ?").run("song", c.uid);
+        applyRemote(db2, {
+          seq: 0,
+          songs: [{ uid: c.uid, deleted: false, seq: snap.seq, fields: snap.data, versions: snap.versions }],
+          folders: [],
+          setlists: [],
+          notices: []
+        }, { videosDir: this.deps.videosDir });
+        notices.push(`«${snap.data.title}» no se borró: está en un servicio de la nube.`);
+      }
+      return;
+    }
+    const what = c.kind === "song" ? `la canción «${c.fields.title ?? snaps.songs.get(c.uid)?.data.title ?? ""}»` : c.kind === "setlist" ? `el servicio «${c.data.name}»` : "un cambio";
+    notices.push(`No se pudo subir ${what} (${r?.error ?? "sin respuesta"}).`);
+  }
+  async run(opts = {}) {
+    const notices = [];
+    this.status = { ...this.status, state: "syncing", notices: [], applied: false };
+    try {
+      let applied = false;
+      let held = false;
+      if (this.deps.isLive() && !opts.force) {
+        const peek = await this.call("POST", "/api/sync/pull", { since: this.since });
+        held = peek.songs.length + peek.setlists.length + peek.folders.length > 0;
+        notices.push(...peek.notices.map((n) => n.message));
+      } else {
+        applied = await this.pullAndApply(notices);
+      }
+      const pushed = await this.push(notices);
+      if (pushed && !held && !this.deps.isLive()) applied = await this.pullAndApply(notices) || applied;
+      const lastOk = this.deps.now().toISOString();
+      setSetting(this.deps.db, "sync_last_ok", lastOk);
+      this.status = { state: held ? "held" : "ok", lastOk, error: null, unauthorized: false, notices, applied };
+    } catch (e) {
+      const err = e instanceof ApiError ? e : new ApiError(String(e?.message ?? e), 0);
+      console.error("ALADO sync failed:", err.message);
+      this.status = { ...this.status, state: "error", error: err.message, unauthorized: err.status === 401, notices, applied: false };
+    }
+    return this.status;
+  }
+  /** Uploads local changes only (frequent, cheap). Incoming changes wait for the next run(). */
+  async pushOnly() {
+    const notices = [];
+    try {
+      if (!this.pending()) return this.status;
+      await this.push(notices);
+      this.status = { ...this.status, notices, applied: notices.length > 0 };
+    } catch (e) {
+      const err = e instanceof ApiError ? e : new ApiError(String(e?.message ?? e), 0);
+      this.status = { ...this.status, state: "error", error: err.message, unauthorized: err.status === 401, notices };
+    }
+    return this.status;
+  }
+}
+const same = (a, b) => JSON.stringify(a ?? null) === JSON.stringify(b ?? null);
+function adoptOnLink(db2, pulled, opts) {
+  if (db2.prepare("SELECT 1 FROM sync_snapshot LIMIT 1").get()) {
+    throw new Error("Esta compu ya estuvo sincronizada; no se puede volver a empatar su catálogo.");
+  }
+  const local = readLocal(db2);
+  const summary = { adopted: 0, replaced: [], backupFile: null, uploaded: 0 };
+  const songMatches = [];
+  const takenSongs = /* @__PURE__ */ new Set();
+  for (const remote of pulled.songs.filter((s) => !s.deleted)) {
+    const key = normalizeTitle(remote.fields.title);
+    if (!key) continue;
+    const candidates = [...local.songs].filter(([uid, f]) => !takenSongs.has(uid) && normalizeTitle(f.title) === key);
+    const match = candidates.find(([, f]) => normalizeTitle(f.artist ?? "") === normalizeTitle(remote.fields.artist ?? "")) ?? candidates[0];
+    if (!match) continue;
+    takenSongs.add(match[0]);
+    songMatches.push({ localUid: match[0], remoteUid: remote.uid, fields: match[1] });
+    if (!same(match[1].sections, remote.fields.sections) || !same(match[1].song_key, remote.fields.song_key)) {
+      summary.replaced.push({ title: match[1].title });
+    }
+  }
+  summary.adopted = songMatches.length;
+  summary.uploaded = [...local.songs.keys()].filter((uid) => !takenSongs.has(uid)).length;
+  const setlistMatches = [];
+  const takenSetlists = /* @__PURE__ */ new Set();
+  for (const remote of pulled.setlists.filter((s) => !s.deleted)) {
+    const match = [...local.setlists].find(([uid, l]) => !takenSetlists.has(uid) && normalizeTitle(l.name) !== "" && normalizeTitle(l.name) === normalizeTitle(remote.name) && (l.service_date ?? null) === (remote.service_date ?? null));
+    if (!match) continue;
+    takenSetlists.add(match[0]);
+    setlistMatches.push([match[0], remote.uid, match[1]]);
+  }
+  const folderMatches = [];
+  const takenFolders = /* @__PURE__ */ new Set();
+  for (const remote of pulled.folders.filter((f) => !f.deleted)) {
+    const match = [...local.folders].find(([uid, name]) => !takenFolders.has(uid) && normalizeTitle(name) !== "" && normalizeTitle(name) === normalizeTitle(remote.name));
+    if (!match) continue;
+    takenFolders.add(match[0]);
+    folderMatches.push([match[0], remote.uid, match[1]]);
+  }
+  if (songMatches.length) {
+    fs.mkdirSync(opts.backupDir, { recursive: true });
+    const stamp = opts.now().toISOString().slice(0, 10);
+    for (let n = 1; ; n++) {
+      const file = path.join(opts.backupDir, n === 1 ? `vinculacion-${stamp}.json` : `vinculacion-${stamp}-${n}.json`);
+      try {
+        fs.writeFileSync(file, JSON.stringify({
+          note: "Canciones de esta compu como estaban antes de vincularla; la versión de la nube las reemplazó.",
+          songs: songMatches.map((m) => m.fields)
+        }, null, 2), { flag: "wx" });
+        summary.backupFile = file;
+        break;
+      } catch (e) {
+        if (e.code !== "EEXIST") throw e;
+      }
+    }
+  }
+  inTransaction(db2, () => {
+    for (const m of songMatches) db2.prepare("UPDATE songs SET uid = ? WHERE uid = ?").run(m.remoteUid, m.localUid);
+    for (const [localUid, remoteUid] of setlistMatches) db2.prepare("UPDATE setlists SET uid = ? WHERE uid = ?").run(remoteUid, localUid);
+    for (const [localUid, remoteUid] of folderMatches) db2.prepare("UPDATE folders SET uid = ? WHERE uid = ?").run(remoteUid, localUid);
+    const now = readLocal(db2);
+    for (const m of songMatches) writeSnapshot(db2, "song", m.remoteUid, now.songs.get(m.remoteUid), {}, 0);
+    for (const [, remoteUid] of setlistMatches) writeSnapshot(db2, "setlist", remoteUid, now.setlists.get(remoteUid), {}, 0);
+    for (const [, remoteUid] of folderMatches) writeSnapshot(db2, "folder", remoteUid, now.folders.get(remoteUid), {}, 0);
+  });
+  return summary;
+}
+const PUSH_EVERY_MS = 6e4;
+const SYNC_EVERY_MS = 3 * 6e4;
+const OFFLINE = "No se pudo conectar con ALADO en la nube. Revisa el internet e intenta de nuevo.";
+class SyncService {
+  constructor(deps) {
+    this.deps = deps;
+    this.engine = new SyncEngine({
+      db: deps.db,
+      api: this.api(() => this.token()),
+      videosDir: deps.videosDir,
+      backupDir: deps.backupDir,
+      isLive: deps.isLive,
+      now: deps.now
+    });
+  }
+  engine;
+  timers = [];
+  running = null;
+  get(key) {
+    const r = this.deps.db.prepare("SELECT value FROM app_settings WHERE key = ?").get(key);
+    return r?.value ?? null;
+  }
+  set(key, value) {
+    if (value === null) this.deps.db.prepare("DELETE FROM app_settings WHERE key = ?").run(key);
+    else this.deps.db.prepare("INSERT OR REPLACE INTO app_settings (key, value) VALUES (?, ?)").run(key, value);
+  }
+  token() {
+    const stored = this.get("sync_token");
+    if (!stored) return null;
+    try {
+      return this.deps.secret.decrypt(stored);
+    } catch {
+      return null;
+    }
+  }
+  api(token) {
+    return async (method, path2, body) => {
+      const t = token();
+      const res = await this.deps.fetch(`${this.deps.cloudUrl}${path2}`, {
+        method,
+        headers: { "Content-Type": "application/json", ...t ? { Authorization: `Bearer ${t}` } : {} },
+        body: body === void 0 ? void 0 : JSON.stringify(body)
+      });
+      let parsed = null;
+      try {
+        parsed = await res.json();
+      } catch {
+      }
+      return { status: res.status, body: parsed };
+    };
+  }
+  info() {
+    return { linked: !!this.token(), churchName: this.get("sync_church"), lastOk: this.get("sync_last_ok") };
+  }
+  status() {
+    return this.info().linked ? this.engine.status : { ...this.engine.status, state: "off" };
+  }
+  emit(s) {
+    this.deps.send("sync:status", s);
+    if (s.applied) this.deps.send("sync:applied", null);
+  }
+  /** One full sync at a time; concurrent callers share it. */
+  run(opts = {}) {
+    if (!this.info().linked) {
+      const off = this.status();
+      this.emit(off);
+      return Promise.resolve(off);
+    }
+    this.running ??= (async () => {
+      this.deps.send("sync:status", { ...this.engine.status, state: "syncing", notices: [], applied: false });
+      const s = await this.engine.run(opts);
+      this.emit(s);
+      return s;
+    })().finally(() => {
+      this.running = null;
+    });
+    return this.running;
+  }
+  async pushOnly() {
+    if (!this.info().linked || this.running) return;
+    const before = this.engine.status;
+    const s = await this.engine.pushOnly();
+    if (s !== before) this.emit(s);
+  }
+  start() {
+    this.stop();
+    void this.run();
+    this.timers.push(setInterval(() => void this.pushOnly(), PUSH_EVERY_MS));
+    this.timers.push(setInterval(() => void this.run(), SYNC_EVERY_MS));
+  }
+  stop() {
+    this.timers.forEach(clearInterval);
+    this.timers = [];
+  }
+  remember(token, churchName) {
+    this.set("sync_token", this.deps.secret.encrypt(token));
+    this.set("sync_church", churchName);
+  }
+  /** Creates the church from this computer (the trusted one) and uploads its catalog. */
+  async setup(p) {
+    let res;
+    try {
+      res = await this.api(() => null)("POST", "/api/setup", { ...p, deviceName: this.deps.deviceName });
+    } catch {
+      return { ok: false, error: OFFLINE };
+    }
+    if (res.status !== 200) return { ok: false, error: res.body?.error ?? `Error ${res.status}` };
+    this.clearSyncState();
+    this.remintUids();
+    this.remember(res.body.deviceToken, res.body.churchName);
+    this.start();
+    const status = await this.run();
+    return { ok: true, churchCode: res.body.churchCode, recoveryCode: res.body.recoveryCode, churchName: res.body.churchName, status };
+  }
+  /** Links this computer with a code from the leader's phone, adopting matching songs. */
+  async link(p) {
+    let res;
+    try {
+      res = await this.api(() => null)("POST", "/api/link", { code: p.code, deviceName: this.deps.deviceName });
+    } catch {
+      return { ok: false, error: OFFLINE };
+    }
+    if (res.status !== 200) return { ok: false, error: res.body?.error ?? `Error ${res.status}` };
+    const token = res.body.deviceToken;
+    let pulled;
+    try {
+      const r = await this.api(() => token)("POST", "/api/sync/pull", { since: 0 });
+      if (r.status !== 200) return { ok: false, error: r.body?.error ?? `Error ${r.status}` };
+      pulled = r.body;
+    } catch {
+      return { ok: false, error: OFFLINE };
+    }
+    this.clearSyncState();
+    this.remintUids();
+    let summary;
+    try {
+      summary = adoptOnLink(this.deps.db, pulled, { backupDir: this.deps.backupDir, now: this.deps.now });
+    } catch (e) {
+      return { ok: false, error: `No se pudo empatar el catálogo: ${e.message}` };
+    }
+    this.remember(token, res.body.churchName);
+    this.start();
+    const status = await this.run();
+    return { ok: true, churchName: res.body.churchName, summary, status };
+  }
+  remintUids() {
+    for (const t of ["songs", "setlists", "folders"]) this.deps.db.prepare(`UPDATE ${t} SET uid = lower(hex(randomblob(16)))`).run();
+  }
+  clearSyncState() {
+    this.deps.db.prepare("DELETE FROM sync_snapshot").run();
+    for (const k of ["sync_seq", "sync_last_ok"]) this.set(k, null);
+  }
+  /** Forgets the link on this computer (the cloud keeps the catalog). */
+  async unlink() {
+    const token = this.token();
+    if (token) await this.api(() => token)("POST", "/api/logout").catch(() => {
+    });
+    this.stop();
+    this.clearSyncState();
+    this.set("sync_token", null);
+    this.set("sync_church", null);
+    this.emit(this.status());
+  }
+}
+const CLOUD_URL = process.env.ALADO_CLOUD_URL || "https://alado.mj-cristhian.workers.dev";
+let service = null;
+const secret = {
+  encrypt: (s) => electron.safeStorage.isEncryptionAvailable() ? `safe:${electron.safeStorage.encryptString(s).toString("base64")}` : `plain:${s}`,
+  decrypt: (s) => s.startsWith("safe:") ? electron.safeStorage.decryptString(Buffer.from(s.slice(5), "base64")) : s.replace(/^plain:/, "")
+};
+const str = (v, max) => typeof v === "string" ? v.slice(0, max) : "";
+function registerSyncHandlers(getMainWindow, isLive) {
+  service = new SyncService({
+    db: getDb(),
+    cloudUrl: CLOUD_URL,
+    fetch: globalThis.fetch,
+    videosDir: path.join(electron.app.getPath("userData"), "videos"),
+    backupDir: path.join(electron.app.getPath("userData"), "backups"),
+    isLive,
+    send: (channel, payload) => {
+      const win = getMainWindow();
+      if (win && !win.isDestroyed()) win.webContents.send(channel, payload);
+    },
+    secret,
+    deviceName: os.hostname() || "Compu",
+    now: () => /* @__PURE__ */ new Date()
+  });
+  const s = service;
+  electron.ipcMain.handle("sync:get-status", () => s.status());
+  electron.ipcMain.handle("sync:info", () => s.info());
+  electron.ipcMain.handle("sync:run", () => s.run({ force: true }));
+  electron.ipcMain.handle("sync:setup", (_e, p) => s.setup({
+    churchName: str(p?.churchName, 200),
+    leaderName: str(p?.leaderName, 100),
+    pin: str(p?.pin, 8),
+    setupKey: str(p?.setupKey, 64)
+  }));
+  electron.ipcMain.handle("sync:link", (_e, p) => s.link({ code: str(p?.code, 20) }));
+  electron.ipcMain.handle("sync:unlink", () => s.unlink());
+  return s;
 }
 const MEDIA_SCHEME = "alado-media";
 const VIDEO_EXT = /\.(mp4|m4v|webm|mov)$/i;
@@ -1604,6 +2416,8 @@ if (process.env.NODE_ENV === "development") {
 registerMediaSchemePrivileges();
 let mainWindow = null;
 let liveWindow = null;
+let liveWindowed = false;
+let sync = null;
 electron.app.whenReady().then(() => {
   registerMediaProtocol();
   registerDbHandlers();
@@ -1613,16 +2427,24 @@ electron.app.whenReady().then(() => {
   registerAudioHandlers(() => mainWindow);
   registerPackHandlers();
   registerSetlistHandlers();
+  registerVideosHandlers();
   mainWindow = createMainWindow();
+  sync = registerSyncHandlers(() => mainWindow, () => !!liveWindow && !liveWindow.isDestroyed());
+  mainWindow.webContents.once("did-finish-load", () => sync?.start());
   electron.ipcMain.handle("live:open", async () => {
     if (!liveWindow || liveWindow.isDestroyed()) {
-      liveWindow = createLiveWindow();
+      const created = createLiveWindow();
+      liveWindow = created.win;
+      liveWindowed = created.windowed;
       setLiveWindow(liveWindow);
       liveWindow.on("closed", () => {
         liveWindow = null;
         setLiveWindow(null);
+        clearLiveState();
         mainWindow?.webContents.send("live:closed");
+        void sync?.run();
       });
+      liveWindow.webContents.ipc.on("live:renderer-ready", replayLiveState);
       await new Promise((resolve) => {
         const timeout = setTimeout(resolve, 5e3);
         liveWindow.webContents.ipc.once("live:renderer-ready", () => {
@@ -1631,9 +2453,19 @@ electron.app.whenReady().then(() => {
         });
       });
     }
-    liveWindow.show();
+    if (!liveWindow) return { windowed: liveWindowed };
+    if (liveWindowed) {
+      liveWindow.showInactive();
+      mainWindow?.focus();
+    } else {
+      liveWindow.show();
+    }
+    return { windowed: liveWindowed };
   });
   electron.ipcMain.handle("live:close", () => {
+    liveWindow?.close();
+  });
+  electron.ipcMain.on("live:escape", () => {
     liveWindow?.close();
   });
   electron.app.on("activate", () => {
