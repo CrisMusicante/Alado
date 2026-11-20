@@ -3,8 +3,8 @@ export interface Db {
   all<T = Record<string, unknown>>(sql: string, ...params: unknown[]): Promise<T[]>
   first<T = Record<string, unknown>>(sql: string, ...params: unknown[]): Promise<T | null>
   run(sql: string, ...params: unknown[]): Promise<{ changes: number }>
-  /** Runs all statements atomically. */
-  batch(stmts: { sql: string; params: unknown[] }[]): Promise<void>
+  /** Runs all statements atomically (one transaction); rows changed by each. */
+  batch(stmts: { sql: string; params: unknown[] }[]): Promise<{ changes: number }[]>
 }
 
 export function d1Db(d1: D1Database): Db {
@@ -20,7 +20,8 @@ export function d1Db(d1: D1Database): Db {
       return { changes: r.meta.changes ?? 0 }
     },
     async batch(stmts) {
-      await d1.batch(stmts.map(s => d1.prepare(s.sql).bind(...s.params)))
+      const results = await d1.batch(stmts.map(s => d1.prepare(s.sql).bind(...s.params)))
+      return results.map(r => ({ changes: r.meta.changes ?? 0 }))
     },
   }
 }

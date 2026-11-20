@@ -32,23 +32,24 @@ export async function sha256(text: string): Promise<string> {
   return hex(await crypto.subtle.digest('SHA-256', enc.encode(text)))
 }
 
-async function pbkdf2(secret: string, salt: Uint8Array): Promise<string> {
+async function pbkdf2(secret: string, salt: Uint8Array, iterations: number): Promise<string> {
   const key = await crypto.subtle.importKey('raw', enc.encode(secret), 'PBKDF2', false, ['deriveBits'])
-  const bits = await crypto.subtle.deriveBits({ name: 'PBKDF2', hash: 'SHA-256', salt, iterations: PBKDF2_ITERATIONS }, key, 256)
+  const bits = await crypto.subtle.deriveBits({ name: 'PBKDF2', hash: 'SHA-256', salt, iterations }, key, 256)
   return hex(bits)
 }
 
-/** `pbkdf2$<salt hex>$<hash hex>` */
+/** `pbkdf2$<iterations>$<salt hex>$<hash hex>`: the count travels with the hash so it can change later. */
 export async function hashSecret(secret: string): Promise<string> {
   const salt = randomBytes(16)
-  return `pbkdf2$${hex(salt.buffer as ArrayBuffer)}$${await pbkdf2(secret, salt)}`
+  return `pbkdf2$${PBKDF2_ITERATIONS}$${hex(salt.buffer as ArrayBuffer)}$${await pbkdf2(secret, salt, PBKDF2_ITERATIONS)}`
 }
 
 export async function verifySecret(secret: string, stored: string): Promise<boolean> {
-  const [, saltHex, hash] = stored.split('$')
-  if (!saltHex || !hash) return false
+  const parts = stored.split('$')
+  const [iterations, saltHex, hash] = parts.length === 4 ? [Number(parts[1]), parts[2], parts[3]] : [100_000, parts[1], parts[2]]
+  if (!saltHex || !hash || !Number.isInteger(iterations) || iterations < 1 || iterations > 100_000) return false
   const salt = new Uint8Array(saltHex.match(/../g)!.map(h => parseInt(h, 16)))
-  const candidate = await pbkdf2(secret, salt)
+  const candidate = await pbkdf2(secret, salt, iterations)
   // Constant-time compare.
   let diff = candidate.length ^ hash.length
   for (let i = 0; i < Math.min(candidate.length, hash.length); i++) diff |= candidate.charCodeAt(i) ^ hash.charCodeAt(i)

@@ -15,7 +15,7 @@ const call = (method: string, path: string, body?: unknown, token?: string, raw?
     body: raw ?? (body === undefined ? undefined : JSON.stringify(body)),
   }))
 
-beforeEach(() => { ctx = { db: sqliteDb(), now: () => Date.now() } })
+beforeEach(() => { ctx = { db: sqliteDb(), now: () => Date.now(), setupKey: 'k' } })
 
 describe('router', () => {
   it('health is public', async () => {
@@ -45,7 +45,7 @@ describe('router', () => {
   })
 
   it('full flow: setup → login → push setlist → pull → proposals → users', async () => {
-    const setup = await (await call('POST', '/api/setup', { churchName: 'Iglesia', leaderName: 'Cris', pin: '1234', deviceName: 'PC' })).json() as { churchCode: string; deviceToken: string }
+    const setup = await (await call('POST', '/api/setup', { churchName: 'Iglesia', leaderName: 'Cris', pin: '1234', deviceName: 'PC', setupKey: 'k' })).json() as { churchCode: string; deviceToken: string }
     const pc = setup.deviceToken
     const login = await (await call('POST', '/api/login', { churchCode: setup.churchCode, name: 'Cris', pin: '1234' })).json() as { token: string }
     const me = await (await call('GET', '/api/me', undefined, login.token)).json()

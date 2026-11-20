@@ -10,8 +10,8 @@ let ctx: Ctx
 let pc: Session, leader: Session, ana: Session, beto: Session, member: Session
 
 beforeEach(async () => {
-  ctx = { db: sqliteDb(), now: () => Date.now() }
-  const r = await setupChurch(ctx, { churchName: 'I', leaderName: 'Cris', pin: '1234', deviceName: 'PC' })
+  ctx = { db: sqliteDb(), now: () => Date.now(), setupKey: 'k' }
+  const r = await setupChurch(ctx, { churchName: 'I', leaderName: 'Cris', pin: '1234', deviceName: 'PC', setupKey: 'k' })
   if (!r.ok) throw new Error(r.error)
   const as = async (t: string) => (await authenticate(ctx, t))!
   pc = await as(r.deviceToken)

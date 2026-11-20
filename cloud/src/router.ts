@@ -1,7 +1,7 @@
 import type { Ctx, Result } from './ctx'
 import {
-  authenticate, churchInfo, createLinkCode, createUser, linkDevice, listUsers, login, loginMember,
-  recover, rotateChurchCode, setupChurch, updateUser, type Session,
+  authenticate, churchInfo, createLinkCode, createUser, linkDevice, listDevices, listUsers, login, loginMember,
+  logout, recover, revokeDevice, rotateChurchCode, setupChurch, updateUser, type Session,
 } from './auth'
 import { pull, push } from './sync'
 import { decide, listProposals, pendingCount, propose, withdraw } from './proposals'
@@ -42,6 +42,9 @@ const PRIVATE: [string, RegExp, Handler][] = [
   ['POST', /^\/api\/sync\/push$/, async ({ ctx, body, session }) => json({ ok: true, ...(await push(ctx, session, body?.changes)) })],
   ['POST', /^\/api\/link-codes$/, async ({ ctx, session }) => respond(await createLinkCode(ctx, session))],
   ['POST', /^\/api\/church\/rotate-code$/, async ({ ctx, session }) => respond(await rotateChurchCode(ctx, session))],
+  ['GET', /^\/api\/devices$/, async ({ ctx, session }) => respond(await listDevices(ctx, session))],
+  ['PATCH', /^\/api\/devices\/([\w-]+)$/, async ({ ctx, body, session, params }) =>
+    body?.revoked === true ? respond(await revokeDevice(ctx, session, params[0])) : err(400, 'Solo se puede revocar.')],
   ['GET', /^\/api\/users$/, async ({ ctx, session }) => respond(await listUsers(ctx, session))],
   ['POST', /^\/api\/users$/, async ({ ctx, body, session }) => respond(await createUser(ctx, session, body))],
   ['PATCH', /^\/api\/users\/([\w-]+)$/, async ({ ctx, body, session, params }) => respond(await updateUser(ctx, session, params[0], body ?? {}))],
@@ -51,6 +54,15 @@ const PRIVATE: [string, RegExp, Handler][] = [
   ['POST', /^\/api\/proposals\/([\w-]+)\/decide$/, async ({ ctx, body, session, params }) => respond(await decide(ctx, session, params[0], body ?? {}))],
   ['POST', /^\/api\/proposals\/([\w-]+)\/withdraw$/, async ({ ctx, session, params }) => respond(await withdraw(ctx, session, params[0]))],
 ]
+
+/**
+ * Cloudflare sets CF-Connecting-IP (clients can't forge it on workers.dev). IPv6 is counted
+ * per /64, since one connection usually owns a whole /64.
+ */
+function clientIp(request: Request): string {
+  const ip = request.headers.get('CF-Connecting-IP') ?? 'unknown'
+  return ip.includes(':') ? ip.split(':').slice(0, 4).join(':') + '::/64' : ip
+}
 
 /** Every /api request: CORS, JSON parsing, bearer auth, dispatch. Errors never leak internals. */
 export async function route(ctx: Ctx, request: Request): Promise<Response> {
@@ -67,9 +79,12 @@ export async function route(ctx: Ctx, request: Request): Promise<Response> {
       try { body = JSON.parse(text) } catch { return err(400, 'JSON inválido.') }
     }
   }
-  const ip = request.headers.get('CF-Connecting-IP') ?? 'unknown'
+  const ip = clientIp(request)
 
   try {
+    if (method === 'POST' && url.pathname === '/api/logout') {
+      return respond(await logout(ctx, request.headers.get('Authorization')?.replace(/^Bearer\s+/i, '')))
+    }
     const pub = PUBLIC[`${method} ${url.pathname}`]
     if (pub) return await pub({ ctx, body: body ?? {}, ip })
 

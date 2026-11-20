@@ -19,8 +19,8 @@ const setlist = (uid: string, items: string[], seenSeq = 0, name = 'Domingo'): C
   ({ kind: 'setlist', uid, seenSeq, data: { name, service_date: '2026-11-22', notes: null, items: items.map(song_uid => ({ song_uid, custom_video_file: null })) } })
 
 beforeEach(async () => {
-  ctx = { db: sqliteDb(), now: () => Date.parse('2026-11-21T10:00:00Z') }
-  const r = await setupChurch(ctx, { churchName: 'Iglesia', leaderName: 'Cris', pin: '1234', deviceName: 'Compu pastor' })
+  ctx = { db: sqliteDb(), now: () => Date.parse('2026-11-21T10:00:00Z'), setupKey: 'k' }
+  const r = await setupChurch(ctx, { churchName: 'Iglesia', leaderName: 'Cris', pin: '1234', deviceName: 'Compu pastor', setupKey: 'k' })
   if (!r.ok) throw new Error(r.error)
   churchCode = r.churchCode
   pc = await as(r.deviceToken)

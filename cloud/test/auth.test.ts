@@ -11,7 +11,7 @@ let clock: number
 const IP = '1.2.3.4'
 
 async function setup() {
-  const r = await setupChurch(ctx, { churchName: 'Iglesia', leaderName: 'Cris', pin: '1234', deviceName: 'Compu pastor' })
+  const r = await setupChurch(ctx, { churchName: 'Iglesia', leaderName: 'Cris', pin: '1234', deviceName: 'Compu pastor', setupKey: 'k' })
   if (!r.ok) throw new Error(r.error)
   return r
 }
@@ -23,7 +23,7 @@ async function session(token: string): Promise<Session> {
 
 beforeEach(() => {
   clock = Date.parse('2026-11-21T10:00:00Z')
-  ctx = { db: sqliteDb(), now: () => clock }
+  ctx = { db: sqliteDb(), now: () => clock, setupKey: 'k' }
 })
 
 describe('setup', () => {
@@ -40,7 +40,7 @@ describe('setup', () => {
 
   it('setup twice returns 409', async () => {
     await setup()
-    const again = await setupChurch(ctx, { churchName: 'Otra', leaderName: 'X', pin: '9999', deviceName: 'PC' })
+    const again = await setupChurch(ctx, { churchName: 'Otra', leaderName: 'X', pin: '9999', deviceName: 'PC', setupKey: 'k' })
     expect(again).toMatchObject({ ok: false, status: 409 })
   })
 
@@ -53,7 +53,7 @@ describe('setup', () => {
   })
 
   it('rejects a PIN shorter than 4 digits', async () => {
-    const r = await setupChurch(ctx, { churchName: 'Iglesia', leaderName: 'Cris', pin: '12', deviceName: 'PC' })
+    const r = await setupChurch(ctx, { churchName: 'Iglesia', leaderName: 'Cris', pin: '12', deviceName: 'PC', setupKey: 'k' })
     expect(r).toMatchObject({ ok: false, status: 400 })
   })
 })

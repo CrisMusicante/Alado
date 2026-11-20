@@ -24,17 +24,18 @@ function diffLines(a: string[], b: string[]): DiffLine[] {
 
 /**
  * What a proposal changes in the lyrics, section by section (matched by label, in the
- * proposed order; sections only in `before` come first, entirely removed).
+ * proposed order; unmatched sections of `before` come first, entirely removed).
  */
 export function diffSections(before: SyncSection[], after: SyncSection[]): SectionDiff[] {
-  const afterLabels = new Set(after.map(s => s.label))
-  const removed = before.filter(s => !afterLabels.has(s.label))
-    .map(s => ({ label: s.label, lines: s.lines.map(text => ({ kind: 'removed' as const, text })) }))
+  // Match each proposed section to the first unused one with the same label; every section of
+  // `before` left unmatched (also a dropped duplicate "Coro") is shown as removed.
   const used = new Set<number>()
   const kept = after.map(s => {
     const idx = before.findIndex((b, k) => !used.has(k) && b.label === s.label)
     if (idx >= 0) used.add(idx)
     return { label: s.label, lines: diffLines(idx >= 0 ? before[idx].lines : [], s.lines) }
   })
+  const removed = before.filter((_, k) => !used.has(k))
+    .map(s => ({ label: s.label, lines: s.lines.map(text => ({ kind: 'removed' as const, text })) }))
   return [...removed, ...kept]
 }

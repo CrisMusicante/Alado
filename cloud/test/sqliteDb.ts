@@ -28,8 +28,9 @@ export function sqliteDb(): Db & { raw: DatabaseSync } {
     async batch(stmts) {
       raw.exec('BEGIN')
       try {
-        for (const s of stmts) raw.prepare(s.sql).run(...args(s.params))
+        const out = stmts.map(s => ({ changes: Number(raw.prepare(s.sql).run(...args(s.params)).changes) }))
         raw.exec('COMMIT')
+        return out
       } catch (e) {
         raw.exec('ROLLBACK')
         throw e

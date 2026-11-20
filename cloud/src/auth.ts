@@ -17,6 +17,8 @@ const LOCK_MS = 15 * 60_000
 const LINK_CODE_MS = 10 * 60_000
 const LINK_CODE_DIGITS = 8
 const PIN_RE = /^\d{4,8}$/
+/** Verified against when the name doesn't exist (never matches). */
+const DUMMY_HASH = 'pbkdf2$100000$00000000000000000000000000000000$' + '0'.repeat(64)
 
 /** Church and recovery codes are typed by hand: ignore case, spaces and dashes. */
 export const normalizeCode = (code: string) => code.toUpperCase().replace(/[^A-Z0-9]/g, '')
@@ -41,16 +43,21 @@ async function isLocked(ctx: Ctx, key: string, limit: number): Promise<boolean> 
   return !!row && row.count >= limit && ctx.now() - Date.parse(row.window_start) < LOCK_MS
 }
 
-/** Atomic: one upsert restarts an expired window or increments the current one. */
-async function recordFailure(ctx: Ctx, key: string): Promise<void> {
+/**
+ * Atomically counts one attempt (restarting an expired window) and says whether it is allowed.
+ * Reserving before checking the secret means parallel guesses can't all slip past the limit.
+ */
+async function takeAttempt(ctx: Ctx, key: string, limit: number): Promise<boolean> {
   const now = iso(ctx.now())
   const expired = iso(ctx.now() - LOCK_MS)
-  await ctx.db.run(
+  const row = await ctx.db.first<{ count: number }>(
     `INSERT INTO attempts (key, count, window_start) VALUES (?, 1, ?)
      ON CONFLICT(key) DO UPDATE SET
        count = CASE WHEN attempts.window_start <= ? THEN 1 ELSE attempts.count + 1 END,
-       window_start = CASE WHEN attempts.window_start <= ? THEN excluded.window_start ELSE attempts.window_start END`,
+       window_start = CASE WHEN attempts.window_start <= ? THEN excluded.window_start ELSE attempts.window_start END
+     RETURNING count`,
     key, now, expired, expired)
+  return (row?.count ?? 1) <= limit
 }
 
 const clearFailures = (ctx: Ctx, key: string) => ctx.db.run('DELETE FROM attempts WHERE key = ?', key)
@@ -107,7 +114,8 @@ async function sameSecret(a: string, b: string): Promise<boolean> {
 
 export async function setupChurch(ctx: Ctx, p: { churchName: string; leaderName: string; pin: string; deviceName: string; setupKey?: string }):
   Promise<Result<{ churchCode: string; recoveryCode: string; deviceToken: string; churchName: string }>> {
-  if (ctx.setupKey && !(await sameSecret(String(p.setupKey ?? ''), ctx.setupKey))) {
+  // Fail closed: without a configured install key nobody can create the church.
+  if (!ctx.setupKey || !(await sameSecret(String(p.setupKey ?? ''), ctx.setupKey))) {
     return fail(403, 'Clave de instalación incorrecta.')
   }
   const churchName = normalizeName(p.churchName ?? '')
@@ -142,21 +150,21 @@ export async function login(ctx: Ctx, ip: string, p: { churchCode: string; name:
   if (await isLocked(ctx, ipKey, PER_SHARED_IP)) return locked()
   const church = await churchByCode(ctx, p.churchCode ?? '')
   if (!church) {
-    await recordFailure(ctx, ipKey)
+    await takeAttempt(ctx, ipKey, PER_SHARED_IP)
     return fail(401, 'Código de iglesia, nombre o PIN incorrectos.')
   }
   const name = normalizeName(p.name ?? '')
   const account = `${church.id}:${name.toLowerCase()}`
   const ipAccountKey = `login:${ip}:${account}`
   const accountKey = `login:*:${account}`
-  if (await isLocked(ctx, ipAccountKey, PER_IP) || await isLocked(ctx, accountKey, PER_TARGET)) return locked()
+  const allowed = await takeAttempt(ctx, ipAccountKey, PER_IP) && await takeAttempt(ctx, accountKey, PER_TARGET)
+  if (!allowed) return locked()
   const user = await ctx.db.first<UserRow>('SELECT * FROM users WHERE church_id = ? AND name = ? COLLATE NOCASE', church.id, name)
-  if (!user || !user.active || !(await verifySecret(p.pin ?? '', user.pin_hash))) {
-    await recordFailure(ctx, ipAccountKey)
-    await recordFailure(ctx, accountKey)
-    return fail(401, 'Código de iglesia, nombre o PIN incorrectos.')
-  }
+  // Unknown names cost the same PBKDF2 time, so response time doesn't reveal who exists.
+  const pinOk = await verifySecret(p.pin ?? '', user?.pin_hash ?? DUMMY_HASH)
+  if (!user || !user.active || !pinOk) return fail(401, 'Código de iglesia, nombre o PIN incorrectos.')
   await clearFailures(ctx, ipAccountKey)
+  await clearFailures(ctx, accountKey)
   const token = await newSession(ctx, church.id, user.role, { userId: user.id })
   return { ok: true, token, role: user.role, userId: user.id, name: user.name, churchName: church.name }
 }
@@ -164,12 +172,10 @@ export async function login(ctx: Ctx, ip: string, p: { churchCode: string; name:
 export async function loginMember(ctx: Ctx, ip: string, p: { churchCode: string }):
   Promise<Result<{ token: string; role: 'member'; churchName: string }>> {
   const key = `ip:${ip}:member`
-  if (await isLocked(ctx, key, PER_SHARED_IP)) return locked()
+  if (!(await takeAttempt(ctx, key, PER_SHARED_IP))) return locked()
   const church = await churchByCode(ctx, p.churchCode ?? '')
-  if (!church) {
-    await recordFailure(ctx, key)
-    return fail(401, 'Código de iglesia incorrecto.')
-  }
+  if (!church) return fail(401, 'Código de iglesia incorrecto.')
+  await clearFailures(ctx, key)
   const token = await newSession(ctx, church.id, 'member', { codeVersion: church.code_version })
   return { ok: true, token, role: 'member', churchName: church.name }
 }
@@ -190,14 +196,15 @@ export async function linkDevice(ctx: Ctx, ip: string, p: { code: string; device
   const key = `ip:${ip}:link`
   // Codes are short-lived but guessable from many IPs: cap failures globally too.
   const globalKey = 'link:*'
-  if (await isLocked(ctx, key, PER_IP) || await isLocked(ctx, globalKey, LINK_GLOBAL)) return locked()
+  if (await isLocked(ctx, globalKey, LINK_GLOBAL)) return locked()
+  if (!(await takeAttempt(ctx, key, PER_IP))) return locked()
   const hash = await sha256(String(p.code ?? '').replace(/\D/g, ''))
   const row = await ctx.db.first<{ church_id: string; expires_at: string; used: number }>('SELECT * FROM link_codes WHERE code_hash = ?', hash)
   if (!row || row.used || Date.parse(row.expires_at) <= ctx.now()) {
-    await recordFailure(ctx, key)
-    await recordFailure(ctx, globalKey)
+    await takeAttempt(ctx, globalKey, LINK_GLOBAL)
     return fail(401, 'Código de vinculación inválido o vencido.')
   }
+  await clearFailures(ctx, key)
   const used = await ctx.db.run('UPDATE link_codes SET used = 1 WHERE code_hash = ? AND used = 0', hash)
   if (!used.changes) return fail(401, 'Código de vinculación inválido o vencido.')
   const deviceId = randomId()
@@ -210,13 +217,10 @@ export async function linkDevice(ctx: Ctx, ip: string, p: { code: string; device
 export async function recover(ctx: Ctx, ip: string, p: { churchCode: string; recoveryCode: string; leaderName: string; newPin: string }):
   Promise<Result> {
   const key = `ip:${ip}:recover`
-  if (await isLocked(ctx, key, PER_IP)) return locked()
+  if (!(await takeAttempt(ctx, key, PER_IP))) return locked()
   const church = await churchByCode(ctx, p.churchCode ?? '')
   const ok = church && await verifySecret(normalizeCode(p.recoveryCode ?? ''), church.recovery_hash)
-  if (!church || !ok) {
-    await recordFailure(ctx, key)
-    return fail(401, 'Código de iglesia o de recuperación incorrecto.')
-  }
+  if (!church || !ok) return fail(401, 'Código de iglesia o de recuperación incorrecto.')
   if (!PIN_RE.test(p.newPin ?? '')) return fail(400, 'El PIN debe tener de 4 a 8 números.')
   const leader = await ctx.db.first<UserRow>(
     "SELECT * FROM users WHERE church_id = ? AND name = ? COLLATE NOCASE AND role = 'leader'", church.id, normalizeName(p.leaderName ?? ''))
@@ -299,6 +303,33 @@ export async function updateUser(ctx: Ctx, s: Session, id: string, p: { role?: '
     stmts.push({ sql: 'UPDATE sessions SET revoked = 1 WHERE user_id = ?', params: [id] })
   }
   if (stmts.length) await ctx.db.batch(stmts)
+  return { ok: true }
+}
+
+// ---------- Devices and logout ----------
+
+export interface DeviceView { id: string; name: string; created_at: string; revoked: boolean }
+
+export async function listDevices(ctx: Ctx, s: Session): Promise<Result<{ devices: DeviceView[] }>> {
+  const denied = requireLeader(s)
+  if (denied) return denied
+  const rows = await ctx.db.all<{ id: string; name: string; created_at: string; revoked: number }>(
+    'SELECT id, name, created_at, revoked FROM devices WHERE church_id = ? ORDER BY created_at', s.churchId)
+  return { ok: true, devices: rows.map(d => ({ ...d, revoked: !!d.revoked })) }
+}
+
+/** A lost or sold computer loses access at once. */
+export async function revokeDevice(ctx: Ctx, s: Session, id: string): Promise<Result> {
+  const denied = requireLeader(s)
+  if (denied) return denied
+  const r = await ctx.db.run('UPDATE devices SET revoked = 1 WHERE id = ? AND church_id = ?', id, s.churchId)
+  if (!r.changes) return fail(404, 'No existe esa compu.')
+  await ctx.db.run('UPDATE sessions SET revoked = 1 WHERE device_id = ?', id)
+  return { ok: true }
+}
+
+export async function logout(ctx: Ctx, token: string | null | undefined): Promise<Result> {
+  if (token) await ctx.db.run('UPDATE sessions SET revoked = 1 WHERE token_hash = ?', await sha256(token))
   return { ok: true }
 }
 

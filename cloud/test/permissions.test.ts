@@ -52,8 +52,8 @@ describe('push enforces roles end to end', () => {
   let pc: Session, editor: Session, member: Session
 
   beforeEach(async () => {
-    ctx = { db: sqliteDb(), now: () => Date.now() }
-    const r = await setupChurch(ctx, { churchName: 'I', leaderName: 'Cris', pin: '1234', deviceName: 'PC' })
+    ctx = { db: sqliteDb(), now: () => Date.now(), setupKey: 'k' }
+    const r = await setupChurch(ctx, { churchName: 'I', leaderName: 'Cris', pin: '1234', deviceName: 'PC', setupKey: 'k' })
     if (!r.ok) throw new Error(r.error)
     pc = (await authenticate(ctx, r.deviceToken))!
     const l = await login(ctx, 'ip', { churchCode: r.churchCode, name: 'Cris', pin: '1234' })

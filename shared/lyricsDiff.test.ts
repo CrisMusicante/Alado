@@ -23,3 +23,12 @@ describe('diffSections', () => {
     expect(diffSections([sec('V', ['x'])], [sec('V', ['x'])])).toEqual([{ label: 'V', lines: [{ kind: 'same', text: 'x' }] }])
   })
 })
+
+describe('diffSections with repeated labels', () => {
+  it('a dropped duplicate chorus is shown as removed', () => {
+    const before = [sec('Coro', ['a']), sec('Verso', ['v']), sec('Coro', ['a'])]
+    const after = [sec('Coro', ['a']), sec('Verso', ['v'])]
+    const d = diffSections(before, after)
+    expect(d.filter(s => s.lines.some(l => l.kind === 'removed'))).toEqual([{ label: 'Coro', lines: [{ kind: 'removed', text: 'a' }] }])
+  })
+})
