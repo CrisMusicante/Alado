@@ -91,7 +91,7 @@ export function applyRemote(db: LocalDb, pulled: PullResponse, opts: { videosDir
       const snap = readSnapshot<SongFields>(db, 'song', s.uid)
       const edited = localFields ? locallyEdited(localFields, snap?.data ?? null, s.fields) : []
       const merged: SongFields = { ...s.fields }
-      for (const f of edited) (merged as Record<string, unknown>)[f] = localFields![f]
+      for (const f of edited) (merged as unknown as Record<string, unknown>)[f] = localFields![f]
       if (edited.length && localFields) result.keptLocal.push(merged.title)
 
       const values = [
