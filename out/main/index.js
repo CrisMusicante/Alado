@@ -2176,6 +2176,7 @@ function adoptOnLink(db2, pulled, opts) {
 }
 const PUSH_EVERY_MS = 6e4;
 const SYNC_EVERY_MS = 3 * 6e4;
+const ALREADY_LINKED = "Esta compu ya está vinculada. Desvincúlala primero en Configuración.";
 const OFFLINE = "No se pudo conectar con ALADO en la nube. Revisa el internet e intenta de nuevo.";
 class SyncService {
   constructor(deps) {
@@ -2274,6 +2275,7 @@ class SyncService {
   }
   /** Creates the church from this computer (the trusted one) and uploads its catalog. */
   async setup(p) {
+    if (this.info().linked) return { ok: false, error: ALREADY_LINKED };
     let res;
     try {
       res = await this.api(() => null)("POST", "/api/setup", { ...p, deviceName: this.deps.deviceName });
@@ -2281,15 +2283,20 @@ class SyncService {
       return { ok: false, error: OFFLINE };
     }
     if (res.status !== 200) return { ok: false, error: res.body?.error ?? `Error ${res.status}` };
+    try {
+      this.remember(res.body.deviceToken, res.body.churchName);
+    } catch (e) {
+      return { ok: false, error: e.message };
+    }
     this.clearSyncState();
     this.remintUids();
-    this.remember(res.body.deviceToken, res.body.churchName);
     this.start();
     const status = await this.run();
     return { ok: true, churchCode: res.body.churchCode, recoveryCode: res.body.recoveryCode, churchName: res.body.churchName, status };
   }
   /** Links this computer with a code from the leader's phone, adopting matching songs. */
   async link(p) {
+    if (this.info().linked) return { ok: false, error: ALREADY_LINKED };
     let res;
     try {
       res = await this.api(() => null)("POST", "/api/link", { code: p.code, deviceName: this.deps.deviceName });
@@ -2314,7 +2321,11 @@ class SyncService {
     } catch (e) {
       return { ok: false, error: `No se pudo empatar el catálogo: ${e.message}` };
     }
-    this.remember(token, res.body.churchName);
+    try {
+      this.remember(token, res.body.churchName);
+    } catch (e) {
+      return { ok: false, error: e.message };
+    }
     this.start();
     const status = await this.run();
     return { ok: true, churchName: res.body.churchName, summary, status };
@@ -2338,17 +2349,21 @@ class SyncService {
     this.emit(this.status());
   }
 }
-const CLOUD_URL = process.env.ALADO_CLOUD_URL || "https://alado.mj-cristhian.workers.dev";
+const CLOUD_URL = "https://alado.mj-cristhian.workers.dev";
 let service = null;
 const secret = {
-  encrypt: (s) => electron.safeStorage.isEncryptionAvailable() ? `safe:${electron.safeStorage.encryptString(s).toString("base64")}` : `plain:${s}`,
+  encrypt: (s) => {
+    if (!electron.safeStorage.isEncryptionAvailable()) throw new Error("Este equipo no puede cifrar el acceso a la nube; no se vinculó.");
+    return `safe:${electron.safeStorage.encryptString(s).toString("base64")}`;
+  },
   decrypt: (s) => s.startsWith("safe:") ? electron.safeStorage.decryptString(Buffer.from(s.slice(5), "base64")) : s.replace(/^plain:/, "")
 };
 const str = (v, max) => typeof v === "string" ? v.slice(0, max) : "";
 function registerSyncHandlers(getMainWindow, isLive) {
   service = new SyncService({
     db: getDb(),
-    cloudUrl: CLOUD_URL,
+    // ALADO_CLOUD_URL (tests against a local cloud) is honored only outside the installed app.
+    cloudUrl: !electron.app.isPackaged && process.env.ALADO_CLOUD_URL || CLOUD_URL,
     fetch: globalThis.fetch,
     videosDir: path.join(electron.app.getPath("userData"), "videos"),
     backupDir: path.join(electron.app.getPath("userData"), "backups"),
