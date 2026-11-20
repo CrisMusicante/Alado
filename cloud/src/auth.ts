@@ -97,8 +97,19 @@ const churchByCode = (ctx: Ctx, code: string) =>
 
 // ---------- Setup, login, linking ----------
 
-export async function setupChurch(ctx: Ctx, p: { churchName: string; leaderName: string; pin: string; deviceName: string }):
+/** Constant-time comparison via hashes of equal length. */
+async function sameSecret(a: string, b: string): Promise<boolean> {
+  const [ha, hb] = await Promise.all([sha256(a), sha256(b)])
+  let diff = 0
+  for (let i = 0; i < ha.length; i++) diff |= ha.charCodeAt(i) ^ hb.charCodeAt(i)
+  return diff === 0
+}
+
+export async function setupChurch(ctx: Ctx, p: { churchName: string; leaderName: string; pin: string; deviceName: string; setupKey?: string }):
   Promise<Result<{ churchCode: string; recoveryCode: string; deviceToken: string; churchName: string }>> {
+  if (ctx.setupKey && !(await sameSecret(String(p.setupKey ?? ''), ctx.setupKey))) {
+    return fail(403, 'Clave de instalación incorrecta.')
+  }
   const churchName = normalizeName(p.churchName ?? '')
   const leaderName = normalizeName(p.leaderName ?? '')
   const deviceName = normalizeName(p.deviceName ?? '') || 'Compu'

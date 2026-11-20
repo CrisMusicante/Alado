@@ -4,6 +4,8 @@ import type { Db } from './db'
 export interface Ctx {
   db: Db
   now: () => number
+  /** Worker secret SETUP_KEY: creating the church requires it, so nobody else can claim the deployment. */
+  setupKey?: string
 }
 
 export type Fail = { ok: false; status: number; error: string }

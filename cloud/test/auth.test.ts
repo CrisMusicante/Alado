@@ -44,6 +44,14 @@ describe('setup', () => {
     expect(again).toMatchObject({ ok: false, status: 409 })
   })
 
+  it('requires the install key when the server has one', async () => {
+    ctx.setupKey = 'clave-secreta'
+    const base = { churchName: 'Iglesia', leaderName: 'Cris', pin: '1234', deviceName: 'PC' }
+    expect(await setupChurch(ctx, base)).toMatchObject({ ok: false, status: 403 })
+    expect(await setupChurch(ctx, { ...base, setupKey: 'otra' })).toMatchObject({ ok: false, status: 403 })
+    expect((await setupChurch(ctx, { ...base, setupKey: 'clave-secreta' })).ok).toBe(true)
+  })
+
   it('rejects a PIN shorter than 4 digits', async () => {
     const r = await setupChurch(ctx, { churchName: 'Iglesia', leaderName: 'Cris', pin: '12', deviceName: 'PC' })
     expect(r).toMatchObject({ ok: false, status: 400 })
