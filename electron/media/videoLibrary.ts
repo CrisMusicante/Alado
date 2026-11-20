@@ -22,21 +22,20 @@ export function listVideos(dir: string): VideoEntry[] {
     .sort((a, b) => a.name.localeCompare(b.name, 'es'))
 }
 
-function sha256(file: string): string {
-  const hash = crypto.createHash('sha256')
-  const fd = fs.openSync(file, 'r')
-  try {
-    const buf = Buffer.alloc(1 << 20)
-    let n: number
-    while ((n = fs.readSync(fd, buf, 0, buf.length, null)) > 0) hash.update(buf.subarray(0, n))
-  } finally {
-    fs.closeSync(fd)
-  }
-  return hash.digest('hex')
+function sha256(file: string): Promise<string> {
+  return new Promise((resolve, reject) => {
+    const hash = crypto.createHash('sha256')
+    fs.createReadStream(file)
+      .on('data', chunk => hash.update(chunk))
+      .on('end', () => resolve(hash.digest('hex')))
+      .on('error', reject)
+  })
 }
 
-function sameContent(a: string, b: string): boolean {
-  return fs.statSync(a).size === fs.statSync(b).size && sha256(a) === sha256(b)
+async function sameContent(a: string, b: string): Promise<boolean> {
+  if (fs.statSync(a).size !== fs.statSync(b).size) return false
+  const [ha, hb] = await Promise.all([sha256(a), sha256(b)])
+  return ha === hb
 }
 
 /**
@@ -44,7 +43,7 @@ function sameContent(a: string, b: string): boolean {
  * already there (same name or an earlier "name (n)" copy) is reused; a different file
  * with the same name gets the next free "name (n).ext", never overwriting another song's video.
  */
-export function importVideo(srcPath: string, dir: string): VideoEntry {
+export async function importVideo(srcPath: string, dir: string): Promise<VideoEntry> {
   fs.mkdirSync(dir, { recursive: true })
   const ext = path.extname(srcPath)
   const base = path.basename(srcPath, ext)
@@ -55,9 +54,15 @@ export function importVideo(srcPath: string, dir: string): VideoEntry {
   for (let n = 1; ; n++) {
     const candidate = path.join(dir, n === 1 ? `${base}${ext}` : `${base} (${n})${ext}`)
     if (!fs.existsSync(candidate)) {
-      fs.copyFileSync(srcPath, candidate)
+      // Async so a large copy from a USB stick never freezes the app (or the projection).
+      try {
+        await fs.promises.copyFile(srcPath, candidate)
+      } catch (e) {
+        fs.rmSync(candidate, { force: true })
+        throw e
+      }
       return entry(candidate)
     }
-    if (sameContent(srcPath, candidate)) return entry(candidate)
+    if (await sameContent(srcPath, candidate)) return entry(candidate)
   }
 }

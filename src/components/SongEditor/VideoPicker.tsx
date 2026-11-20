@@ -2,6 +2,7 @@ import { useEffect, useState } from 'react'
 import type { VideoEntry } from '../../store/songs.store'
 import { grabVideoFrame } from '../../setlist/pptxExport'
 import { filterVideos } from '../../utils/videoFilter'
+import { showToast } from '../../store/toast.store'
 
 // Thumbnails survive closing the picker, so reopening it is instant.
 const thumbs = new Map<string, string | null>()
@@ -47,6 +48,7 @@ export default function VideoPicker({ open, current, onPick, onClose }: {
   const [videos, setVideos] = useState<VideoEntry[] | null>(null)
   const [query, setQuery] = useState('')
   const [, setTick] = useState(0)
+  const [importing, setImporting] = useState(false)
 
   useEffect(() => {
     if (!open) return
@@ -67,8 +69,15 @@ export default function VideoPicker({ open, current, onPick, onClose }: {
   }
 
   async function browse() {
-    const entry = await window.api.importVideo()
-    if (entry) pick(entry.path)
+    setImporting(true)
+    try {
+      const entry = await window.api.importVideo()
+      if (entry) pick(entry.path)
+    } catch {
+      showToast('No se pudo copiar el video.', 'error')
+    } finally {
+      setImporting(false)
+    }
   }
 
   const shown = filterVideos(videos ?? [], query)
@@ -85,8 +94,8 @@ export default function VideoPicker({ open, current, onPick, onClose }: {
             placeholder="Buscar por nombre..."
             className="bg-slate-800 text-white rounded-xl px-4 py-2 outline-none focus:ring-2 focus:ring-indigo-500 border border-slate-700 text-sm w-64"
           />
-          <button onClick={browse} className="bg-slate-700 hover:bg-slate-600 text-white px-4 py-2 rounded-xl text-sm transition-colors border border-slate-600">
-            Explorar...
+          <button onClick={browse} disabled={importing} className="bg-slate-700 hover:bg-slate-600 disabled:opacity-60 text-white px-4 py-2 rounded-xl text-sm transition-colors border border-slate-600">
+            {importing ? 'Copiando video…' : 'Explorar...'}
           </button>
           <button onClick={onClose} className="text-slate-400 hover:text-white text-xl px-2" aria-label="Cerrar">✕</button>
         </div>

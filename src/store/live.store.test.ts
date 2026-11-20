@@ -2,12 +2,14 @@ import { describe, it, expect, beforeEach } from 'vitest'
 
 const listeners: Record<string, ((...args: unknown[]) => void)[]> = {}
 let windowed = false
+let opens = 0
+let sections: number[] = []
 ;(globalThis as any).window = {
   api: {
-    openLive: async () => ({ windowed }),
+    openLive: async () => { opens++; await new Promise(r => setTimeout(r, 20)); return { windowed } },
     closeLive: async () => {},
     setVideo: async () => {},
-    showSection: async () => {},
+    showSection: async (p: any) => { sections.push(p.sectionIndex) },
     on: (channel: string, cb: (...args: unknown[]) => void) => { (listeners[channel] ??= []).push(cb) },
   }
 }
@@ -25,8 +27,7 @@ beforeEach(() => {
 describe('live store', () => {
   it('warns when the projection opened windowed', async () => {
     windowed = true
-    void useLiveStore.getState().startLive([song])
-    await new Promise(r => setTimeout(r, 0))
+    await useLiveStore.getState().startLive([song])
     expect(useDialogStore.getState().current?.message).toBe(
       'No hay segunda pantalla. La proyección se abrió en una ventana: en Windows usa Win+P → Extender.'
     )
@@ -43,5 +44,16 @@ describe('live store', () => {
     listeners['live:closed']?.forEach(cb => cb())
     expect(useLiveStore.getState().isLive).toBe(false)
     expect(useLiveStore.getState().currentSong).toBeNull()
+  })
+
+  it('a second Presentar while the first is still opening is ignored', async () => {
+    await useLiveStore.getState().stopLive()
+    opens = 0
+    sections = []
+    const a = useLiveStore.getState().startLive([song])
+    const b = useLiveStore.getState().startLive([song])
+    await Promise.all([a, b])
+    expect(opens).toBe(1)
+    expect(sections).toEqual([0])
   })
 })

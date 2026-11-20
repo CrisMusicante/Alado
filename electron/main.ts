@@ -64,7 +64,14 @@ app.whenReady().then(() => {
         })
       })
     }
-    liveWindow.show()
+    // Closed from its frame while still loading.
+    if (!liveWindow) return { windowed: liveWindowed }
+    if (liveWindowed) {
+      liveWindow.showInactive()
+      mainWindow?.focus()
+    } else {
+      liveWindow.show()
+    }
     return { windowed: liveWindowed }
   })
 

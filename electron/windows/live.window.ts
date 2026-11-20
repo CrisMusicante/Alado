@@ -18,6 +18,9 @@ export function createLiveWindow(): { win: BrowserWindow; windowed: boolean } {
     skipTaskbar: !windowed,
     resizable: windowed,
     title: 'ALADO — Proyección',
+    // Windowed: open without stealing focus, so the operator keeps the keyboard
+    // and sees the "no second display" warning (shown with showInactive in main).
+    show: !windowed,
     backgroundColor: '#000000',
     webPreferences: {
       preload: path.join(__dirname, '../preload/index.js'),

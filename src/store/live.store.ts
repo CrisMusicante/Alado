@@ -2,6 +2,8 @@ import { create } from 'zustand'
 import { Song, Section } from './songs.store'
 import { alertDialog } from './dialog.store'
 
+let starting = false
+
 const NO_SECOND_DISPLAY = 'No hay segunda pantalla. La proyección se abrió en una ventana: en Windows usa Win+P → Extender.'
 
 interface LiveState {
@@ -31,7 +33,16 @@ export const useLiveStore = create<LiveState>((set, get) => ({
   setlist: [],
 
   startLive: async (setlist) => {
-    const { windowed } = await window.api.openLive()
+    // A second click while a slow PC is still opening the window would later
+    // re-send section 0 over wherever the operator already advanced to.
+    if (starting) return
+    starting = true
+    let windowed = false
+    try {
+      ;({ windowed } = await window.api.openLive())
+    } finally {
+      starting = false
+    }
     const song = setlist[0]
     if (song) {
       await window.api.setVideo({ videoPath: song.video_path ?? null })
