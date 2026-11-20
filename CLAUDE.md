@@ -88,3 +88,11 @@ The Claude AI tab reads `claudeApiKey` from `localStorage` (set in Settings → 
 ### Path Alias
 
 `@` resolves to `src/` (configured in `electron.vite.config.ts`).
+
+### Cloud (fase B: ALADO conectado)
+
+- **`cloud/`** — one Cloudflare Worker (`wrangler.jsonc`, name `alado`) with D1 (`DB`, migrations in `cloud/migrations/`) and static assets (`cloud/public/`, the phone PWA). Live at **https://alado.mj-cristhian.workers.dev**; API under `/api/*` (`cloud/src/router.ts`). Deploy: `npm run cloud:deploy`; schema changes: add a migration and `npx wrangler d1 migrations apply alado --remote` from `cloud/`.
+- Logic is pure and takes `ctx = { db, now }` (`cloud/src/ctx.ts`); tests run in Node over `node:sqlite` (`cloud/test/sqliteDb.ts`), no miniflare.
+- **`shared/`** — types and pure logic used by cloud, desktop and PWA: `types.ts`, `merge.ts` (field-level last-write-wins + "replaced" notices), `lyricsDiff.ts`.
+- Roles: `leader`, `editor` (services directly; song changes only via proposals), `member` (read only, logs in with the church code), `desktop` (trusted computer, edits everything incl. style/PDF sheet/folders). Permissions in `cloud/src/permissions.ts`.
+- Never run `/api/setup` against production from tests: the real church is created from the pastor's computer.

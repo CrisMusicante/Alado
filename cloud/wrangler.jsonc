@@ -11,6 +11,6 @@
     "run_worker_first": ["/api/*"]
   },
   "d1_databases": [
-    { "binding": "DB", "database_name": "alado", "database_id": "TO_BE_CREATED", "migrations_dir": "migrations" }
+    { "binding": "DB", "database_name": "alado", "database_id": "8edbef70-77f8-41fe-b4a8-9970aa5cece8", "migrations_dir": "migrations" }
   ]
 }
