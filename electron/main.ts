@@ -7,7 +7,7 @@ import { app, BrowserWindow } from 'electron'
 import { createMainWindow } from './windows/main.window'
 import { createLiveWindow } from './windows/live.window'
 import { registerDbHandlers } from './ipc/db.handlers'
-import { registerLiveHandlers, setLiveWindow } from './ipc/live.handlers'
+import { registerLiveHandlers, setLiveWindow, replayLiveState, clearLiveState } from './ipc/live.handlers'
 import { registerSystemHandlers } from './ipc/system.handlers'
 import { registerLyricsHandlers } from './ipc/lyrics.handlers'
 import { registerAudioHandlers } from './ipc/audio.handlers'
@@ -41,8 +41,13 @@ app.whenReady().then(() => {
       liveWindow.on('closed', () => {
         liveWindow = null
         setLiveWindow(null)
+        clearLiveState()
         mainWindow?.webContents.send('live:closed')
       })
+
+      // Replay the current state on every ready (also after a reload or a
+      // load slower than the wait below), so the first section is never lost.
+      liveWindow.webContents.ipc.on('live:renderer-ready', replayLiveState)
 
       // Wait for the live renderer to mount and attach its IPC listeners before
       // returning — this ensures setVideo / showSection are not sent into the void.
