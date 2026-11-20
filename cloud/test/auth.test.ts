@@ -192,13 +192,29 @@ describe('security hardening', () => {
     expect(c.ok && c.code).toMatch(/^\d{8}$/)
   })
 
+  it('a handful of bad link attempts from strangers does not block linking', async () => {
+    const { churchCode } = await setup()
+    const l = await login(ctx, IP, { churchCode, name: 'Cris', pin: '1234' })
+    if (!l.ok) throw new Error(l.error)
+    const c = await createLinkCode(ctx, await session(l.token))
+    if (!c.ok) throw new Error(c.error)
+    for (let i = 0; i < 25; i++) await linkDevice(ctx, `10.0.0.${i}`, { code: '00000000', deviceName: 'x' })
+    expect((await linkDevice(ctx, '10.0.1.1', { code: c.code, deviceName: 'PC' })).ok).toBe(true)
+  })
+
+  it('members on one church wifi (shared IP) survive a few typos', async () => {
+    const { churchCode } = await setup()
+    for (let i = 0; i < 6; i++) await loginMember(ctx, IP, { churchCode: 'AAAA-AAAA' })
+    expect((await loginMember(ctx, IP, { churchCode })).ok).toBe(true)
+  })
+
   it('link guessing from many IPs is capped globally', async () => {
     const { churchCode } = await setup()
     const l = await login(ctx, IP, { churchCode, name: 'Cris', pin: '1234' })
     if (!l.ok) throw new Error(l.error)
     const c = await createLinkCode(ctx, await session(l.token))
     if (!c.ok) throw new Error(c.error)
-    for (let i = 0; i < 20; i++) await linkDevice(ctx, `10.0.0.${i}`, { code: '00000000', deviceName: 'x' })
+    for (let i = 0; i < 200; i++) await linkDevice(ctx, `10.${i >> 8}.0.${i & 255}`, { code: '00000000', deviceName: 'x' })
     expect(await linkDevice(ctx, '10.0.1.1', { code: c.code, deviceName: 'PC' })).toMatchObject({ ok: false, status: 429 })
   })
 

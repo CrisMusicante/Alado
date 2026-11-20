@@ -31,6 +31,10 @@ interface UserRow { id: string; church_id: string; name: string; role: 'leader' 
 /** Per (IP, target) limit, and a looser per-target limit so one attacker can't lock someone out from afar. */
 const PER_IP = 5
 const PER_TARGET = 20
+/** Phones on one church wifi share an IP: allow a few more typos per IP for the shared codes. */
+const PER_SHARED_IP = 20
+/** All link attempts together; high enough that a few strangers can't block linking (8-digit codes, 10 min). */
+const LINK_GLOBAL = 200
 
 async function isLocked(ctx: Ctx, key: string, limit: number): Promise<boolean> {
   const row = await ctx.db.first<{ count: number; window_start: string }>('SELECT count, window_start FROM attempts WHERE key = ?', key)
@@ -124,7 +128,7 @@ export async function setupChurch(ctx: Ctx, p: { churchName: string; leaderName:
 export async function login(ctx: Ctx, ip: string, p: { churchCode: string; name: string; pin: string }):
   Promise<Result<{ token: string; role: Role; userId: string; name: string; churchName: string }>> {
   const ipKey = `ip:${ip}:login`
-  if (await isLocked(ctx, ipKey, PER_TARGET)) return locked()
+  if (await isLocked(ctx, ipKey, PER_SHARED_IP)) return locked()
   const church = await churchByCode(ctx, p.churchCode ?? '')
   if (!church) {
     await recordFailure(ctx, ipKey)
@@ -149,7 +153,7 @@ export async function login(ctx: Ctx, ip: string, p: { churchCode: string; name:
 export async function loginMember(ctx: Ctx, ip: string, p: { churchCode: string }):
   Promise<Result<{ token: string; role: 'member'; churchName: string }>> {
   const key = `ip:${ip}:member`
-  if (await isLocked(ctx, key, PER_IP)) return locked()
+  if (await isLocked(ctx, key, PER_SHARED_IP)) return locked()
   const church = await churchByCode(ctx, p.churchCode ?? '')
   if (!church) {
     await recordFailure(ctx, key)
@@ -175,7 +179,7 @@ export async function linkDevice(ctx: Ctx, ip: string, p: { code: string; device
   const key = `ip:${ip}:link`
   // Codes are short-lived but guessable from many IPs: cap failures globally too.
   const globalKey = 'link:*'
-  if (await isLocked(ctx, key, PER_IP) || await isLocked(ctx, globalKey, PER_TARGET)) return locked()
+  if (await isLocked(ctx, key, PER_IP) || await isLocked(ctx, globalKey, LINK_GLOBAL)) return locked()
   const hash = await sha256(String(p.code ?? '').replace(/\D/g, ''))
   const row = await ctx.db.first<{ church_id: string; expires_at: string; used: number }>('SELECT * FROM link_codes WHERE code_hash = ?', hash)
   if (!row || row.used || Date.parse(row.expires_at) <= ctx.now()) {
