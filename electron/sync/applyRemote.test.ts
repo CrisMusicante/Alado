@@ -91,3 +91,18 @@ describe('applyRemote', () => {
     expect(one(db, 'SELECT name FROM setlists')).toEqual({ name: 'Domingo local' })
   })
 })
+
+describe('applyRemote never trusts names or drops local work', () => {
+  it('a video name with a path is ignored', () => {
+    applyRemote(db, pulled({ songs: [remoteSong('a', { title: 'A', video_file: '..\..\Windows\evil.mp4' }), remoteSong('b', { title: 'B', video_file: '../x.mp4' }),
+      remoteSong('c', { title: 'C', video_file: '.hidden.mp4' })] }), { videosDir: VIDEOS })
+    expect(many(db, 'SELECT video_path FROM songs')).toEqual([{ video_path: null }, { video_path: null }, { video_path: null }])
+  })
+
+  it('a remote delete keeps a song edited here and not yet uploaded', () => {
+    applyRemote(db, pulled({ songs: [remoteSong('a', { title: 'A' })] }), { videosDir: VIDEOS })
+    db.prepare("UPDATE songs SET song_key = 'G' WHERE uid = 'a'").run()
+    applyRemote(db, pulled({ songs: [{ ...remoteSong('a', { title: 'A' }), deleted: true }] }), { videosDir: VIDEOS })
+    expect(one(db, 'SELECT song_key FROM songs')).toEqual({ song_key: 'G' })
+  })
+})

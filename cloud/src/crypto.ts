@@ -9,7 +9,7 @@ const b64url = (bytes: Uint8Array) =>
   btoa(String.fromCharCode(...bytes)).replace(/\+/g, '-').replace(/\//g, '_').replace(/=+$/, '')
 const hex = (bytes: ArrayBuffer) => [...new Uint8Array(bytes)].map(b => b.toString(16).padStart(2, '0')).join('')
 
-export function randomBytes(n: number): Uint8Array {
+export function randomBytes(n: number): Uint8Array<ArrayBuffer> {
   return crypto.getRandomValues(new Uint8Array(n))
 }
 
@@ -32,7 +32,7 @@ export async function sha256(text: string): Promise<string> {
   return hex(await crypto.subtle.digest('SHA-256', enc.encode(text)))
 }
 
-async function pbkdf2(secret: string, salt: Uint8Array, iterations: number): Promise<string> {
+async function pbkdf2(secret: string, salt: Uint8Array<ArrayBuffer>, iterations: number): Promise<string> {
   const key = await crypto.subtle.importKey('raw', enc.encode(secret), 'PBKDF2', false, ['deriveBits'])
   const bits = await crypto.subtle.deriveBits({ name: 'PBKDF2', hash: 'SHA-256', salt, iterations }, key, 256)
   return hex(bits)

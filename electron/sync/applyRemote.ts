@@ -36,7 +36,8 @@ const id = (db: LocalDb, table: 'songs' | 'folders' | 'setlists', uid: string | 
 
 /** A cloud video name as a local path: keep the current path if it is the same file name, else userData/videos/<name>. */
 function videoPath(name: string | null, currentPath: string | null, videosDir: string): string | null {
-  if (!name) return null
+  // Only a bare file name from the cloud is trusted; anything path-like is dropped.
+  if (!name || name !== path.basename(name) || /[\\/:]/.test(name) || name.startsWith('.')) return null
   if (currentPath && fileName(currentPath) === name) return currentPath
   return path.join(videosDir, name)
 }
@@ -81,8 +82,11 @@ export function applyRemote(db: LocalDb, pulled: PullResponse, opts: { videosDir
       if (s.deleted) {
         if (row) {
           const used = db.prepare('SELECT 1 FROM setlist_items WHERE song_id = ? LIMIT 1').get(row.id)
-          if (!used) db.prepare('DELETE FROM songs WHERE id = ?').run(row.id)
-          // Still in a local service: kept, and without a snapshot it goes up again (restoring it).
+          const snap = readSnapshot<SongFields>(db, 'song', s.uid)
+          const localFields = local.songs.get(s.uid)
+          const editedHere = !snap || (localFields && locallyEdited(localFields, snap.data, s.fields).length > 0)
+          // Still in a local service or edited here: kept, and without a snapshot it goes up again.
+          if (!used && !editedHere) db.prepare('DELETE FROM songs WHERE id = ?').run(row.id)
         }
         dropSnapshot(db, 'song', s.uid)
         continue
@@ -111,7 +115,11 @@ export function applyRemote(db: LocalDb, pulled: PullResponse, opts: { videosDir
           .run(...values, s.uid)
         result.changedSongs++
       }
-      writeSnapshot(db, 'song', s.uid, s.fields, s.versions, s.seq)
+      // A field kept from a local edit keeps the version this computer had seen when it edited,
+      // so the push tells the cloud it is replacing a value it never saw (and its author hears).
+      const versions = { ...s.versions }
+      for (const f of edited) versions[f] = snap?.versions[f] ?? 0
+      writeSnapshot(db, 'song', s.uid, s.fields, versions, s.seq)
     }
 
     for (const l of pulled.setlists) {
@@ -131,7 +139,11 @@ export function applyRemote(db: LocalDb, pulled: PullResponse, opts: { videosDir
       const editedHere = localData && !same(localData, snap ? snap.data : remoteData)
       if (editedHere) {
         result.keptLocal.push(localData!.name)
-      } else if (!localData || !same(localData, remoteData)) {
+        // Keep the old seq so the push says which version this computer had seen.
+        writeSnapshot(db, 'setlist', l.uid, remoteData, {}, snap?.seq ?? 0)
+        continue
+      }
+      if (!localData || !same(localData, remoteData)) {
         let sid = setlistId
         if (sid) {
           db.prepare('UPDATE setlists SET name = ?, service_date = ?, notes = ? WHERE id = ?').run(l.name, l.service_date, l.notes, sid)

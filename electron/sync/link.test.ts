@@ -54,3 +54,28 @@ describe('adoptOnLink', () => {
     expect(one(db, 'SELECT uid FROM folders')).toEqual({ uid: 'f-cloud' })
   })
 })
+
+describe('adoptOnLink safety', () => {
+  it('backs up every adopted song before adopting, with a unique file name', () => {
+    addSong(db, 'Uno', { sections: sections('a') })
+    const p = pulled({ songs: [remote('c1', { title: 'Uno', sections: [{ type: 'verse', label: 'Verso', lines: ['a'] }] })] })
+    const a = adoptOnLink(db, p, { backupDir, now: () => new Date('2026-11-22T10:00:00Z') })
+    const db2 = desktopDb()
+    addSong(db2, 'Uno')
+    const b = adoptOnLink(db2, p, { backupDir, now: () => new Date('2026-11-22T10:00:00Z') })
+    expect(a.backupFile).not.toBe(b.backupFile)
+    expect(JSON.parse(fs.readFileSync(a.backupFile!, 'utf8')).songs).toHaveLength(1)
+  })
+
+  it('titles that normalize to nothing never match', () => {
+    addSong(db, '   ')
+    adoptOnLink(db, pulled({ songs: [remote('c1', { title: ' ' })] }), { backupDir, now: () => new Date() })
+    expect(one<{ uid: string }>(db, 'SELECT uid FROM songs').uid).not.toBe('c1')
+  })
+
+  it('refuses to run on a computer that already synced', () => {
+    addSong(db, 'Uno')
+    db.prepare("INSERT INTO sync_snapshot (kind, uid, data) VALUES ('song', 'x', '{}')").run()
+    expect(() => adoptOnLink(db, pulled({}), { backupDir, now: () => new Date() })).toThrow()
+  })
+})

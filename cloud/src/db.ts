@@ -7,7 +7,19 @@ export interface Db {
   batch(stmts: { sql: string; params: unknown[] }[]): Promise<{ changes: number }[]>
 }
 
-export function d1Db(d1: D1Database): Db {
+/** The parts of D1Database used here (declared locally so the desktop's tsc, which sees this file through tests, needs no Workers types). */
+interface D1Like {
+  prepare(sql: string): {
+    bind(...params: unknown[]): {
+      all<T>(): Promise<{ results: T[] }>
+      first<T>(): Promise<T | null>
+      run(): Promise<{ meta: { changes?: number } }>
+    }
+  }
+  batch(stmts: unknown[]): Promise<{ meta: { changes?: number } }[]>
+}
+
+export function d1Db(d1: D1Like): Db {
   return {
     async all<T>(sql: string, ...params: unknown[]) {
       return (await d1.prepare(sql).bind(...params).all<T>()).results
@@ -21,7 +33,7 @@ export function d1Db(d1: D1Database): Db {
     },
     async batch(stmts) {
       const results = await d1.batch(stmts.map(s => d1.prepare(s.sql).bind(...s.params)))
-      return results.map(r => ({ changes: r.meta.changes ?? 0 }))
+      return results.map((r: { meta: { changes?: number } }) => ({ changes: r.meta.changes ?? 0 }))
     },
   }
 }
