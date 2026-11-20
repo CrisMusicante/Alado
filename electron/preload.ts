@@ -58,6 +58,10 @@ contextBridge.exposeInMainWorld('api', {
   getDisplays: () => ipcRenderer.invoke('system:get-displays'),
   openFileDialog: (filters: unknown) => ipcRenderer.invoke('system:open-file-dialog', filters),
 
+  // Background videos in userData/videos
+  listVideos: () => ipcRenderer.invoke('videos:list'),
+  importVideo: () => ipcRenderer.invoke('videos:import'),
+
   // Events from main → renderer
   on: (channel: string, cb: (...args: unknown[]) => void) => {
     const allowed = ['live:show-section', 'live:set-video', 'live:blackout', 'live:whiteout', 'live:transition', 'live:closed',

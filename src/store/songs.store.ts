@@ -9,6 +9,13 @@ export interface Section {
   repeat?: number
 }
 
+/** A background video in userData/videos (mirrors electron/media/videoLibrary.ts). */
+export interface VideoEntry {
+  name: string
+  path: string
+  size: number
+}
+
 export interface TextStyle {
   font: 'sans' | 'rounded' | 'bold-condensed'
   size: 'sm' | 'md' | 'lg' | 'xl'
@@ -85,6 +92,8 @@ declare global {
       setTransition: (p: any) => Promise<void>
       getDisplays: () => Promise<any[]>
       openFileDialog: (filters: any) => Promise<string | null>
+      listVideos: () => Promise<VideoEntry[]>
+      importVideo: () => Promise<VideoEntry | null>
       fetchLyricsUrl: (url: string) => Promise<{ success: boolean; rawText?: string; site?: string; error?: string }>
       fetchLyricsAI: (payload: any) => Promise<{ success: boolean; rawText?: string; error?: string }>
       getFolders: () => Promise<Folder[]>

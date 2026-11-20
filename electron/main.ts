@@ -7,6 +7,7 @@ import { app, BrowserWindow } from 'electron'
 import { createMainWindow } from './windows/main.window'
 import { createLiveWindow } from './windows/live.window'
 import { registerDbHandlers } from './ipc/db.handlers'
+import { registerVideosHandlers } from './ipc/videos.handlers'
 import { registerLiveHandlers, setLiveWindow, replayLiveState, clearLiveState } from './ipc/live.handlers'
 import { registerSystemHandlers } from './ipc/system.handlers'
 import { registerLyricsHandlers } from './ipc/lyrics.handlers'
@@ -31,6 +32,7 @@ app.whenReady().then(() => {
   registerAudioHandlers(() => mainWindow)
   registerPackHandlers()
   registerSetlistHandlers()
+  registerVideosHandlers()
 
   mainWindow = createMainWindow()
 
