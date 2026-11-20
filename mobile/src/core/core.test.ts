@@ -41,6 +41,12 @@ describe('catalog', () => {
 })
 
 describe('outbox', () => {
+  it('a malformed push answer keeps the batch queued', () => {
+    const o = [setlistChange('a', 'A'), setlistChange('b', 'B')]
+    expect(() => settle(o, o, [{ ok: true }])).toThrow()
+    expect(() => settle(o, o, undefined as never)).toThrow()
+  })
+
   it('enqueue merges two edits of one song keeping the oldest seen', () => {
     let o = enqueue([], songChange('a', { song_key: 'G' }, { song_key: 3 }))
     o = enqueue(o, songChange('a', { song_key: 'A', title: 'Nuevo' }, { song_key: 9, title: 9 }))

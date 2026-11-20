@@ -15,7 +15,9 @@
     "lint": "eslint .",
     "test": "vitest",
     "cloud:dev": "cd cloud && wrangler dev",
-    "cloud:deploy": "cd cloud && wrangler deploy"
+    "cloud:deploy": "npm run mobile:build && cd cloud && wrangler deploy",
+    "mobile:dev": "vite --config mobile/vite.config.ts",
+    "mobile:build": "vite build --config mobile/vite.config.ts"
   },
   "devDependencies": {
     "@cloudflare/workers-types": "^5.20261120.1",

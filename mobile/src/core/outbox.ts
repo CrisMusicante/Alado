@@ -36,6 +36,8 @@ export const takeBatch = (outbox: Change[], n = PUSH_LIMIT) => outbox.slice(0, n
 
 /** After a push of `batch` (the head of the outbox): every answered change leaves; refusals are reported. */
 export function settle(outbox: Change[], batch: Change[], results: ChangeResult[]): { outbox: Change[]; failed: { change: Change; error: string }[] } {
+  // Only a complete answer settles the batch; anything else is a transient failure (kept queued).
+  if (!Array.isArray(results) || results.length !== batch.length) throw new Error('Respuesta incompleta de la nube')
   const failed = batch.flatMap((change, i) => {
     const r = results[i]
     return r && !r.ok ? [{ change, error: r.error }] : []
