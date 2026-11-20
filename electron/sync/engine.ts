@@ -1,4 +1,4 @@
-import type { Change, ChangeResult, PullResponse, PushResponse, SongFields } from '../../shared/types'
+import { EMPTY_SONG, type Change, type ChangeResult, type PullResponse, type PushResponse, type SongFields } from '../../shared/types'
 import type { LocalDb } from './localDb'
 import { readLocal } from './localView'
 import { applyRemote, writeSnapshot } from './applyRemote'
@@ -86,6 +86,7 @@ export class SyncEngine {
     const pulled = await this.call('POST', '/api/sync/pull', { since: this.since }) as PullResponse
     notices.push(...pulled.notices.map(n => n.message))
     const r = applyRemote(this.deps.db, pulled, { videosDir: this.deps.videosDir })
+    notices.push(...r.restored.map(t => `«${t}» no se borró: está en un servicio de la nube.`))
     setSetting(this.deps.db, 'sync_seq', String(pulled.seq))
     return r.changedSongs + r.changedSetlists > 0 || pulled.folders.length > 0
   }
@@ -105,11 +106,11 @@ export class SyncEngine {
   private afterPush(c: Change, r: ChangeResult | undefined, notices: string[]): void {
     const db = this.deps.db
     const snaps = readSnapshots(db)
-    const local = readLocal(db)
     if (r?.ok) {
       if (c.kind === 'song') {
+        // Exactly what was sent: an edit saved during the round trip still differs, so it goes up next.
         const prev = snaps.songs.get(c.uid)
-        writeSnapshot(db, 'song', c.uid, local.songs.get(c.uid) ?? { ...prev?.data, ...c.fields }, prev?.versions ?? {}, prev?.seq ?? 0)
+        writeSnapshot(db, 'song', c.uid, { ...EMPTY_SONG, ...prev?.data, ...c.fields }, prev?.versions ?? {}, prev?.seq ?? 0)
       } else if (c.kind === 'setlist') {
         writeSnapshot(db, 'setlist', c.uid, c.data, {}, snaps.setlists.get(c.uid)?.seq ?? 0)
       } else if (c.kind === 'folder') {
@@ -131,7 +132,7 @@ export class SyncEngine {
       }
       return
     }
-    const what = c.kind === 'song' ? `la canción «${local.songs.get(c.uid)?.title ?? ''}»`
+    const what = c.kind === 'song' ? `la canción «${(c.fields.title ?? snaps.songs.get(c.uid)?.data.title) ?? ''}»`
       : c.kind === 'setlist' ? `el servicio «${c.data.name}»` : 'un cambio'
     notices.push(`No se pudo subir ${what} (${r?.error ?? 'sin respuesta'}).`)
   }
@@ -151,7 +152,7 @@ export class SyncEngine {
         applied = await this.pullAndApply(notices)
       }
       const pushed = await this.push(notices)
-      if (pushed && !held) applied = (await this.pullAndApply(notices)) || applied
+      if (pushed && !held && !this.deps.isLive()) applied = (await this.pullAndApply(notices)) || applied
       const lastOk = this.deps.now().toISOString()
       setSetting(this.deps.db, 'sync_last_ok', lastOk)
       this.status = { state: held ? 'held' : 'ok', lastOk, error: null, unauthorized: false, notices, applied }

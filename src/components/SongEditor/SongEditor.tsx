@@ -3,6 +3,7 @@ import { Song, Section, TextStyle, useSongsStore } from '../../store/songs.store
 import LyricsImportModal from './LyricsImportModal'
 import AudioPanel from './AudioPanel'
 import SongPreview from './SongPreview'
+import { mergeEdits } from '../../utils/songMerge'
 import VideoPicker, { VideoThumb } from './VideoPicker'
 import { MAJOR_KEYS, MINOR_KEYS } from '../../utils/songKeys'
 import type { SongSheetStyle } from '../../utils/sheetStyle'
@@ -132,7 +133,7 @@ export default function SongEditor({ song, onClose }: Props) {
   async function handleSave() {
     if (!title.trim()) return
     setSaving(true)
-    await saveSong({
+    const edited: Song = {
       ...song,
       title: title.trim(),
       artist: artist.trim() || undefined,
@@ -141,7 +142,10 @@ export default function SongEditor({ song, onClose }: Props) {
       sections,
       video_path: videoPath || undefined,
       text_style: textStyle
-    })
+    }
+    // Only what changed here goes on top of the latest copy (the cloud may have updated it meanwhile).
+    const latest = song.id ? useSongsStore.getState().songs.find(s => s.id === song.id) : undefined
+    await saveSong(mergeEdits(song, edited, latest))
     setSaving(false)
     onClose()
   }

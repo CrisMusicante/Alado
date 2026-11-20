@@ -24,6 +24,31 @@ async function reloadAll(): Promise<void> {
     useFoldersStore.getState().fetchFolders(),
     useFoldersStore.getState().refreshSongsInView(),
   ])
+  reconcileDraft()
+}
+
+const draftKey = (name: string, date: string | null | undefined, notes: string | null | undefined, ids: (number | undefined)[]) =>
+  JSON.stringify([name, date ?? '', notes ?? '', ids])
+
+/**
+ * The service open on the Servicio page may have changed (or vanished) in the cloud. Unchanged
+ * drafts follow the cloud; unsaved edits are kept with a warning (saving them is a newer edit);
+ * a deleted service is forgotten so saving creates it again instead of failing.
+ */
+function reconcileDraft(): void {
+  const draft = useServiceDraftStore.getState()
+  if (!draft.setlistId) return
+  const saved = useSetlistsStore.getState().setlists.find(s => s.id === draft.setlistId)
+  if (!saved) {
+    draft.forgetSavedSetlist(draft.setlistId)
+    showToast('El servicio abierto se borró en la nube; si lo guardas se crea de nuevo.', 'error')
+    return
+  }
+  const cloud = draftKey(saved.name, saved.service_date, saved.notes, (saved.songs ?? []).map(s => s.song.id))
+  const here = draftKey(draft.name, draft.serviceDate, draft.notes, draft.items.map(i => i.song.id))
+  if (cloud === here) return
+  if (draft.dirty) showToast(`El servicio «${saved.name}» cambió en la nube; tienes cambios sin guardar aquí.`, 'error')
+  else draft.loadSaved(saved)
 }
 
 let started = false

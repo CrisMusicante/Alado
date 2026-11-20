@@ -168,4 +168,47 @@ describe('SyncEngine', () => {
     const s = await pc.run()
     expect(s).toMatchObject({ state: 'error', unauthorized: true })
   })
+
+  it('an edit saved while its push is in flight is not lost', async () => {
+    const { uid } = addSong(pcDb, 'Tu fidelidad', { song_key: 'E' })
+    await pc.run()
+    pcDb.prepare('UPDATE songs SET song_key = ? WHERE uid = ?').run('F', uid)
+    const realApi = api(() => pcToken)
+    const sneaky = new SyncEngine({ db: pcDb, videosDir: path.join(tmp, 'videos'), backupDir: tmp, isLive: () => false, now: () => new Date(),
+      api: async (m, p, b) => {
+        const r = await realApi(m, p, b)
+        if (p === '/api/sync/push') pcDb.prepare('UPDATE songs SET song_key = ? WHERE uid = ?').run('G', uid) // saved during the round trip
+        return r
+      } })
+    await sneaky.pushOnly()
+    await pc.run()
+    expect(one(pcDb, 'SELECT song_key FROM songs WHERE uid = ?', uid)).toEqual({ song_key: 'G' })
+    expect((await phoneSongs())[0].fields.song_key).toBe('G')
+  })
+
+  it('a song deleted here after pushOnly uploaded it stays deleted', async () => {
+    await pc.run()
+    const { uid } = addSong(pcDb, 'Pasajera')
+    await pc.pushOnly()
+    pcDb.prepare('DELETE FROM songs WHERE uid = ?').run(uid)
+    await pc.run()
+    expect(one(pcDb, 'SELECT COUNT(*) AS n FROM songs WHERE uid = ?', uid)).toEqual({ n: 0 })
+    expect((await phoneSongs()).find(s => s.uid === uid)?.deleted ?? true).toBe(true)
+  })
+
+  it('a service from the phone that uses a song deleted here restores it in the same run', async () => {
+    const { uid } = addSong(pcDb, 'Tu fidelidad')
+    await pc.run()
+    pcDb.prepare('DELETE FROM songs WHERE uid = ?').run(uid)
+    await phone('POST', '/api/sync/push', { changes: [{ kind: 'setlist', uid: 'sab', seenSeq: 0,
+      data: { name: 'Sábado', service_date: null, notes: null, items: [{ song_uid: uid, custom_video_file: null }] } }] })
+    const s = await pc.run()
+    expect(one(pcDb, 'SELECT title FROM songs WHERE uid = ?', uid)).toEqual({ title: 'Tu fidelidad' })
+    expect(many(pcDb, "SELECT si.position FROM setlist_items si JOIN setlists l ON l.id = si.setlist_id WHERE l.uid = 'sab'")).toHaveLength(1)
+    expect(s.notices).toContain('«Tu fidelidad» no se borró: está en un servicio de la nube.')
+    const pulled = (await phone('POST', '/api/sync/pull', { since: 0 })).body
+    expect(pulled.setlists[0].items).toHaveLength(1)
+    expect(pulled.songs.find((x: { uid: string }) => x.uid === uid).deleted).toBe(false)
+  })
 })
+

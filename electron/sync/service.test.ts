@@ -118,4 +118,40 @@ describe('SyncService', () => {
     expect(s.info().linked).toBe(false)
     expect(one(db, "SELECT COUNT(*) AS n FROM sync_snapshot")).toEqual({ n: 0 })
   })
+
+  it('timers start after setup and again after unlink + link', async () => {
+    vi.useFakeTimers()
+    const s = service()
+    await s.setup({ churchName: 'I', leaderName: 'C', pin: '1234', setupKey: 'k' })
+    calls = []
+    addSong(db, 'Nueva')
+    await vi.advanceTimersByTimeAsync(60_000)
+    expect(calls).toContain('/api/sync/push')
+    s.stop()
+  })
+
+  it('setup gives every row fresh ids, so another church or the installer seed never collide', async () => {
+    const { uid } = addSong(db, 'Uno')
+    db.prepare("INSERT INTO sync_snapshot (kind, uid, data) VALUES ('song', ?, '{}')").run(uid)
+    db.prepare("INSERT INTO app_settings (key, value) VALUES ('sync_seq', '999')").run()
+    const r = await service().setup({ churchName: 'I', leaderName: 'C', pin: '1234', setupKey: 'k' })
+    if (!r.ok) throw new Error(r.error)
+    expect(one<{ uid: string }>(db, 'SELECT uid FROM songs').uid).not.toBe(uid)
+    expect(r.status.state).toBe('ok')
+    const login = await (await fakeFetch('https://alado.test/api/login', { method: 'POST', headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ churchCode: r.churchCode, name: 'C', pin: '1234' }) })).json() as { token: string }
+    const pulled = await (await fakeFetch('https://alado.test/api/sync/pull', { method: 'POST', headers: { Authorization: `Bearer ${login.token}`, 'Content-Type': 'application/json' }, body: '{"since":0}' })).json() as { songs: unknown[] }
+    expect(pulled.songs).toHaveLength(1)
+  })
+
+  it('a syncing message never repeats old notices', async () => {
+    const s = service()
+    await s.setup({ churchName: 'I', leaderName: 'C', pin: '1234', setupKey: 'k' })
+    ;(s as any).engine.status = { ...(s as any).engine.status, notices: ['viejo'] }
+    sent = []
+    await s.run()
+    expect(sent.filter(([c, p]) => c === 'sync:status' && (p as { state: string; notices: string[] }).state === 'syncing'
+      && (p as { notices: string[] }).notices.length)).toEqual([])
+  })
 })
+

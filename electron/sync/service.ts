@@ -92,7 +92,7 @@ export class SyncService {
       return Promise.resolve(off)
     }
     this.running ??= (async () => {
-      this.deps.send('sync:status', { ...this.engine.status, state: 'syncing' })
+      this.deps.send('sync:status', { ...this.engine.status, state: 'syncing', notices: [], applied: false })
       const s = await this.engine.run(opts)
       this.emit(s)
       return s
@@ -134,7 +134,12 @@ export class SyncService {
       return { ok: false, error: OFFLINE }
     }
     if (res.status !== 200) return { ok: false, error: res.body?.error ?? `Error ${res.status}` }
+    // A new church: forget any earlier sync and give every row a fresh id (ids from another
+    // church or from the installer seed would collide in the cloud).
+    this.clearSyncState()
+    this.remintUids()
     this.remember(res.body.deviceToken, res.body.churchName)
+    this.start()
     const status = await this.run()
     return { ok: true, churchCode: res.body.churchCode, recoveryCode: res.body.recoveryCode, churchName: res.body.churchName, status }
   }
@@ -158,10 +163,21 @@ export class SyncService {
       return { ok: false, error: OFFLINE }
     }
     this.clearSyncState()
-    const summary = adoptOnLink(this.deps.db, pulled, { backupDir: this.deps.backupDir, now: this.deps.now })
+    this.remintUids()
+    let summary: LinkSummary
+    try {
+      summary = adoptOnLink(this.deps.db, pulled, { backupDir: this.deps.backupDir, now: this.deps.now })
+    } catch (e) {
+      return { ok: false, error: `No se pudo empatar el catálogo: ${(e as Error).message}` }
+    }
     this.remember(token, res.body.churchName)
+    this.start()
     const status = await this.run()
     return { ok: true, churchName: res.body.churchName, summary, status }
+  }
+
+  private remintUids(): void {
+    for (const t of ['songs', 'setlists', 'folders']) this.deps.db.prepare(`UPDATE ${t} SET uid = lower(hex(randomblob(16)))`).run()
   }
 
   private clearSyncState(): void {

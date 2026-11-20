@@ -91,18 +91,14 @@ export function adoptOnLink(db: LocalDb, pulled: PullResponse, opts: { backupDir
   // 3) Adopt: each matched row takes the cloud's uid and a snapshot of its local state, so the
   //    following applyRemote makes the cloud version win.
   inTransaction(db, () => {
-    for (const m of songMatches) {
-      db.prepare('UPDATE songs SET uid = ? WHERE uid = ?').run(m.remoteUid, m.localUid)
-      writeSnapshot(db, 'song', m.remoteUid, m.fields, {}, 0)
-    }
-    for (const [localUid, remoteUid, data] of setlistMatches) {
-      db.prepare('UPDATE setlists SET uid = ? WHERE uid = ?').run(remoteUid, localUid)
-      writeSnapshot(db, 'setlist', remoteUid, data, {}, 0)
-    }
-    for (const [localUid, remoteUid, name] of folderMatches) {
-      db.prepare('UPDATE folders SET uid = ? WHERE uid = ?').run(remoteUid, localUid)
-      writeSnapshot(db, 'folder', remoteUid, name, {}, 0)
-    }
+    for (const m of songMatches) db.prepare('UPDATE songs SET uid = ? WHERE uid = ?').run(m.remoteUid, m.localUid)
+    for (const [localUid, remoteUid] of setlistMatches) db.prepare('UPDATE setlists SET uid = ? WHERE uid = ?').run(remoteUid, localUid)
+    for (const [localUid, remoteUid] of folderMatches) db.prepare('UPDATE folders SET uid = ? WHERE uid = ?').run(remoteUid, localUid)
+    // Snapshots from the state after every rewrite (services and songs point at the new uids).
+    const now = readLocal(db)
+    for (const m of songMatches) writeSnapshot(db, 'song', m.remoteUid, now.songs.get(m.remoteUid), {}, 0)
+    for (const [, remoteUid] of setlistMatches) writeSnapshot(db, 'setlist', remoteUid, now.setlists.get(remoteUid), {}, 0)
+    for (const [, remoteUid] of folderMatches) writeSnapshot(db, 'folder', remoteUid, now.folders.get(remoteUid), {}, 0)
   })
   return summary
 }

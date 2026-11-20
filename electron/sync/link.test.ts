@@ -78,4 +78,19 @@ describe('adoptOnLink safety', () => {
     db.prepare("INSERT INTO sync_snapshot (kind, uid, data) VALUES ('song', 'x', '{}')").run()
     expect(() => adoptOnLink(db, pulled({}), { backupDir, now: () => new Date() })).toThrow()
   })
+
+  it('an adopted service with adopted songs is not seen as edited here (cloud wins quietly)', () => {
+    const a = addSong(db, 'Uno', { sections: sections('a') })
+    db.prepare("INSERT INTO setlists (name, service_date) VALUES ('Domingo', '2026-11-22')").run()
+    db.prepare('INSERT INTO setlist_items (setlist_id, song_id, position) VALUES (1, ?, 0)').run(a.id)
+    const p = pulled({
+      songs: [remote('c1', { title: 'Uno', sections: [{ type: 'verse', label: 'Verso', lines: ['a'] }] })],
+      setlists: [{ uid: 's-cloud', deleted: false, seq: 4, name: 'Domingo', service_date: '2026-11-22', notes: 'nube', items: [{ song_uid: 'c1', custom_video_file: null }] }],
+    })
+    adoptOnLink(db, p, { backupDir, now: () => new Date() })
+    const r = applyRemote(db, p, { videosDir: backupDir })
+    expect(r.keptLocal).toEqual([])
+    expect(one(db, 'SELECT notes FROM setlists')).toEqual({ notes: 'nube' })
+  })
 })
+

@@ -42,9 +42,28 @@ function videoPath(name: string | null, currentPath: string | null, videosDir: s
   return path.join(videosDir, name)
 }
 
+/** Writes song fields to the local row (insert when `row` is null); returns the row id. */
+function writeSongRow(db: LocalDb, uid: string, f: SongFields, row: { id: number; video_path: string | null } | null, videosDir: string): number {
+  const values = [
+    f.title, f.artist, JSON.stringify(f.sections), f.song_key,
+    videoPath(f.video_file, row?.video_path ?? null, videosDir),
+    JSON.stringify(f.text_style ?? {}), f.sheet_style ? JSON.stringify(f.sheet_style) : null,
+    id(db, 'folders', f.folder_uid),
+  ]
+  if (row) {
+    db.prepare('UPDATE songs SET title = ?, artist = ?, sections = ?, song_key = ?, video_path = ?, text_style = ?, sheet_style = ?, folder_id = ? WHERE id = ?')
+      .run(...values, row.id)
+    return row.id
+  }
+  return Number(db.prepare('INSERT INTO songs (title, artist, sections, song_key, video_path, text_style, sheet_style, folder_id, uid) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)')
+    .run(...values, uid).lastInsertRowid)
+}
+
 export interface ApplyResult {
   changedSongs: number
   changedSetlists: number
+  /** Songs deleted here that came back because a cloud service uses them. */
+  restored: string[]
   /** Titles whose local, not-yet-uploaded edits were kept over the incoming version. */
   keptLocal: string[]
 }
@@ -55,7 +74,7 @@ export interface ApplyResult {
  * takes the cloud's value. Afterwards the snapshot holds the cloud's state.
  */
 export function applyRemote(db: LocalDb, pulled: PullResponse, opts: { videosDir: string }): ApplyResult {
-  const result: ApplyResult = { changedSongs: 0, changedSetlists: 0, keptLocal: [] }
+  const result: ApplyResult = { changedSongs: 0, changedSetlists: 0, restored: [], keptLocal: [] }
   inTransaction(db, () => {
     const local = readLocal(db)
 
@@ -70,6 +89,7 @@ export function applyRemote(db: LocalDb, pulled: PullResponse, opts: { videosDir
         continue
       }
       const snap = readSnapshot<string>(db, 'folder', f.uid)
+      if (!folderId && snap && snap.data === f.name) continue // deleted here; only our own echo
       const localName = local.folders.get(f.uid)
       const editedHere = localName !== undefined && snap && localName !== snap.data
       if (folderId && !editedHere) db.prepare('UPDATE folders SET name = ? WHERE id = ?').run(f.name, folderId)
@@ -93,26 +113,16 @@ export function applyRemote(db: LocalDb, pulled: PullResponse, opts: { videosDir
       }
       const localFields = local.songs.get(s.uid)
       const snap = readSnapshot<SongFields>(db, 'song', s.uid)
+      // Deleted here, and the cloud only echoes what this computer already knew (its own upload):
+      // leave it deleted so the pending delete goes up.
+      if (!row && snap && same(s.fields, snap.data)) continue
       const edited = localFields ? locallyEdited(localFields, snap?.data ?? null, s.fields) : []
       const merged: SongFields = { ...s.fields }
       for (const f of edited) (merged as unknown as Record<string, unknown>)[f] = localFields![f]
       if (edited.length && localFields) result.keptLocal.push(merged.title)
 
-      const values = [
-        merged.title, merged.artist, JSON.stringify(merged.sections), merged.song_key,
-        videoPath(merged.video_file, row?.video_path ?? null, opts.videosDir),
-        JSON.stringify(merged.text_style ?? {}), merged.sheet_style ? JSON.stringify(merged.sheet_style) : null,
-        id(db, 'folders', merged.folder_uid),
-      ]
-      if (row) {
-        if (!localFields || !same(merged, localFields)) {
-          db.prepare('UPDATE songs SET title = ?, artist = ?, sections = ?, song_key = ?, video_path = ?, text_style = ?, sheet_style = ?, folder_id = ? WHERE id = ?')
-            .run(...values, row.id)
-          result.changedSongs++
-        }
-      } else {
-        db.prepare('INSERT INTO songs (title, artist, sections, song_key, video_path, text_style, sheet_style, folder_id, uid) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)')
-          .run(...values, s.uid)
+      if (!row || !localFields || !same(merged, localFields)) {
+        writeSongRow(db, s.uid, merged, row ?? null, opts.videosDir)
         result.changedSongs++
       }
       // A field kept from a local edit keeps the version this computer had seen when it edited,
@@ -136,6 +146,7 @@ export function applyRemote(db: LocalDb, pulled: PullResponse, opts: { videosDir
       const remoteData: SetlistData = { name: l.name, service_date: l.service_date, notes: l.notes, items: l.items }
       const localData = local.setlists.get(l.uid)
       const snap = readSnapshot<SetlistData>(db, 'setlist', l.uid)
+      if (!setlistId && snap && same(remoteData, snap.data)) continue // deleted here; only our own echo
       const editedHere = localData && !same(localData, snap ? snap.data : remoteData)
       if (editedHere) {
         result.keptLocal.push(localData!.name)
@@ -154,7 +165,15 @@ export function applyRemote(db: LocalDb, pulled: PullResponse, opts: { videosDir
         const insert = db.prepare('INSERT INTO setlist_items (setlist_id, song_id, position, custom_video) VALUES (?, ?, ?, ?)')
         let position = 0
         for (const item of l.items) {
-          const songId = id(db, 'songs', item.song_uid)
+          let songId = id(db, 'songs', item.song_uid)
+          if (!songId) {
+            // Deleted here but used by a cloud service: bring it back (the delete must not go up).
+            const snapSong = readSnapshot<SongFields>(db, 'song', item.song_uid)
+            if (snapSong) {
+              songId = writeSongRow(db, item.song_uid, snapSong.data, null, opts.videosDir)
+              result.restored.push(snapSong.data.title)
+            }
+          }
           if (songId) insert.run(sid, songId, position++, videoPath(item.custom_video_file, null, opts.videosDir))
         }
         result.changedSetlists++
