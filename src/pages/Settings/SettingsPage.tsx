@@ -8,6 +8,8 @@ interface DisplayInfo {
   isPrimary: boolean
 }
 
+import CloudSection from './CloudSection'
+
 export default function SettingsPage() {
   const [displays, setDisplays] = useState<DisplayInfo[]>([])
   const [selectedDisplayId, setSelectedDisplayId] = useState<number | null>(
@@ -65,6 +67,8 @@ export default function SettingsPage() {
   return (
     <div className="p-6 max-w-2xl">
       <h1 className="text-2xl font-bold mb-8">Configuración</h1>
+
+      <CloudSection />
 
       {/* Display selection */}
       <section className="mb-8">

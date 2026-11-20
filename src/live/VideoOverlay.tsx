@@ -47,6 +47,11 @@ export default function VideoOverlay() {
     window.api.on('live:whiteout', onWhiteout)
     window.api.on('live:transition', onTransition)
 
+    const onKey = (e: KeyboardEvent) => {
+      if (e.key === 'Escape') window.api.requestCloseLive()
+    }
+    window.addEventListener('keydown', onKey)
+
     // Notify main process that listeners are attached and ready to receive IPC
     window.api.signalReady()
 
@@ -56,6 +61,7 @@ export default function VideoOverlay() {
       window.api.off('live:blackout', onBlackout)
       window.api.off('live:whiteout', onWhiteout)
       window.api.off('live:transition', onTransition)
+      window.removeEventListener('keydown', onKey)
     }
   }, [])
 

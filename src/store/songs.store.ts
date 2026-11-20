@@ -9,6 +9,23 @@ export interface Section {
   repeat?: number
 }
 
+/** Cloud sync state (mirrors electron/sync/engine.ts SyncStatus). */
+export interface SyncStatus {
+  state: 'off' | 'syncing' | 'ok' | 'error' | 'held'
+  lastOk: string | null
+  error: string | null
+  unauthorized: boolean
+  notices: string[]
+  applied: boolean
+}
+
+/** A background video in userData/videos (mirrors electron/media/videoLibrary.ts). */
+export interface VideoEntry {
+  name: string
+  path: string
+  size: number
+}
+
 export interface TextStyle {
   font: 'sans' | 'rounded' | 'bold-condensed'
   size: 'sm' | 'md' | 'lg' | 'xl'
@@ -76,7 +93,15 @@ declare global {
       sheetPreview: (p: { song: Song; sheetStyle: SheetStyle }) => Promise<string>
       setlistImportInspect: () => Promise<{ path: string; name: string; service_date: string | null; songCount: number; duplicateOf: number | null } | null>
       setlistImportApply: (p: { path: string; mode: 'new' | 'replace'; replaceId?: number }) => Promise<ImportSummary>
-      openLive: () => Promise<void>
+      syncGetStatus: () => Promise<SyncStatus>
+      syncInfo: () => Promise<{ linked: boolean; churchName: string | null; lastOk: string | null }>
+      syncRun: () => Promise<SyncStatus>
+      syncSetup: (p: { churchName: string; leaderName: string; pin: string; setupKey: string }) =>
+        Promise<{ ok: true; churchCode: string; recoveryCode: string; churchName: string } | { ok: false; error: string }>
+      syncLink: (p: { code: string }) =>
+        Promise<{ ok: true; churchName: string; summary: { adopted: number; replaced: { title: string }[]; backupFile: string | null; uploaded: number } } | { ok: false; error: string }>
+      syncUnlink: () => Promise<void>
+      openLive: () => Promise<{ windowed: boolean }>
       closeLive: () => Promise<void>
       showSection: (p: any) => Promise<void>
       setVideo: (p: any) => Promise<void>
@@ -85,6 +110,8 @@ declare global {
       setTransition: (p: any) => Promise<void>
       getDisplays: () => Promise<any[]>
       openFileDialog: (filters: any) => Promise<string | null>
+      listVideos: () => Promise<VideoEntry[]>
+      importVideo: () => Promise<VideoEntry | null>
       fetchLyricsUrl: (url: string) => Promise<{ success: boolean; rawText?: string; site?: string; error?: string }>
       fetchLyricsAI: (payload: any) => Promise<{ success: boolean; rawText?: string; error?: string }>
       getFolders: () => Promise<Folder[]>
@@ -109,6 +136,7 @@ declare global {
       on: (channel: string, cb: (...args: any[]) => void) => void
       off: (channel: string, cb: (...args: any[]) => void) => void
       signalReady: () => void
+      requestCloseLive: () => void
     }
   }
 }

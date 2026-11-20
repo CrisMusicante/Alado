@@ -36,6 +36,10 @@ function VideoOverlay() {
     window.api.on("live:blackout", onBlackout);
     window.api.on("live:whiteout", onWhiteout);
     window.api.on("live:transition", onTransition);
+    const onKey = (e) => {
+      if (e.key === "Escape") window.api.requestCloseLive();
+    };
+    window.addEventListener("keydown", onKey);
     window.api.signalReady();
     return () => {
       window.api.off("live:show-section", onShowSection);
@@ -43,6 +47,7 @@ function VideoOverlay() {
       window.api.off("live:blackout", onBlackout);
       window.api.off("live:whiteout", onWhiteout);
       window.api.off("live:transition", onTransition);
+      window.removeEventListener("keydown", onKey);
     };
   }, []);
   const videoSrc = videoPath ? `file:///${videoPath.replace(/\\/g, "/")}` : null;

@@ -1,4 +1,5 @@
 import { ipcMain, BrowserWindow } from 'electron'
+import { LiveStateCache, LiveChannel } from '../live/liveState'
 
 interface TextStyle {
   font: 'sans' | 'rounded' | 'bold-condensed'
@@ -11,8 +12,24 @@ interface TextStyle {
 
 let liveWindow: BrowserWindow | null = null
 
+const cache = new LiveStateCache()
+
 export function setLiveWindow(win: BrowserWindow | null): void {
   liveWindow = win
+}
+
+/** Re-sends the current live state; called each time the live window says it is ready. */
+export function replayLiveState(): void {
+  cache.replay((channel, payload) => liveWindow?.webContents.send(channel, payload))
+}
+
+export function clearLiveState(): void {
+  cache.clear()
+}
+
+function forward(channel: LiveChannel, payload: unknown): void {
+  cache.record(channel, payload)
+  liveWindow?.webContents.send(channel, payload)
 }
 
 export function registerLiveHandlers(): void {
@@ -23,22 +40,22 @@ export function registerLiveHandlers(): void {
     lines: string[]
     textStyle?: Partial<TextStyle>
   }) => {
-    liveWindow?.webContents.send('live:show-section', payload)
+    forward('live:show-section', payload)
   })
 
   ipcMain.handle('live:set-video', (_e, payload: { videoPath: string | null }) => {
-    liveWindow?.webContents.send('live:set-video', payload)
+    forward('live:set-video', payload)
   })
 
   ipcMain.handle('live:blackout', (_e, payload: { active: boolean }) => {
-    liveWindow?.webContents.send('live:blackout', payload)
+    forward('live:blackout', payload)
   })
 
   ipcMain.handle('live:whiteout', (_e, payload: { active: boolean }) => {
-    liveWindow?.webContents.send('live:whiteout', payload)
+    forward('live:whiteout', payload)
   })
 
   ipcMain.handle('live:transition', (_e, payload: { type: 'fade' | 'cut'; duration: number }) => {
-    liveWindow?.webContents.send('live:transition', payload)
+    forward('live:transition', payload)
   })
 }

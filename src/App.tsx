@@ -7,6 +7,10 @@ import { useLiveStore } from './store/live.store'
 import PlaybackController from './audio/PlaybackController'
 import DialogHost from './components/DialogHost'
 import ToastHost from './components/ToastHost'
+import SyncIndicator from './components/SyncIndicator'
+import { initSync } from './store/sync.store'
+
+initSync()
 
 type Page = 'songs' | 'setlist' | 'settings'
 
@@ -24,8 +28,10 @@ export default function App() {
         <NavBtn icon="🎵" label="Canciones" active={page === 'songs'} onClick={() => setPage('songs')} />
         <NavBtn icon="📋" label="Servicio" active={page === 'setlist'} onClick={() => setPage('setlist')} />
         <NavBtn icon="⚙️" label="Ajustes" active={page === 'settings'} onClick={() => setPage('settings')} />
+        <div className="mt-auto" />
+        <SyncIndicator />
         {isLive && (
-          <div className="mt-auto mb-2 flex flex-col items-center gap-1">
+          <div className="mt-3 mb-2 flex flex-col items-center gap-1">
             <div className="w-2.5 h-2.5 rounded-full bg-red-500 animate-pulse" />
             <span className="text-[9px] font-bold text-red-400 tracking-widest uppercase">Live</span>
           </div>

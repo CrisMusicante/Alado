@@ -22,5 +22,6 @@ Los músicos deben poder verla **en tiempo real**, siguiendo la sección que est
 - **Captura.** Editor con acordes sobre la letra. Importar desde texto con acordes "encima" (formato de LaCuerda/Ultimate Guitar) y convertirlo a ChordPro.
 - **Transposición.** Si la canción está en `G` y se toca en `A`, transponer todos los acordes. ¿El tono del servicio puede ser distinto al tono guardado de la canción (por ejemplo, otra voz líder)?
 - **Vista en tiempo real para músicos.** Pantalla/tablet/celular que sigue la sección actual. Encaja con el proyecto B: control y seguimiento por wifi local entre celular y compu.
+- **Presentación en celular con acordes** (anotado el 2026-11-19, a pedido del usuario). La vista en vivo del celular de B2 (modos "canción completa" y "ahora + siguiente") debe tener una versión con los acordes sobre cada línea. B2 deja ese espacio reservado.
 - **PDF con acordes.** Opción en el mismo exportador: "Letras" (coristas) o "Letras + acordes" (músicos).
 - **Notación.** Mostrar los acordes en americano (`C D E`) o latino (`Do Re Mi`) como preferencia de visualización, guardándolos siempre en americano.

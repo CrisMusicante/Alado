@@ -68,6 +68,8 @@ export default function SetlistPage() {
 
   async function handlePresent() {
     if (setlistSongs.length === 0) return
+    // Space/Enter on the still-focused button must not act again once live.
+    ;(document.activeElement as HTMLElement | null)?.blur()
     await startLive(setlistSongs.map(s => s.song))
   }
 

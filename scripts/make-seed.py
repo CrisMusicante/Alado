@@ -16,6 +16,16 @@ con.close()
 # Limpia estado local que no debe viajar
 con = sqlite3.connect(dest_db)
 con.execute("DELETE FROM app_settings WHERE key = 'last_backup'")
+# ALADO conectado: a new install must not inherit this computer's link to the cloud
+# (token, change number, snapshot) nor its global ids.
+con.execute("DELETE FROM app_settings WHERE key LIKE 'sync_%'")
+tables = {r[0] for r in con.execute("SELECT name FROM sqlite_master WHERE type = 'table'")}
+if 'sync_snapshot' in tables:
+    con.execute('DELETE FROM sync_snapshot')
+for t in ('songs', 'setlists', 'folders'):
+    cols = {r[1] for r in con.execute(f"PRAGMA table_info({t})")}
+    if 'uid' in cols:
+        con.execute(f"UPDATE {t} SET uid = lower(hex(randomblob(16)))")
 con.commit()
 con.execute('VACUUM')
 n = con.execute('SELECT COUNT(*) FROM songs').fetchone()[0]

@@ -15,6 +15,13 @@ electron.contextBridge.exposeInMainWorld("api", {
   sheetPreview: (payload) => electron.ipcRenderer.invoke("setlist:sheet-preview", payload),
   setlistImportInspect: () => electron.ipcRenderer.invoke("setlist:import-inspect"),
   setlistImportApply: (payload) => electron.ipcRenderer.invoke("setlist:import-apply", payload),
+  // ALADO conectado (cloud sync)
+  syncGetStatus: () => electron.ipcRenderer.invoke("sync:get-status"),
+  syncInfo: () => electron.ipcRenderer.invoke("sync:info"),
+  syncRun: () => electron.ipcRenderer.invoke("sync:run"),
+  syncSetup: (payload) => electron.ipcRenderer.invoke("sync:setup", payload),
+  syncLink: (payload) => electron.ipcRenderer.invoke("sync:link", payload),
+  syncUnlink: () => electron.ipcRenderer.invoke("sync:unlink"),
   // Live window
   openLive: () => electron.ipcRenderer.invoke("live:open"),
   closeLive: () => electron.ipcRenderer.invoke("live:close"),
@@ -50,6 +57,9 @@ electron.contextBridge.exposeInMainWorld("api", {
   // System
   getDisplays: () => electron.ipcRenderer.invoke("system:get-displays"),
   openFileDialog: (filters) => electron.ipcRenderer.invoke("system:open-file-dialog", filters),
+  // Background videos in userData/videos
+  listVideos: () => electron.ipcRenderer.invoke("videos:list"),
+  importVideo: () => electron.ipcRenderer.invoke("videos:import"),
   // Events from main → renderer
   on: (channel, cb) => {
     const allowed = [
@@ -61,7 +71,9 @@ electron.contextBridge.exposeInMainWorld("api", {
       "live:closed",
       "audio:progress",
       "audio:status-changed",
-      "audio:engine-progress"
+      "audio:engine-progress",
+      "sync:status",
+      "sync:applied"
     ];
     if (allowed.includes(channel)) electron.ipcRenderer.on(channel, (_e, ...args) => cb(...args));
   },
@@ -69,5 +81,7 @@ electron.contextBridge.exposeInMainWorld("api", {
     electron.ipcRenderer.removeListener(channel, cb);
   },
   // Signal from live renderer → main that it is mounted and ready to receive IPC
-  signalReady: () => electron.ipcRenderer.send("live:renderer-ready")
+  signalReady: () => electron.ipcRenderer.send("live:renderer-ready"),
+  // Esc inside the live window → main closes it
+  requestCloseLive: () => electron.ipcRenderer.send("live:escape")
 });

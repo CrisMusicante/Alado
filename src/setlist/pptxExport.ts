@@ -39,8 +39,15 @@ const FRAME_MAX_H = 720
 const FRAME_TIMEOUT_MS = 8000
 const DARKEN = 'rgba(0,0,0,0.35)'
 
-/** A darkened still from ~1s into the video, as a JPEG data URL; null if it can't be read. */
-export function grabVideoFrame(videoPath: string): Promise<string | null> {
+/**
+ * A still from ~1s into the video, as a JPEG data URL; null if it can't be read.
+ * Darkened by default (slide backgrounds); thumbnails pass `darken: false` and a smaller size.
+ */
+export function grabVideoFrame(
+  videoPath: string,
+  opts: { darken?: boolean; maxWidth?: number; maxHeight?: number } = {}
+): Promise<string | null> {
+  const { darken = true, maxWidth = FRAME_MAX_W, maxHeight = FRAME_MAX_H } = opts
   return new Promise(resolve => {
     const video = document.createElement('video')
     let done = false
@@ -64,14 +71,16 @@ export function grabVideoFrame(videoPath: string): Promise<string | null> {
     }
     video.onseeked = () => {
       try {
-        const scale = Math.min(1, FRAME_MAX_W / video.videoWidth, FRAME_MAX_H / video.videoHeight)
+        const scale = Math.min(1, maxWidth / video.videoWidth, maxHeight / video.videoHeight)
         const canvas = document.createElement('canvas')
         canvas.width = Math.round(video.videoWidth * scale)
         canvas.height = Math.round(video.videoHeight * scale)
         const ctx = canvas.getContext('2d')!
         ctx.drawImage(video, 0, 0, canvas.width, canvas.height)
-        ctx.fillStyle = DARKEN
-        ctx.fillRect(0, 0, canvas.width, canvas.height)
+        if (darken) {
+          ctx.fillStyle = DARKEN
+          ctx.fillRect(0, 0, canvas.width, canvas.height)
+        }
         finish(canvas.toDataURL('image/jpeg', 0.7))
       } catch (e) {
         console.warn('No se pudo leer un cuadro del video', videoPath, e)

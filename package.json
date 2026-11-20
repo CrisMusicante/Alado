@@ -1,6 +1,6 @@
 {
   "name": "alado",
-  "version": "1.2.0",
+  "version": "1.3.0",
   "description": "Worship song presentation app for local churches",
   "author": "Alado",
   "main": "out/main/index.js",
@@ -13,9 +13,14 @@
     "dist:win": "electron-builder --win",
     "dist:mac": "electron-builder --mac",
     "lint": "eslint .",
-    "test": "vitest"
+    "test": "vitest",
+    "cloud:dev": "cd cloud && wrangler dev",
+    "cloud:deploy": "npm run mobile:build && cd cloud && wrangler deploy",
+    "mobile:dev": "vite --config mobile/vite.config.ts",
+    "mobile:build": "vite build --config mobile/vite.config.ts"
   },
   "devDependencies": {
+    "@cloudflare/workers-types": "^5.20261120.1",
     "@types/better-sqlite3": "^7.6.8",
     "@types/react": "^18.3.3",
     "@types/react-dom": "^18.3.0",
@@ -31,7 +36,8 @@
     "tailwindcss": "^3.4.13",
     "typescript": "^5.5.4",
     "vite": "^7.3.1",
-    "vitest": "^4.0.18"
+    "vitest": "^4.0.18",
+    "wrangler": "^4.165.0"
   },
   "dependencies": {
     "@dnd-kit/core": "^6.1.0",

@@ -2,61 +2,12 @@ import Database from 'better-sqlite3'
 import { app } from 'electron'
 import path from 'path'
 import fs from 'fs'
+import { SCHEMA, SONG_AUDIO_SQL } from './schemaSql'
+import { migrateV6 } from '../sync/schema'
 
 let db: Database.Database
 
-// Inlined schema — avoids electron-vite not copying .sql assets to out/main/
-const SCHEMA = `
-CREATE TABLE IF NOT EXISTS folders (
-  id         INTEGER PRIMARY KEY AUTOINCREMENT,
-  name       TEXT NOT NULL,
-  created_at DATETIME DEFAULT CURRENT_TIMESTAMP
-);
-
-CREATE TABLE IF NOT EXISTS songs (
-  id          INTEGER PRIMARY KEY AUTOINCREMENT,
-  title       TEXT NOT NULL,
-  artist      TEXT,
-  sections    TEXT NOT NULL DEFAULT '[]',
-  video_path  TEXT,
-  text_style  TEXT NOT NULL DEFAULT '{}',
-  folder_id   INTEGER REFERENCES folders(id) ON DELETE SET NULL,
-  created_at  DATETIME DEFAULT CURRENT_TIMESTAMP,
-  updated_at  DATETIME DEFAULT CURRENT_TIMESTAMP
-);
-
-CREATE TABLE IF NOT EXISTS setlists (
-  id           INTEGER PRIMARY KEY AUTOINCREMENT,
-  name         TEXT NOT NULL,
-  service_date TEXT,
-  notes        TEXT,
-  created_at   DATETIME DEFAULT CURRENT_TIMESTAMP
-);
-
-CREATE TABLE IF NOT EXISTS setlist_items (
-  id           INTEGER PRIMARY KEY AUTOINCREMENT,
-  setlist_id   INTEGER NOT NULL REFERENCES setlists(id) ON DELETE CASCADE,
-  song_id      INTEGER NOT NULL REFERENCES songs(id) ON DELETE RESTRICT,
-  position     INTEGER NOT NULL,
-  custom_video TEXT
-);
-
-CREATE TABLE IF NOT EXISTS app_settings (
-  key   TEXT PRIMARY KEY,
-  value TEXT NOT NULL
-);
-
-CREATE INDEX IF NOT EXISTS idx_songs_title ON songs(title COLLATE NOCASE);
-
-CREATE VIRTUAL TABLE IF NOT EXISTS songs_fts
-  USING fts5(title, artist, sections, content='songs', content_rowid='id');
-
-CREATE TRIGGER IF NOT EXISTS songs_updated_at
-  AFTER UPDATE ON songs
-  BEGIN
-    UPDATE songs SET updated_at = CURRENT_TIMESTAMP WHERE id = NEW.id;
-  END;
-`
+// Inlined schema (electron/db/schemaSql.ts) — avoids electron-vite not copying .sql assets to out/main/
 
 export function getDb(): Database.Database {
   if (!db) {
@@ -129,21 +80,7 @@ function runMigrations(database: Database.Database): void {
 
   if (version < 3) {
     database.transaction(() => {
-      database.exec(`
-        CREATE TABLE IF NOT EXISTS song_audio (
-          song_id           INTEGER PRIMARY KEY REFERENCES songs(id) ON DELETE CASCADE,
-          status            TEXT NOT NULL DEFAULT 'pending',
-          error             TEXT,
-          original_hash     TEXT,
-          duration_sec      REAL,
-          vol_instrumental  REAL NOT NULL DEFAULT 1,
-          vol_vocals        REAL NOT NULL DEFAULT 0,
-          cues              TEXT NOT NULL DEFAULT '[]',
-          cues_sections_sig TEXT,
-          created_at        DATETIME DEFAULT CURRENT_TIMESTAMP,
-          updated_at        DATETIME DEFAULT CURRENT_TIMESTAMP
-        );
-      `)
+      database.exec(SONG_AUDIO_SQL)
       database.pragma('user_version = 3')
     })()
   }
@@ -168,6 +105,14 @@ function runMigrations(database: Database.Database): void {
         if (!String(e?.message).includes('duplicate column name')) throw e
       }
       database.pragma('user_version = 5')
+    })()
+  }
+
+  if (version < 6) {
+    database.transaction(() => {
+      // Global ids + sync snapshot for ALADO conectado (electron/sync/schema.ts).
+      migrateV6(database)
+      database.pragma('user_version = 6')
     })()
   }
 }

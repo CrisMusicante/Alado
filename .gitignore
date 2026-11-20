@@ -9,3 +9,6 @@ release/
 
 .superpowers/
 resources/seed/
+cloud/.setup-key
+cloud/.wrangler/
+cloud/public/

@@ -30,7 +30,7 @@ The app has two Electron `BrowserWindow` instances:
 1. **Main window** (`electron/windows/main.window.ts`) — The operator's control UI. Loads `index.html` → `src/main.tsx` → `src/App.tsx`.
 2. **Live window** (`electron/windows/live.window.ts`) — A fullscreen, frameless, always-on-top presentation window. Targets an external display if found, otherwise falls back to primary. Loads `src/live/live.html` → `src/live/live.tsx` → `src/live/VideoOverlay.tsx`.
 
-The live window is opened/closed on demand via `ipcMain.handle('live:open' / 'live:close')` in `electron/main.ts`.
+The live window is opened/closed on demand via `ipcMain.handle('live:open' / 'live:close')` in `electron/main.ts`. `planLiveWindow` (`electron/windows/liveDisplay.ts`) picks fullscreen on an external display or, with a single display (Windows "Duplicate"), a normal framed window so it never covers the app; `live:open` returns `{ windowed }`. Main keeps the last payload per live channel (`LiveStateCache`, `electron/live/liveState.ts`) and replays it on every `live:renderer-ready`, so nothing sent before the live window listens is lost. Esc in the live window closes it (`live:escape`); the main renderer resets on `live:closed`.
 
 ### IPC Layer
 
@@ -39,6 +39,7 @@ All renderer↔main communication goes through `electron/preload.ts`, which expo
 - `db:*` — CRUD for songs and setlists (`electron/ipc/db.handlers.ts`)
 - `live:*` — Commands forwarded from main window to live window (`electron/ipc/live.handlers.ts`)
 - `system:*` — Display enumeration, file dialogs (`electron/ipc/system.handlers.ts`)
+- `videos:*` — Background videos in `userData/videos/`: list and import/copy with dedupe (`electron/ipc/videos.handlers.ts`, logic in `electron/media/videoLibrary.ts`); the song editor picks them from a thumbnail gallery (`VideoPicker.tsx`)
 
 **Live display data flow:** `useLiveStore` → `window.api.showSection()` → IPC → `live.handlers.ts` → `liveWindow.webContents.send()` → `VideoOverlay.tsx` listens via `window.api.on()`
 
@@ -87,3 +88,15 @@ The Claude AI tab reads `claudeApiKey` from `localStorage` (set in Settings → 
 ### Path Alias
 
 `@` resolves to `src/` (configured in `electron.vite.config.ts`).
+
+### Cloud (fase B: ALADO conectado)
+
+- **`cloud/`** — one Cloudflare Worker (`wrangler.jsonc`, name `alado`) with D1 (`DB`, migrations in `cloud/migrations/`) and static assets (`cloud/public/`, the phone PWA). Live at **https://alado.mj-cristhian.workers.dev**; API under `/api/*` (`cloud/src/router.ts`). Deploy: `npm run cloud:deploy`; schema changes: add a migration and `npx wrangler d1 migrations apply alado --remote` from `cloud/`.
+- Logic is pure and takes `ctx = { db, now }` (`cloud/src/ctx.ts`); tests run in Node over `node:sqlite` (`cloud/test/sqliteDb.ts`), no miniflare.
+- **`shared/`** — types and pure logic used by cloud, desktop and PWA: `types.ts`, `merge.ts` (field-level last-write-wins + "replaced" notices), `lyricsDiff.ts`.
+- Roles: `leader`, `editor` (services directly; song changes only via proposals), `member` (read only, logs in with the church code), `desktop` (trusted computer, edits everything incl. style/PDF sheet/folders). Permissions in `cloud/src/permissions.ts`.
+- Never run `/api/setup` against production from tests: the real church is created from the pastor's computer.
+- **`mobile/`** — the phone PWA (Vite + React + Tailwind, own `vite.config.ts`/`tsconfig.json`). `npm run mobile:build` writes to `cloud/public/` (gitignored); `npm run cloud:deploy` builds it and deploys the Worker. Offline-first: `mobile/src/core/` (catalog, outbox capped at 30 per push, `syncOnce`) is pure and tested; state lives in IndexedDB; `public/sw.js` caches the shell and never `/api/`. Local dev: `npm run cloud:dev` (wrangler dev on :8787, needs `--var SETUP_KEY:…`) + `npm run mobile:dev` (proxies `/api`).
+- **Desktop sync** — `electron/sync/`: `migrateV6` (uid columns + triggers + `sync_snapshot`), `readLocal` (cloud-shaped view), `localChanges` (diff vs snapshot), `applyRemote` (keeps fields edited here), `adoptOnLink`, `SyncEngine` (pull → apply/hold while live → push in chunks → pull), `SyncService` (timers 60 s push / 3 min full, token via safeStorage). IPC `sync:*`, push channels `sync:status`/`sync:applied`. UI: `SyncIndicator` (sidebar) and Settings → `CloudSection`. `ALADO_CLOUD_URL` overrides the cloud URL (tests against wrangler dev). Sync tests run desktop and cloud together in Node (`electron/sync/*.test.ts` over `node:sqlite` + the real `route()`).
+- The install key for creating the church (`SETUP_KEY` Worker secret) is kept locally in `cloud/.setup-key` (gitignored).
+

@@ -3,6 +3,8 @@ import { Song, Section, TextStyle, useSongsStore } from '../../store/songs.store
 import LyricsImportModal from './LyricsImportModal'
 import AudioPanel from './AudioPanel'
 import SongPreview from './SongPreview'
+import { mergeEdits } from '../../utils/songMerge'
+import VideoPicker, { VideoThumb } from './VideoPicker'
 import { MAJOR_KEYS, MINOR_KEYS } from '../../utils/songKeys'
 import type { SongSheetStyle } from '../../utils/sheetStyle'
 import SheetStylePanel from '../SheetStyle/SheetStylePanel'
@@ -118,6 +120,7 @@ export default function SongEditor({ song, onClose }: Props) {
   const [sheetStyle, setSheetStyle] = useState<SongSheetStyle | null>(song.sheet_style ?? null)
   const [sections, setSections] = useState<Section[]>(song.sections)
   const [videoPath, setVideoPath] = useState(song.video_path ?? '')
+  const [pickingVideo, setPickingVideo] = useState(false)
   const [textStyle, setTextStyle] = useState<Partial<TextStyle>>(song.text_style ?? {})
   const [saving, setSaving] = useState(false)
   const [showImport, setShowImport] = useState(false)
@@ -130,7 +133,7 @@ export default function SongEditor({ song, onClose }: Props) {
   async function handleSave() {
     if (!title.trim()) return
     setSaving(true)
-    await saveSong({
+    const edited: Song = {
       ...song,
       title: title.trim(),
       artist: artist.trim() || undefined,
@@ -139,16 +142,12 @@ export default function SongEditor({ song, onClose }: Props) {
       sections,
       video_path: videoPath || undefined,
       text_style: textStyle
-    })
+    }
+    // Only what changed here goes on top of the latest copy (the cloud may have updated it meanwhile).
+    const latest = song.id ? useSongsStore.getState().songs.find(s => s.id === song.id) : undefined
+    await saveSong(mergeEdits(song, edited, latest))
     setSaving(false)
     onClose()
-  }
-
-  async function pickVideo() {
-    const path = await window.api.openFileDialog([
-      { name: 'Video', extensions: ['mp4', 'webm', 'mov'] }
-    ])
-    if (path) setVideoPath(path)
   }
 
   function addSection() {
@@ -253,20 +252,29 @@ export default function SongEditor({ song, onClose }: Props) {
       {/* Video background */}
       <div className="mb-5">
         <label className="block text-sm text-slate-400 mb-1.5">Video de fondo</label>
-        <div className="flex gap-2">
-          <input
-            value={videoPath}
-            onChange={e => setVideoPath(e.target.value)}
-            className="flex-1 bg-slate-800 text-white rounded-xl px-4 py-2.5 outline-none focus:ring-2 focus:ring-indigo-500 border border-slate-700 text-sm"
-            placeholder="Ruta del video (MP4, WebM, MOV)"
-          />
+        <div className="flex items-center gap-3">
+          {videoPath
+            ? <VideoThumb path={videoPath} className="w-24 aspect-video rounded-lg border border-slate-700" />
+            : <div className="w-24 aspect-video rounded-lg border border-dashed border-slate-700 bg-slate-900" />}
+          <span className="flex-1 min-w-0 truncate text-sm text-slate-300" title={videoPath}>
+            {videoPath ? videoPath.split(/[\\/]/).pop() : 'Sin video (fondo por defecto)'}
+          </span>
           <button
-            onClick={pickVideo}
+            onClick={() => setPickingVideo(true)}
             className="bg-slate-700 hover:bg-slate-600 text-white px-4 py-2.5 rounded-xl text-sm transition-colors border border-slate-600"
           >
-            Explorar...
+            Elegir video
           </button>
+          {videoPath && (
+            <button
+              onClick={() => setVideoPath('')}
+              className="text-slate-400 hover:text-white px-3 py-2.5 rounded-xl text-sm transition-colors"
+            >
+              Quitar
+            </button>
+          )}
         </div>
+        <VideoPicker open={pickingVideo} current={videoPath} onPick={setVideoPath} onClose={() => setPickingVideo(false)} />
       </div>
 
       <AudioPanel songId={song.id} sections={sections} />
