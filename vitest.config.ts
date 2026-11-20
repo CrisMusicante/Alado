@@ -5,6 +5,6 @@ export default defineConfig({
   resolve: { alias: { '@': path.resolve(__dirname, 'src') } },
   test: {
     environment: 'node',
-    include: ['src/**/*.test.ts', 'electron/**/*.test.ts', 'shared/**/*.test.ts', 'cloud/**/*.test.ts']
+    include: ['src/**/*.test.ts', 'electron/**/*.test.ts', 'shared/**/*.test.ts', 'cloud/**/*.test.ts', 'mobile/**/*.test.ts']
   }
 })
