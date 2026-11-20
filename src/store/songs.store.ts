@@ -76,7 +76,7 @@ declare global {
       sheetPreview: (p: { song: Song; sheetStyle: SheetStyle }) => Promise<string>
       setlistImportInspect: () => Promise<{ path: string; name: string; service_date: string | null; songCount: number; duplicateOf: number | null } | null>
       setlistImportApply: (p: { path: string; mode: 'new' | 'replace'; replaceId?: number }) => Promise<ImportSummary>
-      openLive: () => Promise<void>
+      openLive: () => Promise<{ windowed: boolean }>
       closeLive: () => Promise<void>
       showSection: (p: any) => Promise<void>
       setVideo: (p: any) => Promise<void>
@@ -109,6 +109,7 @@ declare global {
       on: (channel: string, cb: (...args: any[]) => void) => void
       off: (channel: string, cb: (...args: any[]) => void) => void
       signalReady: () => void
+      requestCloseLive: () => void
     }
   }
 }

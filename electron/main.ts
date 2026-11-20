@@ -20,6 +20,7 @@ registerMediaSchemePrivileges()
 
 let mainWindow: BrowserWindow | null = null
 let liveWindow: BrowserWindow | null = null
+let liveWindowed = false
 
 app.whenReady().then(() => {
   registerMediaProtocol()
@@ -36,7 +37,9 @@ app.whenReady().then(() => {
   // Open/close Live window on demand from renderer
   ipcMain.handle('live:open', async () => {
     if (!liveWindow || liveWindow.isDestroyed()) {
-      liveWindow = createLiveWindow()
+      const created = createLiveWindow()
+      liveWindow = created.win
+      liveWindowed = created.windowed
       setLiveWindow(liveWindow)
       liveWindow.on('closed', () => {
         liveWindow = null
@@ -60,9 +63,15 @@ app.whenReady().then(() => {
       })
     }
     liveWindow.show()
+    return { windowed: liveWindowed }
   })
 
   ipcMain.handle('live:close', () => {
+    liveWindow?.close()
+  })
+
+  // Esc inside the projection: with a single display it may be the only window in view.
+  ipcMain.on('live:escape', () => {
     liveWindow?.close()
   })
 

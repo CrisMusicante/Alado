@@ -69,5 +69,7 @@ contextBridge.exposeInMainWorld('api', {
   },
 
   // Signal from live renderer → main that it is mounted and ready to receive IPC
-  signalReady: () => ipcRenderer.send('live:renderer-ready')
+  signalReady: () => ipcRenderer.send('live:renderer-ready'),
+  // Esc inside the live window → main closes it
+  requestCloseLive: () => ipcRenderer.send('live:escape')
 })

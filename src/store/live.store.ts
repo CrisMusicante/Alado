@@ -1,5 +1,8 @@
 import { create } from 'zustand'
 import { Song, Section } from './songs.store'
+import { alertDialog } from './dialog.store'
+
+const NO_SECOND_DISPLAY = 'No hay segunda pantalla. La proyección se abrió en una ventana: en Windows usa Win+P → Extender.'
 
 interface LiveState {
   isLive: boolean
@@ -28,13 +31,14 @@ export const useLiveStore = create<LiveState>((set, get) => ({
   setlist: [],
 
   startLive: async (setlist) => {
-    await window.api.openLive()
+    const { windowed } = await window.api.openLive()
     const song = setlist[0]
     if (song) {
       await window.api.setVideo({ videoPath: song.video_path ?? null })
       await sendSection(song, 0)
     }
     set({ isLive: true, setlist, currentSong: song ?? null, currentSectionIndex: 0 })
+    if (windowed) void alertDialog(NO_SECOND_DISPLAY, 'Proyección en ventana')
   },
 
   stopLive: async () => {
@@ -99,3 +103,8 @@ async function sendSection(song: Song, index: number): Promise<void> {
     textStyle: song.text_style
   })
 }
+
+// The live window can close on its own (Esc inside it, or the user closing it).
+window.api.on('live:closed', () => {
+  useLiveStore.setState({ isLive: false, currentSong: null, blackout: false, whiteout: false })
+})
