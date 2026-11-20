@@ -30,7 +30,7 @@ The app has two Electron `BrowserWindow` instances:
 1. **Main window** (`electron/windows/main.window.ts`) — The operator's control UI. Loads `index.html` → `src/main.tsx` → `src/App.tsx`.
 2. **Live window** (`electron/windows/live.window.ts`) — A fullscreen, frameless, always-on-top presentation window. Targets an external display if found, otherwise falls back to primary. Loads `src/live/live.html` → `src/live/live.tsx` → `src/live/VideoOverlay.tsx`.
 
-The live window is opened/closed on demand via `ipcMain.handle('live:open' / 'live:close')` in `electron/main.ts`.
+The live window is opened/closed on demand via `ipcMain.handle('live:open' / 'live:close')` in `electron/main.ts`. `planLiveWindow` (`electron/windows/liveDisplay.ts`) picks fullscreen on an external display or, with a single display (Windows "Duplicate"), a normal framed window so it never covers the app; `live:open` returns `{ windowed }`. Main keeps the last payload per live channel (`LiveStateCache`, `electron/live/liveState.ts`) and replays it on every `live:renderer-ready`, so nothing sent before the live window listens is lost. Esc in the live window closes it (`live:escape`); the main renderer resets on `live:closed`.
 
 ### IPC Layer
 
@@ -39,6 +39,7 @@ All renderer↔main communication goes through `electron/preload.ts`, which expo
 - `db:*` — CRUD for songs and setlists (`electron/ipc/db.handlers.ts`)
 - `live:*` — Commands forwarded from main window to live window (`electron/ipc/live.handlers.ts`)
 - `system:*` — Display enumeration, file dialogs (`electron/ipc/system.handlers.ts`)
+- `videos:*` — Background videos in `userData/videos/`: list and import/copy with dedupe (`electron/ipc/videos.handlers.ts`, logic in `electron/media/videoLibrary.ts`); the song editor picks them from a thumbnail gallery (`VideoPicker.tsx`)
 
 **Live display data flow:** `useLiveStore` → `window.api.showSection()` → IPC → `live.handlers.ts` → `liveWindow.webContents.send()` → `VideoOverlay.tsx` listens via `window.api.on()`
 
