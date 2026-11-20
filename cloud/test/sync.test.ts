@@ -132,6 +132,17 @@ describe('sync', () => {
     expect(bad.results.map(r => r.ok)).toEqual([false, false, false, false])
   })
 
+  it('rejects a seen vector that is not whole numbers up to the current seq', async () => {
+    await push(ctx, pc, [newSong('a', 'Uno')])
+    const bad = await push(ctx, leader, [
+      song('a', { song_key: 'G' }, { song_key: 'x' } as never),
+      song('a', { song_key: 'G' }, { song_key: -1 }),
+      song('a', { song_key: 'G' }, { song_key: 9999 }),
+      song('a', { song_key: 'G' }, { nope: 1 } as never),
+    ])
+    expect(bad.results.map(r => r.ok)).toEqual([false, false, false, false])
+  })
+
   it('folders sync and devices from another church never see this one', async () => {
     await push(ctx, pc, [{ kind: 'folder', uid: 'f1', name: 'Adoración' }])
     expect((await pull(ctx, leader, 0)).folders.map(f => f.name)).toEqual(['Adoración'])

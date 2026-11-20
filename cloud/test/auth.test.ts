@@ -100,7 +100,7 @@ describe('device linking', () => {
 
     const c1 = await createLinkCode(ctx, leader)
     if (!c1.ok) throw new Error(c1.error)
-    expect(c1.code).toMatch(/^\d{6}$/)
+    expect(c1.code).toMatch(/^\d{8}$/)
     const d = await linkDevice(ctx, IP, { code: c1.code, deviceName: 'Compu Cris' })
     if (!d.ok) throw new Error(d.error)
     expect((await session(d.deviceToken)).role).toBe('desktop')
@@ -174,3 +174,44 @@ describe('users', () => {
       .toMatchObject({ ok: false })
   })
 })
+
+describe('security hardening', () => {
+  it('recovery revokes the leader sessions and does not reactivate', async () => {
+    const { churchCode, recoveryCode } = await setup()
+    const l = await login(ctx, IP, { churchCode, name: 'Cris', pin: '1234' })
+    if (!l.ok) throw new Error(l.error)
+    expect((await recover(ctx, IP, { churchCode, recoveryCode, leaderName: 'Cris', newPin: '8888' })).ok).toBe(true)
+    expect(await authenticate(ctx, l.token)).toBeNull()
+  })
+
+  it('link codes have 8 digits', async () => {
+    const { churchCode } = await setup()
+    const l = await login(ctx, IP, { churchCode, name: 'Cris', pin: '1234' })
+    if (!l.ok) throw new Error(l.error)
+    const c = await createLinkCode(ctx, await session(l.token))
+    expect(c.ok && c.code).toMatch(/^\d{8}$/)
+  })
+
+  it('link guessing from many IPs is capped globally', async () => {
+    const { churchCode } = await setup()
+    const l = await login(ctx, IP, { churchCode, name: 'Cris', pin: '1234' })
+    if (!l.ok) throw new Error(l.error)
+    const c = await createLinkCode(ctx, await session(l.token))
+    if (!c.ok) throw new Error(c.error)
+    for (let i = 0; i < 20; i++) await linkDevice(ctx, `10.0.0.${i}`, { code: '00000000', deviceName: 'x' })
+    expect(await linkDevice(ctx, '10.0.1.1', { code: c.code, deviceName: 'PC' })).toMatchObject({ ok: false, status: 429 })
+  })
+
+  it('wrong PINs from another IP do not lock the leader out on theirs', async () => {
+    const { churchCode } = await setup()
+    for (let i = 0; i < 5; i++) await login(ctx, '6.6.6.6', { churchCode, name: 'Cris', pin: '0000' })
+    expect((await login(ctx, IP, { churchCode, name: 'Cris', pin: '1234' })).ok).toBe(true)
+  })
+
+  it('an account still locks after 20 failures across IPs', async () => {
+    const { churchCode } = await setup()
+    for (let i = 0; i < 20; i++) await login(ctx, `10.0.0.${i}`, { churchCode, name: 'Cris', pin: '0000' })
+    expect(await login(ctx, IP, { churchCode, name: 'Cris', pin: '1234' })).toMatchObject({ ok: false, status: 429 })
+  })
+})
+

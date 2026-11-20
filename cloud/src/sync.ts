@@ -89,6 +89,14 @@ function validSetlistData(d: unknown): d is SetlistData {
     s.items.every(i => i && isStr(i.song_uid, 64) && validVideoFile(i.custom_video_file ?? null))
 }
 
+/** `seen` decides whether a writer gets told it overwrote someone: whole numbers no newer than the church. */
+function validSeen(seen: unknown, maxSeq: number): boolean {
+  if (seen === undefined) return true
+  if (!seen || typeof seen !== 'object' || Array.isArray(seen)) return false
+  return Object.entries(seen).every(([k, v]) =>
+    (SONG_FIELDS as readonly string[]).includes(k) && Number.isInteger(v) && (v as number) >= 0 && (v as number) <= maxSeq)
+}
+
 const validUid = (u: unknown) => isStr(u, 64) && /^[A-Za-z0-9_-]+$/.test(u as string)
 
 // ---------- Apply one change ----------
@@ -123,6 +131,8 @@ async function applyChange(ctx: Ctx, s: Session, c: Change): Promise<ChangeResul
   switch (c.kind) {
     case 'song': {
       if (!validSongFields(c.fields)) return { ok: false, error: 'invalid' }
+      const church = await ctx.db.first<{ seq: number }>('SELECT seq FROM churches WHERE id = ?', s.churchId)
+      if (!validSeen(c.seen, church!.seq)) return { ok: false, error: 'invalid' }
       const existing = await getSong(ctx, s.churchId, c.uid)
       const allowed = canApply(s.role, c, existing)
       if (allowed !== true) return { ok: false, error: allowed }
@@ -142,6 +152,7 @@ async function applyChange(ctx: Ctx, s: Session, c: Change): Promise<ChangeResul
     }
     case 'setlist': {
       if (!validSetlistData(c.data)) return { ok: false, error: 'invalid' }
+      if (c.seenSeq !== undefined && !(Number.isInteger(c.seenSeq) && c.seenSeq >= 0)) return { ok: false, error: 'invalid' }
       const allowed = canApply(s.role, c, null)
       if (allowed !== true) return { ok: false, error: allowed }
       // Every song must exist (a proposed new song can't go in a service until approved).
