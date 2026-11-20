@@ -18,6 +18,14 @@ contextBridge.exposeInMainWorld('api', {
   setlistImportInspect: () => ipcRenderer.invoke('setlist:import-inspect'),
   setlistImportApply: (payload: unknown) => ipcRenderer.invoke('setlist:import-apply', payload),
 
+  // ALADO conectado (cloud sync)
+  syncGetStatus: () => ipcRenderer.invoke('sync:get-status'),
+  syncInfo: () => ipcRenderer.invoke('sync:info'),
+  syncRun: () => ipcRenderer.invoke('sync:run'),
+  syncSetup: (payload: unknown) => ipcRenderer.invoke('sync:setup', payload),
+  syncLink: (payload: unknown) => ipcRenderer.invoke('sync:link', payload),
+  syncUnlink: () => ipcRenderer.invoke('sync:unlink'),
+
   // Live window
   openLive: () => ipcRenderer.invoke('live:open'),
   closeLive: () => ipcRenderer.invoke('live:close'),
@@ -65,7 +73,7 @@ contextBridge.exposeInMainWorld('api', {
   // Events from main → renderer
   on: (channel: string, cb: (...args: unknown[]) => void) => {
     const allowed = ['live:show-section', 'live:set-video', 'live:blackout', 'live:whiteout', 'live:transition', 'live:closed',
-      'audio:progress', 'audio:status-changed', 'audio:engine-progress']
+      'audio:progress', 'audio:status-changed', 'audio:engine-progress', 'sync:status', 'sync:applied']
     if (allowed.includes(channel)) ipcRenderer.on(channel, (_e, ...args) => cb(...args))
   },
   off: (channel: string, cb: (...args: unknown[]) => void) => {

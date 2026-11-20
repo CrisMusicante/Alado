@@ -9,6 +9,16 @@ export interface Section {
   repeat?: number
 }
 
+/** Cloud sync state (mirrors electron/sync/engine.ts SyncStatus). */
+export interface SyncStatus {
+  state: 'off' | 'syncing' | 'ok' | 'error' | 'held'
+  lastOk: string | null
+  error: string | null
+  unauthorized: boolean
+  notices: string[]
+  applied: boolean
+}
+
 /** A background video in userData/videos (mirrors electron/media/videoLibrary.ts). */
 export interface VideoEntry {
   name: string
@@ -83,6 +93,14 @@ declare global {
       sheetPreview: (p: { song: Song; sheetStyle: SheetStyle }) => Promise<string>
       setlistImportInspect: () => Promise<{ path: string; name: string; service_date: string | null; songCount: number; duplicateOf: number | null } | null>
       setlistImportApply: (p: { path: string; mode: 'new' | 'replace'; replaceId?: number }) => Promise<ImportSummary>
+      syncGetStatus: () => Promise<SyncStatus>
+      syncInfo: () => Promise<{ linked: boolean; churchName: string | null; lastOk: string | null }>
+      syncRun: () => Promise<SyncStatus>
+      syncSetup: (p: { churchName: string; leaderName: string; pin: string; setupKey: string }) =>
+        Promise<{ ok: true; churchCode: string; recoveryCode: string; churchName: string } | { ok: false; error: string }>
+      syncLink: (p: { code: string }) =>
+        Promise<{ ok: true; churchName: string; summary: { adopted: number; replaced: { title: string }[]; backupFile: string | null; uploaded: number } } | { ok: false; error: string }>
+      syncUnlink: () => Promise<void>
       openLive: () => Promise<{ windowed: boolean }>
       closeLive: () => Promise<void>
       showSection: (p: any) => Promise<void>

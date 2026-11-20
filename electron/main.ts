@@ -14,6 +14,8 @@ import { registerLyricsHandlers } from './ipc/lyrics.handlers'
 import { registerAudioHandlers } from './ipc/audio.handlers'
 import { registerPackHandlers } from './ipc/pack.handlers'
 import { registerSetlistHandlers } from './ipc/setlist.handlers'
+import { registerSyncHandlers } from './ipc/sync.handlers'
+import type { SyncService } from './sync/service'
 import { registerMediaSchemePrivileges, registerMediaProtocol } from './media/protocol'
 import { ipcMain } from 'electron'
 
@@ -22,6 +24,7 @@ registerMediaSchemePrivileges()
 let mainWindow: BrowserWindow | null = null
 let liveWindow: BrowserWindow | null = null
 let liveWindowed = false
+let sync: SyncService | null = null
 
 app.whenReady().then(() => {
   registerMediaProtocol()
@@ -36,6 +39,10 @@ app.whenReady().then(() => {
 
   mainWindow = createMainWindow()
 
+  // ALADO conectado: sync at start (once the UI can show it), then on timers. Never blocks the app.
+  sync = registerSyncHandlers(() => mainWindow, () => !!liveWindow && !liveWindow.isDestroyed())
+  mainWindow.webContents.once('did-finish-load', () => sync?.start())
+
   // Open/close Live window on demand from renderer
   ipcMain.handle('live:open', async () => {
     if (!liveWindow || liveWindow.isDestroyed()) {
@@ -48,6 +55,8 @@ app.whenReady().then(() => {
         setLiveWindow(null)
         clearLiveState()
         mainWindow?.webContents.send('live:closed')
+        // Changes held during the projection are applied now.
+        void sync?.run()
       })
 
       // Replay the current state on every ready (also after a reload or a
