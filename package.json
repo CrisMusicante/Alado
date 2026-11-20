@@ -13,9 +13,12 @@
     "dist:win": "electron-builder --win",
     "dist:mac": "electron-builder --mac",
     "lint": "eslint .",
-    "test": "vitest"
+    "test": "vitest",
+    "cloud:dev": "cd cloud && wrangler dev",
+    "cloud:deploy": "cd cloud && wrangler deploy"
   },
   "devDependencies": {
+    "@cloudflare/workers-types": "^5.20261120.1",
     "@types/better-sqlite3": "^7.6.8",
     "@types/react": "^18.3.3",
     "@types/react-dom": "^18.3.0",
@@ -31,7 +34,8 @@
     "tailwindcss": "^3.4.13",
     "typescript": "^5.5.4",
     "vite": "^7.3.1",
-    "vitest": "^4.0.18"
+    "vitest": "^4.0.18",
+    "wrangler": "^4.165.0"
   },
   "dependencies": {
     "@dnd-kit/core": "^6.1.0",
