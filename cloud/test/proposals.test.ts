@@ -70,6 +70,7 @@ describe('proposals', () => {
     if (!list.ok) throw new Error(list.error)
     expect(list.proposals[0].stale).toBe(true)
     expect(list.proposals[0].current?.song_key).toBe('F')
+    expect(list.proposals[0].current_versions?.song_key).toBe((await currentSong()).versions.song_key)
   })
 
   it('new song proposal creates the song on approval', async () => {

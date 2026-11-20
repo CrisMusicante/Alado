@@ -7,7 +7,11 @@ import type { SetlistItem, SyncSetlist } from '../core/types'
 import { Button, Card, Empty, Input, Label, Page, TextArea, shortDate } from '../ui'
 import SongView from './SongView'
 
-const today = () => new Date().toISOString().slice(0, 10)
+/** Local date (not UTC: after 6 p.m. in Mexico UTC is already tomorrow). */
+const today = () => {
+  const d = new Date()
+  return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`
+}
 
 /** Upcoming services first (soonest first), then past ones (most recent first), then undated. */
 function ordered(list: SyncSetlist[]): SyncSetlist[] {
@@ -26,6 +30,11 @@ export default function Services() {
 
   if (open) {
     const setlist = open === 'new' ? null : state.catalog.setlists[open] ?? null
+    if (open !== 'new' && !setlist) {
+      // Deleted (here or in the cloud) while open.
+      setTimeout(() => setOpen(null), 0)
+      return null
+    }
     return canEdit
       ? <ServiceEditor setlist={setlist} onClose={() => setOpen(null)} />
       : <ServiceView setlist={setlist!} onClose={() => setOpen(null)} />
@@ -87,7 +96,9 @@ function ServiceEditor({ setlist, onClose }: { setlist: SyncSetlist | null; onCl
   const [items, setItems] = useState<SetlistItem[]>(setlist?.items ?? [])
   const [adding, setAdding] = useState(false)
   const [viewing, setViewing] = useState<string | null>(null)
-  const uid = useMemo(() => setlist?.uid ?? newId(), [setlist])
+  // Fixed when the editor opens: the uid (a new service keeps one) and the version it was based on.
+  const [uid] = useState(() => setlist?.uid ?? newId())
+  const [seenSeq] = useState(() => (setlist ? state.base.setlists[setlist.uid]?.seq ?? 0 : 0))
 
   if (viewing) return <SongView uid={viewing} onClose={() => setViewing(null)} />
   if (adding) {
@@ -102,7 +113,7 @@ function ServiceEditor({ setlist, onClose }: { setlist: SyncSetlist | null; onCl
   }
 
   function save() {
-    update(s => saveSetlistChange(s, { kind: 'setlist', uid, seenSeq: setlist?.seq ?? 0,
+    update(s => saveSetlistChange(s, { kind: 'setlist', uid, seenSeq,
       data: { name: name.trim(), service_date: date || null, notes: notes.trim() || null, items } }))
     showToast('Servicio guardado')
     onClose()

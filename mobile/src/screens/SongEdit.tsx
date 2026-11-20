@@ -1,7 +1,7 @@
 import { useState } from 'react'
 import { MAJOR_KEYS, MINOR_KEYS } from '@/utils/songKeys'
 import { useStore } from '../store'
-import { saveSong } from '../core/sync'
+import { saveSong, validateSong } from '../core/sync'
 import { videoNames } from '../core/catalog'
 import { EMPTY_SONG, type SongFields, type SyncSection } from '../core/types'
 import { Button, Input, Label, Page, Select, TextArea } from '../ui'
@@ -23,7 +23,13 @@ const same = (a: unknown, b: unknown) => JSON.stringify(a ?? null) === JSON.stri
 export default function SongEdit({ uid, onClose }: { uid: string | null; onClose: () => void }) {
   const { state, update, showToast } = useStore()
   const isLeader = state.me?.role === 'leader'
-  const current: SongFields = (uid && state.catalog.songs[uid]?.fields) || EMPTY_SONG
+  // What the user opened: changes and `seen` are measured against this, not against whatever a
+  // background sync brings in while the screen is open (that would silently revert others' edits).
+  const [opened] = useState(() => ({
+    fields: (uid && state.catalog.songs[uid]?.fields) || EMPTY_SONG,
+    versions: (uid && state.base.songs[uid]?.versions) || {},
+  }))
+  const current: SongFields = opened.fields
   const [title, setTitle] = useState(current.title)
   const [artist, setArtist] = useState(current.artist ?? '')
   const [key, setKey] = useState(current.song_key ?? '')
@@ -42,7 +48,9 @@ export default function SongEdit({ uid, onClose }: { uid: string | null; onClose
       if (!uid || !same(v, current[k])) (changed as Record<string, unknown>)[k] = v
     }
     if (!Object.keys(changed).length) { onClose(); return }
-    update(s => saveSong(s, uid, changed))
+    const problem = validateSong(changed)
+    if (problem) { showToast(problem, 'error'); return }
+    update(s => saveSong(s, uid, changed, opened.versions))
     showToast(isLeader ? 'Canción guardada' : 'Propuesta enviada: queda pendiente hasta que el líder la apruebe')
     onClose()
   }

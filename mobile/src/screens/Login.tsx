@@ -28,8 +28,8 @@ export default function Login() {
         localStorage.setItem('alado.churchCode', churchCode)
         if (mode === 'user') localStorage.setItem('alado.name', name)
       } catch { /* private mode */ }
-      const { role, name: myName, actor, church, pending } = me.data
-      signIn({ token: r.data.token, churchCode: churchCode.toUpperCase() }, { role, name: myName, actor, church, pending })
+      const { role, name: myName, actor, churchId, church, pending } = me.data
+      signIn({ token: r.data.token, churchCode: churchCode.toUpperCase() }, { role, name: myName, actor, churchId, church, pending })
     } finally {
       setBusy(false)
     }

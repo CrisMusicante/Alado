@@ -7,10 +7,12 @@ import { CLOUD_URL } from '../sync/config'
 
 let service: SyncService | null = null
 
-/** Device token at rest: OS-encrypted when available (DPAPI on Windows), plain otherwise. */
+/** Device token at rest: OS-encrypted (DPAPI on Windows); never stored in the clear. */
 const secret = {
-  encrypt: (s: string) => safeStorage.isEncryptionAvailable()
-    ? `safe:${safeStorage.encryptString(s).toString('base64')}` : `plain:${s}`,
+  encrypt: (s: string) => {
+    if (!safeStorage.isEncryptionAvailable()) throw new Error('Este equipo no puede cifrar el acceso a la nube; no se vinculó.')
+    return `safe:${safeStorage.encryptString(s).toString('base64')}`
+  },
   decrypt: (s: string) => s.startsWith('safe:')
     ? safeStorage.decryptString(Buffer.from(s.slice(5), 'base64')) : s.replace(/^plain:/, ''),
 }
@@ -20,7 +22,8 @@ const str = (v: unknown, max: number) => (typeof v === 'string' ? v.slice(0, max
 export function registerSyncHandlers(getMainWindow: () => BrowserWindow | null, isLive: () => boolean): SyncService {
   service = new SyncService({
     db: getDb(),
-    cloudUrl: CLOUD_URL,
+    // ALADO_CLOUD_URL (tests against a local cloud) is honored only outside the installed app.
+    cloudUrl: (!app.isPackaged && process.env.ALADO_CLOUD_URL) || CLOUD_URL,
     fetch: globalThis.fetch,
     videosDir: path.join(app.getPath('userData'), 'videos'),
     backupDir: path.join(app.getPath('userData'), 'backups'),

@@ -59,8 +59,8 @@ export default function Pending() {
   async function decide(p: ProposalView, action: 'approve' | 'reject') {
     setBusy(true)
     try {
-      // The versions this phone has seen: if the song changed since, the cloud answers 409.
-      const seen = p.song_uid ? state.catalog.songs[p.song_uid]?.versions : undefined
+      // The versions shown in this list: if the song changed since, the cloud answers 409.
+      const seen = p.current_versions ?? undefined
       const r = await call(token, 'POST', `/api/proposals/${p.id}/decide`, { action, note: action === 'reject' ? note.trim() || null : null, seen })
       if (!r.ok) {
         showToast(r.status === 409 ? `${r.error} Se actualizó la lista.` : r.error, 'error')

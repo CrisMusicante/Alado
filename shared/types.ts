@@ -116,6 +116,8 @@ export interface Proposal {
 export interface ProposalView extends Proposal {
   /** Current song fields (null for a proposed new song). */
   current: SongFields | null
+  /** Versions of `current`: send them back as `seen` when deciding, so a change made since is caught. */
+  current_versions: FieldVersions | null
   /** True when a proposed field changed after the proposal was made. */
   stale: boolean
 }

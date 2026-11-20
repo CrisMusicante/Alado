@@ -2,13 +2,17 @@
 const DB = 'alado'
 const STORE = 'kv'
 
+let opening: Promise<IDBDatabase> | null = null
+
+/** One connection for the app's lifetime. */
 function open(): Promise<IDBDatabase> {
-  return new Promise((resolve, reject) => {
+  opening ??= new Promise<IDBDatabase>((resolve, reject) => {
     const req = indexedDB.open(DB, 1)
     req.onupgradeneeded = () => req.result.createObjectStore(STORE)
     req.onsuccess = () => resolve(req.result)
-    req.onerror = () => reject(req.error)
+    req.onerror = () => { opening = null; reject(req.error) }
   })
+  return opening
 }
 
 export async function idbGet<T>(key: string): Promise<T | undefined> {

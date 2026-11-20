@@ -153,5 +153,21 @@ describe('SyncService', () => {
     expect(sent.filter(([c, p]) => c === 'sync:status' && (p as { state: string; notices: string[] }).state === 'syncing'
       && (p as { notices: string[] }).notices.length)).toEqual([])
   })
+
+  it('a linked computer refuses to set up or link again until unlinked', async () => {
+    const s = service()
+    await s.setup({ churchName: 'I', leaderName: 'C', pin: '1234', setupKey: 'k' })
+    expect(await s.setup({ churchName: 'Otra', leaderName: 'X', pin: '1234', setupKey: 'k' })).toMatchObject({ ok: false })
+    expect(await s.link({ code: '12345678' })).toMatchObject({ ok: false, error: expect.stringMatching(/Desvincúlala/) })
+  })
+
+  it('the token is never stored when it cannot be encrypted', async () => {
+    const s = new SyncService({ db, cloudUrl: 'https://alado.test', fetch: fakeFetch, videosDir: os.tmpdir(), backupDir: os.tmpdir(),
+      isLive: () => false, send: () => {}, deviceName: 'PC', now: () => new Date(),
+      secret: { encrypt: () => { throw new Error('Este equipo no puede cifrar el acceso.') }, decrypt: s => s } })
+    const r = await s.setup({ churchName: 'I', leaderName: 'C', pin: '1234', setupKey: 'k' })
+    expect(r).toMatchObject({ ok: false, error: 'Este equipo no puede cifrar el acceso.' })
+    expect(one(db, "SELECT COUNT(*) AS n FROM app_settings WHERE key = 'sync_token'")).toEqual({ n: 0 })
+  })
 })
 

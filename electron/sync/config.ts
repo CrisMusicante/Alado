@@ -1,2 +1,2 @@
-/** ALADO in the cloud (Cloudflare Worker). Override with ALADO_CLOUD_URL for local tests (wrangler dev). */
-export const CLOUD_URL = process.env.ALADO_CLOUD_URL || 'https://alado.mj-cristhian.workers.dev'
+/** ALADO in the cloud (Cloudflare Worker). Unpackaged runs may override it with ALADO_CLOUD_URL (sync.handlers.ts). */
+export const CLOUD_URL = 'https://alado.mj-cristhian.workers.dev'

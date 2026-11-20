@@ -50,6 +50,7 @@ describe('router', () => {
     const login = await (await call('POST', '/api/login', { churchCode: setup.churchCode, name: 'Cris', pin: '1234' })).json() as { token: string }
     const me = await (await call('GET', '/api/me', undefined, login.token)).json()
     expect(me).toMatchObject({ ok: true, role: 'leader', name: 'Cris', church: { name: 'Iglesia', code: setup.churchCode }, pending: 0 })
+    expect(typeof (me as { churchId: unknown }).churchId).toBe('string')
 
     const pushRes = await (await call('POST', '/api/sync/push', { changes: [
       { kind: 'song', uid: 'a', seen: {}, fields: { title: 'Uno', artist: null, sections: [], song_key: 'E', video_file: null, text_style: null, sheet_style: null, folder_uid: null } },

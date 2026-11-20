@@ -63,7 +63,7 @@ export async function listProposals(ctx: Ctx, s: Session, q: { status?: Proposal
     const p = parse(r)
     const song = p.song_uid ? songs.get(p.song_uid) ?? null : null
     const stale = !!song && changedSince(song.versions, Object.keys(p.fields), p.seen)
-    return { ...p, current: song?.fields ?? null, stale }
+    return { ...p, current: song?.fields ?? null, current_versions: song?.versions ?? null, stale }
   })
   return { ok: true, proposals }
 }

@@ -35,7 +35,7 @@ const PUBLIC: Record<string, PublicHandler> = {
 
 const PRIVATE: [string, RegExp, Handler][] = [
   ['GET', /^\/api\/me$/, async ({ ctx, session }) => json({
-    ok: true, role: session.role, name: session.name, actor: session.actor,
+    ok: true, role: session.role, name: session.name, actor: session.actor, churchId: session.churchId,
     church: await churchInfo(ctx, session), pending: await pendingCount(ctx, session),
   })],
   ['POST', /^\/api\/sync\/pull$/, async ({ ctx, body, session }) => json({ ok: true, ...(await pull(ctx, session, Number(body?.since) || 0)) })],

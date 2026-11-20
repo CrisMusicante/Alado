@@ -23,6 +23,7 @@ export interface SyncServiceDeps {
 
 export type Ok<T> = ({ ok: true } & T) | { ok: false; error: string }
 
+const ALREADY_LINKED = 'Esta compu ya está vinculada. Desvincúlala primero en Configuración.'
 const OFFLINE = 'No se pudo conectar con ALADO en la nube. Revisa el internet e intenta de nuevo.'
 
 /**
@@ -127,6 +128,7 @@ export class SyncService {
   /** Creates the church from this computer (the trusted one) and uploads its catalog. */
   async setup(p: { churchName: string; leaderName: string; pin: string; setupKey: string }):
     Promise<Ok<{ churchCode: string; recoveryCode: string; churchName: string; status: SyncStatus }>> {
+    if (this.info().linked) return { ok: false, error: ALREADY_LINKED }
     let res: { status: number; body: any }
     try {
       res = await this.api(() => null)('POST', '/api/setup', { ...p, deviceName: this.deps.deviceName })
@@ -136,9 +138,13 @@ export class SyncService {
     if (res.status !== 200) return { ok: false, error: res.body?.error ?? `Error ${res.status}` }
     // A new church: forget any earlier sync and give every row a fresh id (ids from another
     // church or from the installer seed would collide in the cloud).
+    try {
+      this.remember(res.body.deviceToken, res.body.churchName)
+    } catch (e) {
+      return { ok: false, error: (e as Error).message }
+    }
     this.clearSyncState()
     this.remintUids()
-    this.remember(res.body.deviceToken, res.body.churchName)
     this.start()
     const status = await this.run()
     return { ok: true, churchCode: res.body.churchCode, recoveryCode: res.body.recoveryCode, churchName: res.body.churchName, status }
@@ -146,6 +152,7 @@ export class SyncService {
 
   /** Links this computer with a code from the leader's phone, adopting matching songs. */
   async link(p: { code: string }): Promise<Ok<{ churchName: string; summary: LinkSummary; status: SyncStatus }>> {
+    if (this.info().linked) return { ok: false, error: ALREADY_LINKED }
     let res: { status: number; body: any }
     try {
       res = await this.api(() => null)('POST', '/api/link', { code: p.code, deviceName: this.deps.deviceName })
@@ -170,7 +177,11 @@ export class SyncService {
     } catch (e) {
       return { ok: false, error: `No se pudo empatar el catálogo: ${(e as Error).message}` }
     }
-    this.remember(token, res.body.churchName)
+    try {
+      this.remember(token, res.body.churchName)
+    } catch (e) {
+      return { ok: false, error: (e as Error).message }
+    }
     this.start()
     const status = await this.run()
     return { ok: true, churchName: res.body.churchName, summary, status }
